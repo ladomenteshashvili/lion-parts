@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { getHealthStatus } from "../api/client";
+import { FormEvent, useEffect, useState } from "react";
+import { getHealthStatus, searchParts } from "../api/client";
+import type { PartSearchResponse } from "../api/client";
 
 type HealthStatus = {
   status: string;
@@ -9,6 +10,12 @@ type HealthStatus = {
 function SearchPage() {
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [healthError, setHealthError] = useState("");
+
+  const [partNumber, setPartNumber] = useState("");
+  const [vin, setVin] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const [quote, setQuote] = useState<PartSearchResponse | null>(null);
 
   useEffect(() => {
     getHealthStatus()
@@ -21,6 +28,36 @@ function SearchPage() {
         setHealthError("Backend connection failed");
       });
   }, []);
+
+  async function handleSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const cleanPartNumber = partNumber.trim();
+    const cleanVin = vin.trim();
+
+    if (!cleanPartNumber) {
+      setSearchError("Part number აუცილებელია");
+      setQuote(null);
+      return;
+    }
+
+    setIsSearching(true);
+    setSearchError("");
+
+    try {
+      const data = await searchParts({
+        part_number: cleanPartNumber,
+        vin: cleanVin || undefined,
+      });
+
+      setQuote(data);
+    } catch {
+      setQuote(null);
+      setSearchError("ძიება ვერ შესრულდა. სცადე თავიდან.");
+    } finally {
+      setIsSearching(false);
+    }
+  }
 
   return (
     <section className="card">
@@ -40,11 +77,56 @@ function SearchPage() {
         )}
       </div>
 
-      <div className="search-form">
-        <input placeholder="მაგ: 51118070648" />
-        <input placeholder="VIN — არასავალდებულო" />
-        <button>ძებნა</button>
-      </div>
+      <form className="search-form" onSubmit={handleSearch}>
+        <input
+          value={partNumber}
+          onChange={(event) => setPartNumber(event.target.value)}
+          placeholder="მაგ: 51118070648"
+        />
+        <input
+          value={vin}
+          onChange={(event) => setVin(event.target.value)}
+          placeholder="VIN — არასავალდებულო"
+        />
+        <button type="submit" disabled={isSearching}>
+          {isSearching ? "იძებნება..." : "ძებნა"}
+        </button>
+      </form>
+
+      {searchError && <p className="form-error">{searchError}</p>}
+
+      {quote && (
+        <div className="quote">
+          <div className="quote__header">
+            <div>
+              <p className="eyebrow">შეთავაზება</p>
+              <h2>Quote #{quote.quote_id}</h2>
+              <p className="muted">
+                Part number: {quote.part_number}
+                {quote.vin ? ` · VIN: ${quote.vin}` : ""}
+              </p>
+            </div>
+          </div>
+
+          {quote.results.map((item) => (
+            <article className="part-option" key={item.part_option_id}>
+              <div>
+                <h3>{item.name}</h3>
+                <p className="muted">
+                  {item.brand} · {item.condition} · ETA: {item.eta_days} დღე
+                </p>
+                <p className="muted">{item.note}</p>
+              </div>
+
+              <div className="part-option__side">
+                <span className="availability">{item.availability}</span>
+                <strong>{item.final_price_gel.toLocaleString("ka-GE")} ₾</strong>
+                <button type="button">კალათაში დამატება</button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

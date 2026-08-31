@@ -176,3 +176,82 @@ button {
 .status-box__error {
   color: #b91c1c;
 }
+
+.form-error {
+  margin-top: 12px;
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.quote {
+  margin-top: 28px;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 24px;
+}
+
+.quote__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.quote h2 {
+  margin: 0 0 8px;
+  font-size: 24px;
+}
+
+.part-option {
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  padding: 18px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 18px;
+  align-items: center;
+  background: #f9fafb;
+}
+
+.part-option h3 {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+
+.part-option__side {
+  display: grid;
+  justify-items: end;
+  gap: 10px;
+}
+
+.part-option__side strong {
+  font-size: 26px;
+}
+
+.availability {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+@media (max-width: 720px) {
+  .part-option {
+    grid-template-columns: 1fr;
+  }
+
+  .part-option__side {
+    justify-items: stretch;
+  }
+
+  .part-option__side button {
+    width: 100%;
+  }
+}
