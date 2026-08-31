@@ -1,0 +1,163 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #f4f6f8;
+  color: #111827;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.app {
+  min-height: 100vh;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.header__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header__logo {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: #111827;
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+}
+
+.header__title {
+  font-weight: 800;
+  font-size: 18px;
+}
+
+.header__subtitle {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.header__nav {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.header__nav a {
+  padding: 9px 12px;
+  border-radius: 999px;
+  color: #374151;
+  font-size: 14px;
+}
+
+.header__nav a.active {
+  background: #111827;
+  color: #ffffff;
+}
+
+.page {
+  width: min(100%, 980px);
+  margin: 0 auto;
+  padding: 28px 16px;
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 22px;
+  padding: 28px;
+  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.06);
+}
+
+.eyebrow {
+  margin: 0 0 10px;
+  color: #2563eb;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+h1 {
+  margin: 0 0 12px;
+  font-size: clamp(28px, 5vw, 46px);
+  line-height: 1.05;
+}
+
+.muted {
+  color: #6b7280;
+  line-height: 1.6;
+  max-width: 680px;
+}
+
+.search-form {
+  margin-top: 24px;
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 12px;
+}
+
+input {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 14px;
+  padding: 14px 16px;
+  font-size: 16px;
+}
+
+button {
+  border: 0;
+  border-radius: 14px;
+  padding: 14px 22px;
+  background: #2563eb;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+@media (max-width: 720px) {
+  .header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .header__nav {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .header__nav a {
+    text-align: center;
+    font-size: 13px;
+    padding: 9px 8px;
+  }
+
+  .card {
+    padding: 22px;
+  }
+
+  .search-form {
+    grid-template-columns: 1fr;
+  }
+}
