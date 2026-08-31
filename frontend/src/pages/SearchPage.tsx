@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { getHealthStatus, searchParts } from "../api/client";
 import type { PartSearchResponse } from "../api/client";
+import { addCartItem } from "../api/cart";
 
 type HealthStatus = {
   status: string;
@@ -16,6 +17,7 @@ function SearchPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
   const [quote, setQuote] = useState<PartSearchResponse | null>(null);
+  const [cartMessage, setCartMessage] = useState("");
 
   useEffect(() => {
     getHealthStatus()
@@ -59,6 +61,22 @@ function SearchPage() {
     }
   }
 
+function handleAddToCart(item: PartSearchResponse["results"][number]) {
+  if (!quote) {
+    return;
+  }
+
+  addCartItem({
+    ...item,
+    quote_id: quote.quote_id,
+    part_number: quote.part_number,
+    quantity: 1,
+  });
+
+  setCartMessage("ნაწილი დაემატა კალათაში");
+}
+
+
   return (
     <section className="card">
       <p className="eyebrow">ნაწილების ძიება</p>
@@ -94,6 +112,7 @@ function SearchPage() {
       </form>
 
       {searchError && <p className="form-error">{searchError}</p>}
+      {cartMessage && <p className="form-success">{cartMessage}</p>}
 
       {quote && (
         <div className="quote">
@@ -121,7 +140,9 @@ function SearchPage() {
               <div className="part-option__side">
                 <span className="availability">{item.availability}</span>
                 <strong>{item.final_price_gel.toLocaleString("ka-GE")} ₾</strong>
-                <button type="button">კალათაში დამატება</button>
+                <button type="button" onClick={() => handleAddToCart(item)}>
+  კალათაში დამატება
+</button>
               </div>
             </article>
           ))}
