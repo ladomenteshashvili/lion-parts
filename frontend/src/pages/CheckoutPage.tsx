@@ -79,7 +79,8 @@ function CheckoutPage() {
         vin: vin.trim() || undefined,
         note: note.trim() || undefined,
       });
-
+      window.dispatchEvent(new Event("lion-parts-cart-updated"));
+      window.dispatchEvent(new Event("lion-parts-orders-updated"));
       navigate("/orders");
     } catch (error) {
       console.error("Checkout failed", error);

@@ -85,6 +85,7 @@ function SearchPage() {
         final_price_gel: Number(item.final_price_gel),
         quantity: 1,
       });
+      window.dispatchEvent(new Event("lion-parts-cart-updated"));
 
       setSearchError("");
       setCartMessage("ნაწილი დაემატა კალათაში");

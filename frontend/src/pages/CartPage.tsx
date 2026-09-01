@@ -32,6 +32,8 @@ function CartPage() {
     try {
       const cart = await removeCartItem(cartItemId);
       setItems(cart.items);
+
+      window.dispatchEvent(new Event("lion-parts-cart-updated"));
     } catch {
       setError("ნაწილის წაშლა ვერ მოხერხდა");
     }
@@ -73,7 +75,8 @@ function CartPage() {
       <p className="eyebrow">კალათა</p>
       <h1>შენი კალათა</h1>
       <p className="muted">
-        კალათა უკვე backend-ში ინახება session_id-ით. Login-ის შემდეგ ამას customer account-ს მივაბამთ.
+        კალათა უკვე backend-ში ინახება session_id-ით. Login-ის შემდეგ ამას
+        customer account-ს მივაბამთ.
       </p>
 
       <div className="cart-list">
@@ -81,9 +84,11 @@ function CartPage() {
           <article className="cart-item" key={item.cart_item_id}>
             <div>
               <h3>{item.name}</h3>
+
               <p className="muted">
                 Part number: {item.part_number} · Quote: {item.quote_id}
               </p>
+
               <p className="muted">
                 {item.brand} · {item.condition} · ETA: {item.eta_days} დღე
               </p>
@@ -91,10 +96,18 @@ function CartPage() {
 
             <div className="cart-item__side">
               <span>Qty: {item.quantity}</span>
+
               <strong>
-                {(Number(item.final_price_gel) * item.quantity).toLocaleString("ka-GE")} ₾
+                {(Number(item.final_price_gel) * item.quantity).toLocaleString(
+                  "ka-GE"
+                )}{" "}
+                ₾
               </strong>
-              <button type="button" onClick={() => handleRemove(item.cart_item_id)}>
+
+              <button
+                type="button"
+                onClick={() => handleRemove(item.cart_item_id)}
+              >
                 წაშლა
               </button>
             </div>
