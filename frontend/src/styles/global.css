@@ -1,3 +1,5 @@
+/* Lion Parts global styles */
+
 * {
   box-sizing: border-box;
 }
@@ -558,6 +560,121 @@ textarea {
 
 @media (max-width: 720px) {
   .profile-actions button {
+    width: 100%;
+  }
+}
+
+/* Order item status and action-required UI */
+.action-required-card {
+  margin: 18px 0;
+  padding: 16px;
+  border-radius: 16px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  display: grid;
+  gap: 6px;
+}
+
+.action-required-card strong {
+  color: #9a3412;
+}
+
+.item-status {
+  display: inline-flex;
+  width: fit-content;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.item-status--action {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+/* Modal */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 9999;
+}
+
+.modal-card {
+  width: min(720px, 100%);
+  max-height: 90vh;
+  overflow: auto;
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 24px;
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.35);
+}
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.modal-close {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: none;
+  background: #f1f5f9;
+  color: #0f172a;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.modal-summary {
+  margin: 18px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.tracking-timeline--modal {
+  margin-top: 18px;
+}
+
+.timeline-step--warning .timeline-dot {
+  background: #f97316;
+}
+
+.timeline-step--warning strong {
+  color: #9a3412;
+}
+
+.modal-actions {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 720px) {
+  .modal-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .modal-card {
+    max-height: 92vh;
+    border-radius: 24px 24px 0 0;
+  }
+
+  .modal-actions button {
     width: 100%;
   }
 }
