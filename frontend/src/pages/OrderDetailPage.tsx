@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { getOrderDetail, type BackendOrder, type OrderItem } from "../api/orders";
+import {
+  getOrderDetail,
+  resolveOrderItemAction,
+  type BackendOrder,
+  type OrderItem,
+} from "../api/orders";
 import { getOrderStatusLabel } from "../utils/orderStatus";
 import {
   getActionTypeLabel,
@@ -13,6 +18,7 @@ function OrderDetailPage() {
   const [order, setOrder] = useState<BackendOrder | null>(null);
   const [selectedItem, setSelectedItem] = useState<OrderItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isResolvingAction, setIsResolvingAction] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -62,6 +68,35 @@ function OrderDetailPage() {
 
     return stepIndex <= currentIndex;
   }
+
+  async function handleResolveItemAction() {
+  if (!selectedItem) {
+    return;
+  }
+
+  setIsResolvingAction(true);
+  setError("");
+
+  try {
+    const updatedOrder = await resolveOrderItemAction(selectedItem.id);
+
+    setOrder(updatedOrder);
+
+    const updatedSelectedItem = updatedOrder.items.find(
+      (item) => item.id === selectedItem.id
+    );
+
+    setSelectedItem(updatedSelectedItem || null);
+
+    window.dispatchEvent(new Event("lion-parts-orders-updated"));
+  } catch (error) {
+    console.error("Resolve item action failed", error);
+    setError("მოქმედების დადასტურება ვერ მოხერხდა");
+  } finally {
+    setIsResolvingAction(false);
+  }
+}
+
 
   if (isLoading) {
     return (
@@ -447,7 +482,21 @@ function OrderDetailPage() {
             </div>
 
             <div className="modal-actions">
-              <button type="button" onClick={() => setSelectedItem(null)}>
+              {selectedItem.action_required && (
+                <button
+                  type="button"
+                  onClick={handleResolveItemAction}
+                  disabled={isResolvingAction}
+                >
+                  {isResolvingAction ? "მუშავდება..." : "დადასტურება"}
+                </button>
+              )}
+
+              <button
+                type="button"
+                className="button-secondary"
+                onClick={() => setSelectedItem(null)}
+              >
                 დახურვა
               </button>
             </div>
