@@ -1,12 +1,43 @@
 import { useEffect, useState } from "react";
-import { getOrders, type DemoOrder } from "../api/orders";
+import { getOrders, type BackendOrder } from "../api/orders";
 
 function OrdersPage() {
-  const [orders, setOrders] = useState<DemoOrder[]>([]);
+  const [orders, setOrders] = useState<BackendOrder[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    setOrders(getOrders());
+    getOrders()
+      .then((data) => {
+        setOrders(data);
+        setError("");
+      })
+      .catch(() => {
+        setError("შეკვეთების ჩატვირთვა ვერ მოხერხდა");
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
   }, []);
+
+  if (isLoading) {
+    return (
+      <section className="card">
+        <p className="eyebrow">შეკვეთები</p>
+        <h1>იტვირთება...</h1>
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className="card">
+        <p className="eyebrow">შეკვეთები</p>
+        <h1>შეცდომა</h1>
+        <p className="form-error">{error}</p>
+      </section>
+    );
+  }
 
   if (orders.length === 0) {
     return (
@@ -27,9 +58,9 @@ function OrdersPage() {
 
       <div className="orders-list">
         {orders.map((order) => (
-          <article className="order-card" key={order.order_id}>
+          <article className="order-card" key={order.order_number}>
             <div>
-              <h3>{order.order_id}</h3>
+              <h3>{order.order_number}</h3>
               <p className="muted">
                 {order.customer_name} · {order.customer_phone}
                 {order.vin ? ` · VIN: ${order.vin}` : ""}
@@ -41,8 +72,8 @@ function OrdersPage() {
             </div>
 
             <div className="order-card__side">
-              <span className="availability">{order.status}</span>
-              <strong>{order.total_gel.toLocaleString("ka-GE")} ₾</strong>
+              <span className="availability">{order.status_label}</span>
+              <strong>{Number(order.total_gel).toLocaleString("ka-GE")} ₾</strong>
             </div>
           </article>
         ))}

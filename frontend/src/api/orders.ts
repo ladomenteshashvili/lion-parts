@@ -1,52 +1,62 @@
+import { getSessionId } from "./cart";
 import type { CartItem } from "./cart";
 
-const ORDERS_STORAGE_KEY = "lion_parts_orders";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
-export type DemoOrder = {
-  order_id: string;
+export type BackendOrder = {
+  id: number;
+  order_number: string;
+  session_id: string;
+  customer_name: string;
+  customer_phone: string;
+  vin: string;
+  note: string;
+  payment_type: "full";
+  status: string;
+  status_label: string;
+  total_gel: string;
+  items: CartItem[];
+  created_at: string;
+  updated_at: string;
+};
+
+export async function getOrders(): Promise<BackendOrder[]> {
+  const sessionId = getSessionId();
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/orders/?session_id=${encodeURIComponent(sessionId)}`
+  );
+
+  if (!response.ok) {
+    throw new Error("Orders load failed");
+  }
+
+  return response.json();
+}
+
+export async function checkoutOrder(payload: {
   customer_name: string;
   customer_phone: string;
   vin?: string;
   note?: string;
-  payment_type: "FULL";
-  status: "Payment pending";
-  total_gel: number;
-  items: CartItem[];
-  created_at: string;
-};
+}): Promise<BackendOrder> {
+  const sessionId = getSessionId();
 
-export function getOrders(): DemoOrder[] {
-  const rawOrders = localStorage.getItem(ORDERS_STORAGE_KEY);
+  const response = await fetch(`${API_BASE_URL}/api/orders/checkout/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      session_id: sessionId,
+      ...payload,
+    }),
+  });
 
-  if (!rawOrders) {
-    return [];
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Checkout failed");
   }
 
-  try {
-    return JSON.parse(rawOrders) as DemoOrder[];
-  } catch {
-    return [];
-  }
-}
-
-export function saveOrders(orders: DemoOrder[]) {
-  localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(orders));
-}
-
-export function createDemoOrder(
-  order: Omit<DemoOrder, "order_id" | "created_at" | "status">
-) {
-  const currentOrders = getOrders();
-
-  const newOrder: DemoOrder = {
-    ...order,
-    order_id: `ORD-${Date.now()}`,
-    status: "Payment pending",
-    created_at: new Date().toISOString(),
-  };
-
-  const updatedOrders = [newOrder, ...currentOrders];
-  saveOrders(updatedOrders);
-
-  return newOrder;
+  return response.json();
 }

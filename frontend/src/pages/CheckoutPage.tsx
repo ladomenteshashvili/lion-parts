@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { getCart, type CartItem } from "../api/cart";
-import { createDemoOrder } from "../api/orders";
+import { checkoutOrder } from "../api/orders";
 
 function CheckoutPage() {
   const navigate = useNavigate();
@@ -36,36 +36,38 @@ function CheckoutPage() {
     );
   }, [items]);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  event.preventDefault();
 
-    if (items.length === 0) {
-      setError("კალათა ცარიელია");
-      return;
-    }
+  if (items.length === 0) {
+    setError("კალათა ცარიელია");
+    return;
+  }
 
-    if (!customerName.trim()) {
-      setError("სახელი აუცილებელია");
-      return;
-    }
+  if (!customerName.trim()) {
+    setError("სახელი აუცილებელია");
+    return;
+  }
 
-    if (!customerPhone.trim()) {
-      setError("ტელეფონის ნომერი აუცილებელია");
-      return;
-    }
+  if (!customerPhone.trim()) {
+    setError("ტელეფონის ნომერი აუცილებელია");
+    return;
+  }
 
-    createDemoOrder({
+  try {
+    await checkoutOrder({
       customer_name: customerName.trim(),
       customer_phone: customerPhone.trim(),
       vin: vin.trim() || undefined,
       note: note.trim() || undefined,
-      payment_type: "FULL",
-      total_gel: total,
-      items,
     });
 
     navigate("/orders");
+  } catch (error) {
+    console.error("Checkout failed", error);
+    setError("შეკვეთის შექმნა ვერ მოხერხდა");
   }
+}
 
   if (isLoading) {
     return (
