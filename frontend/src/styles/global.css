@@ -680,3 +680,44 @@ textarea {
     width: 100%;
   }
 }
+
+
+.proposed-changes {
+  margin-top: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.proposed-change-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 16px;
+  padding: 12px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid #fed7aa;
+}
+
+.proposed-change-row span {
+  color: #6b7280;
+}
+
+.proposed-change-row strong {
+  color: #111827;
+}
+
+.item-action-preview {
+  margin-top: 10px;
+  display: grid;
+  gap: 4px;
+}
+
+.item-action-preview p {
+  margin: 0;
+}
+
+@media (max-width: 720px) {
+  .proposed-change-row {
+    grid-template-columns: 1fr;
+  }
+}

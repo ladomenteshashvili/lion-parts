@@ -243,10 +243,27 @@ function OrderDetailPage() {
               </p>
 
               {item.action_required && (
-                <p className="form-error">
-                  საჭიროა მოქმედება: {getActionTypeLabel(item.action_type)}
-                  {item.action_message ? ` — ${item.action_message}` : ""}
-                </p>
+                <div className="item-action-preview">
+                  <p className="form-error">
+                    საჭიროა მოქმედება: {getActionTypeLabel(item.action_type)}
+                    {item.action_message ? ` — ${item.action_message}` : ""}
+                  </p>
+
+                  {item.proposed_final_price_gel && (
+                    <p className="muted">
+                      ახალი ფასი:{" "}
+                      <strong>
+                        {Number(item.proposed_final_price_gel).toLocaleString("ka-GE")} ₾
+                      </strong>
+                    </p>
+                  )}
+
+                  {item.proposed_eta_days && (
+                    <p className="muted">
+                      ახალი ETA: <strong>{item.proposed_eta_days} დღე</strong>
+                    </p>
+                  )}
+                </div>
               )}
             </div>
 
@@ -317,8 +334,43 @@ function OrderDetailPage() {
               <div className="action-required-card">
                 <strong>საჭიროა თქვენი მოქმედება</strong>
                 <span>{getActionTypeLabel(selectedItem.action_type)}</span>
+
                 {selectedItem.action_message && (
                   <span className="muted">{selectedItem.action_message}</span>
+                )}
+
+                {(selectedItem.proposed_final_price_gel ||
+                  selectedItem.proposed_eta_days) && (
+                  <div className="proposed-changes">
+                    {selectedItem.proposed_final_price_gel && (
+                      <div className="proposed-change-row">
+                        <span>არსებული ფასი</span>
+                        <strong>
+                          {Number(selectedItem.final_price_gel).toLocaleString("ka-GE")} ₾
+                        </strong>
+                        <span>ახალი ფასი</span>
+                        <strong>
+                          {Number(selectedItem.proposed_final_price_gel).toLocaleString(
+                            "ka-GE"
+                          )}{" "}
+                          ₾
+                        </strong>
+                      </div>
+                    )}
+
+                    {selectedItem.proposed_eta_days && (
+                      <div className="proposed-change-row">
+                        <span>არსებული ETA</span>
+                        <strong>
+                          {selectedItem.eta_days
+                            ? `${selectedItem.eta_days} დღე`
+                            : "მითითებული არ არის"}
+                        </strong>
+                        <span>ახალი ETA</span>
+                        <strong>{selectedItem.proposed_eta_days} დღე</strong>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             )}

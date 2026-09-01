@@ -14,9 +14,11 @@ export type OrderItem = {
   availability: string;
   eta_days: number | null;
   final_price_gel: string;
+  proposed_final_price_gel: string | null;
   currency: string;
   note: string;
   quantity: number;
+  proposed_eta_days: number | null;
   item_status: string;
   action_required: boolean;
   action_type: string;
