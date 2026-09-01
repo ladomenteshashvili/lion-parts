@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { getCartItems, removeCartItem, type CartItem } from "../api/cart";
+import { Link } from "react-router-dom";
 
 function CartPage() {
   const [items, setItems] = useState<CartItem[]>([]);
@@ -68,6 +69,11 @@ function CartPage() {
       <div className="cart-total">
         <span>ჯამი</span>
         <strong>{total.toLocaleString("ka-GE")} ₾</strong>
+      </div>
+      <div className="cart-actions">
+        <Link className="button-link" to="/checkout">
+          შეკვეთის გაგრძელება
+        </Link>
       </div>
     </section>
   );
