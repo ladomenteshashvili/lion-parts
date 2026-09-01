@@ -120,11 +120,17 @@ class OrderItem(models.Model):
     eta_days = models.PositiveIntegerField(null=True, blank=True)
 
     final_price_gel = models.DecimalField(max_digits=12, decimal_places=2)
+    proposed_final_price_gel = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
     currency = models.CharField(max_length=10, default="GEL")
     note = models.TextField(blank=True)
 
     quantity = models.PositiveIntegerField(default=1)
-
+    proposed_eta_days = models.PositiveIntegerField(null=True, blank=True)
     item_status = models.CharField(
         max_length=40,
         choices=ITEM_STATUS_CHOICES,

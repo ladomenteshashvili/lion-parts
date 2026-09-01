@@ -17,6 +17,17 @@ def generate_order_number():
     return f"LP-{timestamp}"
 
 
+def recalculate_order_total(order):
+    total_gel = sum(
+        item.final_price_gel * Decimal(item.quantity)
+        for item in order.items.all()
+    )
+
+    order.total_gel = total_gel
+    order.save(update_fields=["total_gel", "updated_at"])
+    return order
+
+
 @api_view(["GET"])
 def list_orders(request):
     session_id = request.query_params.get("session_id", "").strip()
@@ -139,7 +150,6 @@ def checkout(request):
     serializer = OrderSerializer(order)
     return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-
 @api_view(["POST"])
 def demo_resolve_item_action(request, item_id):
     session_id = request.data.get("session_id", "").strip()
@@ -163,17 +173,98 @@ def demo_resolve_item_action(request, item_id):
 
     order = item.order
 
+    if item.proposed_final_price_gel is not None:
+        item.final_price_gel = item.proposed_final_price_gel
+
+    if item.proposed_eta_days is not None:
+        item.eta_days = item.proposed_eta_days
+
+    item.proposed_final_price_gel = None
+    item.proposed_eta_days = None
+
     item.action_required = False
     item.action_type = OrderItem.ACTION_TYPE_NONE
     item.action_message = ""
     item.item_status = OrderItem.ITEM_STATUS_CHECKING
     item.save()
 
+    recalculate_order_total(order)
+
     has_other_action_items = order.items.filter(action_required=True).exists()
 
     if not has_other_action_items and order.status == Order.STATUS_ACTION_REQUIRED:
         order.status = Order.STATUS_PROCESSING
-        order.save()
+        order.save(update_fields=["status", "updated_at"])
+
+    serializer = OrderSerializer(order)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+def demo_request_item_change(request, item_id):
+    session_id = request.data.get("session_id", "").strip()
+    action_type = request.data.get("action_type", "").strip()
+    action_message = request.data.get("action_message", "").strip()
+    proposed_final_price_gel = request.data.get("proposed_final_price_gel")
+    proposed_eta_days = request.data.get("proposed_eta_days")
+
+    if not session_id:
+        return Response(
+            {"detail": "session_id is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        item = OrderItem.objects.select_related("order").get(
+            id=item_id,
+            order__session_id=session_id,
+        )
+    except OrderItem.DoesNotExist:
+        return Response(
+            {"detail": "order item not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if action_type not in [
+        OrderItem.ACTION_TYPE_PRICE_CHANGE,
+        OrderItem.ACTION_TYPE_ETA_CHANGE,
+        OrderItem.ACTION_TYPE_WEIGHT_CHANGE,
+        OrderItem.ACTION_TYPE_FITMENT_ISSUE,
+        OrderItem.ACTION_TYPE_ALTERNATIVE_REQUIRED,
+        OrderItem.ACTION_TYPE_OTHER,
+    ]:
+        return Response(
+            {"detail": "invalid action_type"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if proposed_final_price_gel not in [None, ""]:
+        try:
+            item.proposed_final_price_gel = Decimal(str(proposed_final_price_gel))
+        except Exception:
+            return Response(
+                {"detail": "invalid proposed_final_price_gel"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    if proposed_eta_days not in [None, ""]:
+        try:
+            item.proposed_eta_days = int(proposed_eta_days)
+        except Exception:
+            return Response(
+                {"detail": "invalid proposed_eta_days"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    item.action_required = True
+    item.action_type = action_type
+    item.action_message = action_message
+    item.item_status = OrderItem.ITEM_STATUS_ACTION_REQUIRED
+    item.save()
+
+    order = item.order
+    order.status = Order.STATUS_ACTION_REQUIRED
+    order.save(update_fields=["status", "updated_at"])
 
     serializer = OrderSerializer(order)
     return Response(serializer.data, status=status.HTTP_200_OK)
