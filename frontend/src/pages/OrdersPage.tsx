@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { getOrders, type BackendOrder } from "../api/orders";
+import { getOrderStatusLabel } from "../utils/orderStatus";
 
 function OrdersPage() {
   const [orders, setOrders] = useState<BackendOrder[]>([]);
@@ -73,7 +74,7 @@ function OrdersPage() {
             </div>
 
             <div className="order-card__side">
-              <span className="availability">{order.status_label}</span>
+              <span className="availability">{getOrderStatusLabel(order.status)}</span>
               <strong>{Number(order.total_gel).toLocaleString("ka-GE")} ₾</strong>
               <Link className="button-link button-link--small" to={`/orders/${order.order_number}`}>
                 დეტალები

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getOrderDetail, type BackendOrder } from "../api/orders";
+import { getOrderStatusLabel } from "../utils/orderStatus";
 
 function OrderDetailPage() {
   const { orderNumber } = useParams<{ orderNumber: string }>();
@@ -68,7 +69,7 @@ function OrderDetailPage() {
         </div>
 
         <div className="order-detail-status">
-          <span className="availability">{order.status_label}</span>
+          <span className="availability">{getOrderStatusLabel(order.status)}</span>
           <strong>{Number(order.total_gel).toLocaleString("ka-GE")} ₾</strong>
         </div>
       </div>
