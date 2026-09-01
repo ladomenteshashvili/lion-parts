@@ -3,10 +3,19 @@ import type { PartOption } from "./client";
 const CART_STORAGE_KEY = "lion_parts_cart";
 
 export type CartItem = PartOption & {
+  cart_item_id: string;
   quote_id: string;
   part_number: string;
   quantity: number;
 };
+
+export function buildCartItemId(params: {
+  quote_id: string;
+  part_option_id: string;
+  part_number: string;
+}) {
+  return `${params.quote_id}:${params.part_option_id}:${params.part_number}`;
+}
 
 export function getCartItems(): CartItem[] {
   const rawCart = localStorage.getItem(CART_STORAGE_KEY);
@@ -30,12 +39,12 @@ export function addCartItem(item: CartItem) {
   const currentItems = getCartItems();
 
   const existingItem = currentItems.find(
-    (cartItem) => cartItem.part_option_id === item.part_option_id
+    (cartItem) => cartItem.cart_item_id === item.cart_item_id
   );
 
   if (existingItem) {
     const updatedItems = currentItems.map((cartItem) =>
-      cartItem.part_option_id === item.part_option_id
+      cartItem.cart_item_id === item.cart_item_id
         ? { ...cartItem, quantity: cartItem.quantity + item.quantity }
         : cartItem
     );
@@ -49,9 +58,9 @@ export function addCartItem(item: CartItem) {
   return updatedItems;
 }
 
-export function removeCartItem(partOptionId: string) {
+export function removeCartItem(cartItemId: string) {
   const updatedItems = getCartItems().filter(
-    (item) => item.part_option_id !== partOptionId
+    (item) => item.cart_item_id !== cartItemId
   );
 
   saveCartItems(updatedItems);

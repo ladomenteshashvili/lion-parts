@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { getHealthStatus, searchParts } from "../api/client";
 import type { PartSearchResponse } from "../api/client";
-import { addCartItem } from "../api/cart";
+import { addCartItem, buildCartItemId } from "../api/cart";
 
 type HealthStatus = {
   status: string;
@@ -66,8 +66,15 @@ function handleAddToCart(item: PartSearchResponse["results"][number]) {
     return;
   }
 
+  const cartItemId = buildCartItemId({
+    quote_id: quote.quote_id,
+    part_option_id: item.part_option_id,
+    part_number: quote.part_number,
+  });
+
   addCartItem({
     ...item,
+    cart_item_id: cartItemId,
     quote_id: quote.quote_id,
     part_number: quote.part_number,
     quantity: 1,

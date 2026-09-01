@@ -15,8 +15,8 @@ function CartPage() {
     );
   }, [items]);
 
-  function handleRemove(partOptionId: string) {
-    setItems(removeCartItem(partOptionId));
+  function handleRemove(cartItemId: string) {
+    setItems(removeCartItem(cartItemId));
   }
 
   if (items.length === 0) {
@@ -57,9 +57,9 @@ function CartPage() {
               <strong>
                 {(item.final_price_gel * item.quantity).toLocaleString("ka-GE")} ₾
               </strong>
-              <button type="button" onClick={() => handleRemove(item.part_option_id)}>
-                წაშლა
-              </button>
+            <button type="button" onClick={() => handleRemove(item.cart_item_id)}>
+              წაშლა
+            </button>
             </div>
           </article>
         ))}
