@@ -1,22 +1,33 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { clearProfile, getProfile, saveProfile } from "../api/profile";
+import { getProfile, saveProfile } from "../api/profile";
 
 function ProfilePage() {
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [isPhoneVerified, setIsPhoneVerified] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    const profile = getProfile();
-
-    if (profile) {
-      setCustomerName(profile.customer_name);
-      setCustomerPhone(profile.customer_phone);
-    }
+    getProfile()
+      .then((profile) => {
+        if (profile) {
+          setCustomerName(profile.customer_name);
+          setCustomerPhone(profile.customer_phone);
+          setIsPhoneVerified(profile.is_phone_verified);
+        }
+      })
+      .catch(() => {
+        setMessage("პროფილის ჩატვირთვა ვერ მოხერხდა");
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
   }, []);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!customerName.trim()) {
@@ -29,35 +40,52 @@ function ProfilePage() {
       return;
     }
 
-    saveProfile({
-      customer_name: customerName.trim(),
-      customer_phone: customerPhone.trim(),
-    });
+    setIsSaving(true);
+    setMessage("");
 
-    setMessage("პროფილი შენახულია");
+    try {
+      const profile = await saveProfile({
+        customer_name: customerName.trim(),
+        customer_phone: customerPhone.trim(),
+      });
+
+      setCustomerName(profile.customer_name);
+      setCustomerPhone(profile.customer_phone);
+      setIsPhoneVerified(profile.is_phone_verified);
+      setMessage("პროფილი შენახულია backend-ში");
+    } catch {
+      setMessage("პროფილის შენახვა ვერ მოხერხდა");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
-  function handleLogout() {
-    clearProfile();
-    setCustomerName("");
-    setCustomerPhone("");
-    setMessage("პროფილი გასუფთავდა");
-  }
+  const hasProfile = Boolean(customerName && customerPhone);
 
-  const isLoggedInDemo = Boolean(customerName && customerPhone);
+  if (isLoading) {
+    return (
+      <section className="card">
+        <p className="eyebrow">პროფილი</p>
+        <h1>იტვირთება...</h1>
+      </section>
+    );
+  }
 
   return (
     <section className="card">
       <p className="eyebrow">პროფილი</p>
       <h1>მომხმარებლის პროფილი</h1>
       <p className="muted">
-        ეს არის demo profile. შემდეგ ეტაპზე აქ დაემატება ტელეფონის ნომრით შესვლა და SMS verification.
+        ეს არის backend profile skeleton. შემდეგ ეტაპზე აქ დაემატება SMS verification.
       </p>
 
-      {isLoggedInDemo && (
+      {hasProfile && (
         <div className="profile-status">
-          <strong>Demo login active</strong>
+          <strong>Profile saved</strong>
           <span>{customerName} · {customerPhone}</span>
+          <span>
+            Phone verification: {isPhoneVerified ? "Verified" : "Not verified"}
+          </span>
         </div>
       )}
 
@@ -83,9 +111,8 @@ function ProfilePage() {
         {message && <p className="form-success">{message}</p>}
 
         <div className="profile-actions">
-          <button type="submit">პროფილის შენახვა</button>
-          <button type="button" className="button-secondary" onClick={handleLogout}>
-            გასუფთავება
+          <button type="submit" disabled={isSaving}>
+            {isSaving ? "ინახება..." : "პროფილის შენახვა"}
           </button>
         </div>
       </form>

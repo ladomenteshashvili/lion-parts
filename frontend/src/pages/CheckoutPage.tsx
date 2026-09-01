@@ -16,6 +16,7 @@ function CheckoutPage() {
   const [vin, setVin] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     getCart()
@@ -31,14 +32,17 @@ function CheckoutPage() {
   }, []);
 
   useEffect(() => {
-  const profile = getProfile();
-
-  if (profile) {
-    setCustomerName(profile.customer_name);
-    setCustomerPhone(profile.customer_phone);
-  }
-}, []);
-
+    getProfile()
+      .then((profile) => {
+        if (profile) {
+          setCustomerName(profile.customer_name);
+          setCustomerPhone(profile.customer_phone);
+        }
+      })
+      .catch(() => {
+        // Profile is optional at this stage.
+      });
+  }, []);
 
   const total = useMemo(() => {
     return items.reduce(
@@ -47,38 +51,43 @@ function CheckoutPage() {
     );
   }, [items]);
 
-async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-  event.preventDefault();
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
 
-  if (items.length === 0) {
-    setError("კალათა ცარიელია");
-    return;
+    if (items.length === 0) {
+      setError("კალათა ცარიელია");
+      return;
+    }
+
+    if (!customerName.trim()) {
+      setError("სახელი აუცილებელია");
+      return;
+    }
+
+    if (!customerPhone.trim()) {
+      setError("ტელეფონის ნომერი აუცილებელია");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError("");
+
+    try {
+      await checkoutOrder({
+        customer_name: customerName.trim(),
+        customer_phone: customerPhone.trim(),
+        vin: vin.trim() || undefined,
+        note: note.trim() || undefined,
+      });
+
+      navigate("/orders");
+    } catch (error) {
+      console.error("Checkout failed", error);
+      setError("შეკვეთის შექმნა ვერ მოხერხდა");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
-
-  if (!customerName.trim()) {
-    setError("სახელი აუცილებელია");
-    return;
-  }
-
-  if (!customerPhone.trim()) {
-    setError("ტელეფონის ნომერი აუცილებელია");
-    return;
-  }
-
-  try {
-    await checkoutOrder({
-      customer_name: customerName.trim(),
-      customer_phone: customerPhone.trim(),
-      vin: vin.trim() || undefined,
-      note: note.trim() || undefined,
-    });
-
-    navigate("/orders");
-  } catch (error) {
-    console.error("Checkout failed", error);
-    setError("შეკვეთის შექმნა ვერ მოხერხდა");
-  }
-}
 
   if (isLoading) {
     return (
@@ -106,7 +115,8 @@ async function handleSubmit(event: FormEvent<HTMLFormElement>) {
       <p className="eyebrow">Checkout</p>
       <h1>შეკვეთის გაფორმება</h1>
       <p className="muted">
-        ეს არის demo checkout. შემდეგ order backend database-ში შეიქმნება.
+        ეს არის backend checkout skeleton. შემდეგ ეტაპზე აქ დაემატება SMS
+        verification და payment.
       </p>
 
       <div className="checkout-summary">
@@ -158,7 +168,9 @@ async function handleSubmit(event: FormEvent<HTMLFormElement>) {
 
         {error && <p className="form-error">{error}</p>}
 
-        <button type="submit">შეკვეთის შექმნა</button>
+        <button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? "იქმნება..." : "შეკვეთის შექმნა"}
+        </button>
       </form>
     </section>
   );
