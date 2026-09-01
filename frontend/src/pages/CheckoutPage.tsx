@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { getCart, type CartItem } from "../api/cart";
 import { checkoutOrder } from "../api/orders";
+import { getProfile } from "../api/profile";
 
 function CheckoutPage() {
   const navigate = useNavigate();
@@ -28,6 +29,16 @@ function CheckoutPage() {
         setIsLoading(false);
       });
   }, []);
+
+  useEffect(() => {
+  const profile = getProfile();
+
+  if (profile) {
+    setCustomerName(profile.customer_name);
+    setCustomerPhone(profile.customer_phone);
+  }
+}, []);
+
 
   const total = useMemo(() => {
     return items.reduce(

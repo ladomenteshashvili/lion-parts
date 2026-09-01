@@ -532,3 +532,32 @@ textarea {
   background: #ecfdf5;
   color: #047857;
 }
+
+.profile-status {
+  margin-top: 22px;
+  margin-bottom: 22px;
+  border-radius: 16px;
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+  padding: 14px;
+  display: grid;
+  gap: 4px;
+}
+
+.profile-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.button-secondary {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+@media (max-width: 720px) {
+  .profile-actions button {
+    width: 100%;
+  }
+}
