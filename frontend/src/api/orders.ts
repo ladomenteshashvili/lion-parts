@@ -13,12 +13,14 @@ export type OrderItem = {
   brand: string;
   availability: string;
   eta_days: number | null;
+  expected_arrival_date: string | null;
   final_price_gel: string;
   proposed_final_price_gel: string | null;
   currency: string;
   note: string;
   quantity: number;
   proposed_eta_days: number | null;
+  proposed_expected_arrival_date: string | null;
   item_status: string;
   action_required: boolean;
   action_type: string;

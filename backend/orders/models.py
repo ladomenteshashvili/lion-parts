@@ -118,6 +118,7 @@ class OrderItem(models.Model):
     brand = models.CharField(max_length=120, blank=True)
     availability = models.CharField(max_length=120, blank=True)
     eta_days = models.PositiveIntegerField(null=True, blank=True)
+    expected_arrival_date = models.DateField(null=True, blank=True)
 
     final_price_gel = models.DecimalField(max_digits=12, decimal_places=2)
     proposed_final_price_gel = models.DecimalField(
@@ -131,6 +132,7 @@ class OrderItem(models.Model):
 
     quantity = models.PositiveIntegerField(default=1)
     proposed_eta_days = models.PositiveIntegerField(null=True, blank=True)
+    proposed_expected_arrival_date = models.DateField(null=True, blank=True)
     item_status = models.CharField(
         max_length=40,
         choices=ITEM_STATUS_CHOICES,

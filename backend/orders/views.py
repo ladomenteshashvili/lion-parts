@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal
 
 from django.db import transaction
@@ -135,6 +136,16 @@ def checkout(request):
                 brand=item.brand,
                 availability=item.availability,
                 eta_days=item.eta_days,
+                expected_arrival_date=(
+                    timezone.localdate() + timedelta(days=item.eta_days)
+                    if item.eta_days is not None
+                    else None
+                ),
+                proposed_expected_arrival_date=(
+                    timezone.localdate() + timedelta(days=item.proposed_eta_days)
+                    if item.proposed_eta_days is not None
+                    else None
+                ),
                 final_price_gel=item.final_price_gel,
                 currency=item.currency,
                 note=item.note,
@@ -179,8 +190,12 @@ def demo_resolve_item_action(request, item_id):
     if item.proposed_eta_days is not None:
         item.eta_days = item.proposed_eta_days
 
+    if item.proposed_expected_arrival_date is not None:
+        item.expected_arrival_date = item.proposed_expected_arrival_date        
+
     item.proposed_final_price_gel = None
     item.proposed_eta_days = None
+    item.proposed_expected_arrival_date = None
 
     item.action_required = False
     item.action_type = OrderItem.ACTION_TYPE_NONE
@@ -207,6 +222,7 @@ def demo_request_item_change(request, item_id):
     action_message = request.data.get("action_message", "").strip()
     proposed_final_price_gel = request.data.get("proposed_final_price_gel")
     proposed_eta_days = request.data.get("proposed_eta_days")
+    proposed_expected_arrival_date = request.data.get("proposed_expected_arrival_date")
 
     if not session_id:
         return Response(
@@ -249,7 +265,11 @@ def demo_request_item_change(request, item_id):
 
     if proposed_eta_days not in [None, ""]:
         try:
-            item.proposed_eta_days = int(proposed_eta_days)
+            parsed_eta_days = int(proposed_eta_days)
+            item.proposed_eta_days = parsed_eta_days
+            item.proposed_expected_arrival_date = (
+                timezone.localdate() + timedelta(days=parsed_eta_days)
+            )
         except Exception:
             return Response(
                 {"detail": "invalid proposed_eta_days"},

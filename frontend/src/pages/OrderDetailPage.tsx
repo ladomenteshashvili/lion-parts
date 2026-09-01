@@ -11,6 +11,7 @@ import {
   getActionTypeLabel,
   getOrderItemStatusLabel,
 } from "../utils/orderItemStatus";
+import { formatDateKa } from "../utils/dateFormat";
 
 function OrderDetailPage() {
   const { orderNumber } = useParams<{ orderNumber: string }>();
@@ -239,7 +240,12 @@ function OrderDetailPage() {
               </p>
 
               <p className="muted">
-                {item.brand} · {item.condition} · ETA: {item.eta_days} დღე
+                {item.brand} · {item.condition} · ETA:{" "}
+                {item.eta_days ? `${item.eta_days} დღე` : "მითითებული არ არის"}
+              </p>
+
+              <p className="muted">
+                მოსალოდნელი ჩამოსვლა: {formatDateKa(item.expected_arrival_date)}
               </p>
 
               {item.action_required && (
@@ -366,8 +372,17 @@ function OrderDetailPage() {
                             ? `${selectedItem.eta_days} დღე`
                             : "მითითებული არ არის"}
                         </strong>
+
+                        <span>არსებული მოსალოდნელი თარიღი</span>
+                        <strong>{formatDateKa(selectedItem.expected_arrival_date)}</strong>
+
                         <span>ახალი ETA</span>
                         <strong>{selectedItem.proposed_eta_days} დღე</strong>
+
+                        <span>ახალი მოსალოდნელი თარიღი</span>
+                        <strong>
+                          {formatDateKa(selectedItem.proposed_expected_arrival_date)}
+                        </strong>
                       </div>
                     )}
                   </div>
