@@ -1,18 +1,15 @@
-from django.shortcuts import render
-
-# Create your views here.
 from decimal import Decimal
 
 from django.db import transaction
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from rest_framework import status
 
 from cart.models import Cart
 from .models import Order, OrderItem
 from .serializers import OrderSerializer
-from django.shortcuts import get_object_or_404
 
 
 def generate_order_number():
@@ -53,7 +50,7 @@ def get_order_detail(request, order_number):
 
     serializer = OrderSerializer(order)
     return Response(serializer.data)
-    
+
 
 @api_view(["POST"])
 def checkout(request):
@@ -64,23 +61,38 @@ def checkout(request):
     note = request.data.get("note", "").strip()
 
     if not session_id:
-        return Response({"detail": "session_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"detail": "session_id is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     if not customer_name:
-        return Response({"detail": "customer_name is required"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"detail": "customer_name is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     if not customer_phone:
-        return Response({"detail": "customer_phone is required"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"detail": "customer_phone is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     try:
         cart = Cart.objects.prefetch_related("items").get(session_id=session_id)
     except Cart.DoesNotExist:
-        return Response({"detail": "cart not found"}, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {"detail": "cart not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
 
     cart_items = list(cart.items.all())
 
     if not cart_items:
-        return Response({"detail": "cart is empty"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"detail": "cart is empty"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     total_gel = sum(
         item.final_price_gel * Decimal(item.quantity)
@@ -116,9 +128,52 @@ def checkout(request):
                 currency=item.currency,
                 note=item.note,
                 quantity=item.quantity,
+                item_status=OrderItem.ITEM_STATUS_CREATED,
+                action_required=False,
+                action_type=OrderItem.ACTION_TYPE_NONE,
+                action_message="",
             )
 
         cart.items.all().delete()
 
     serializer = OrderSerializer(order)
     return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+@api_view(["POST"])
+def demo_resolve_item_action(request, item_id):
+    session_id = request.data.get("session_id", "").strip()
+
+    if not session_id:
+        return Response(
+            {"detail": "session_id is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        item = OrderItem.objects.select_related("order").get(
+            id=item_id,
+            order__session_id=session_id,
+        )
+    except OrderItem.DoesNotExist:
+        return Response(
+            {"detail": "order item not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    order = item.order
+
+    item.action_required = False
+    item.action_type = OrderItem.ACTION_TYPE_NONE
+    item.action_message = ""
+    item.item_status = OrderItem.ITEM_STATUS_CHECKING
+    item.save()
+
+    has_other_action_items = order.items.filter(action_required=True).exists()
+
+    if not has_other_action_items and order.status == Order.STATUS_ACTION_REQUIRED:
+        order.status = Order.STATUS_PROCESSING
+        order.save()
+
+    serializer = OrderSerializer(order)
+    return Response(serializer.data, status=status.HTTP_200_OK)
