@@ -15,6 +15,7 @@ function CheckoutPage() {
   const [customerPhone, setCustomerPhone] = useState("");
   const [vin, setVin] = useState("");
   const [note, setNote] = useState("");
+
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -73,15 +74,17 @@ function CheckoutPage() {
     setError("");
 
     try {
-      await checkoutOrder({
+      const order = await checkoutOrder({
         customer_name: customerName.trim(),
         customer_phone: customerPhone.trim(),
         vin: vin.trim() || undefined,
         note: note.trim() || undefined,
       });
+
       window.dispatchEvent(new Event("lion-parts-cart-updated"));
       window.dispatchEvent(new Event("lion-parts-orders-updated"));
-      navigate("/orders");
+
+      navigate(`/orders/${order.order_number}`);
     } catch (error) {
       console.error("Checkout failed", error);
       setError("შეკვეთის შექმნა ვერ მოხერხდა");
@@ -115,6 +118,7 @@ function CheckoutPage() {
     <section className="card">
       <p className="eyebrow">Checkout</p>
       <h1>შეკვეთის გაფორმება</h1>
+
       <p className="muted">
         ეს არის backend checkout skeleton. შემდეგ ეტაპზე აქ დაემატება SMS
         verification და payment.
