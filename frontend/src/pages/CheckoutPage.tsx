@@ -1,12 +1,14 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { clearCart, getCartItems } from "../api/cart";
+import { getCart, type CartItem } from "../api/cart";
 import { createDemoOrder } from "../api/orders";
 
 function CheckoutPage() {
   const navigate = useNavigate();
-  const items = getCartItems();
+
+  const [items, setItems] = useState<CartItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -14,9 +16,22 @@ function CheckoutPage() {
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    getCart()
+      .then((cart) => {
+        setItems(cart.items);
+      })
+      .catch(() => {
+        setError("კალათის ჩატვირთვა ვერ მოხერხდა");
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, []);
+
   const total = useMemo(() => {
     return items.reduce(
-      (sum, item) => sum + item.final_price_gel * item.quantity,
+      (sum, item) => sum + Number(item.final_price_gel) * item.quantity,
       0
     );
   }, [items]);
@@ -49,8 +64,16 @@ function CheckoutPage() {
       items,
     });
 
-    clearCart();
     navigate("/orders");
+  }
+
+  if (isLoading) {
+    return (
+      <section className="card">
+        <p className="eyebrow">Checkout</p>
+        <h1>იტვირთება...</h1>
+      </section>
+    );
   }
 
   if (items.length === 0) {
@@ -70,7 +93,7 @@ function CheckoutPage() {
       <p className="eyebrow">Checkout</p>
       <h1>შეკვეთის გაფორმება</h1>
       <p className="muted">
-        ეს არის demo checkout. შემდეგ დაემატება SMS verification და payment.
+        ეს არის demo checkout. შემდეგ order backend database-ში შეიქმნება.
       </p>
 
       <div className="checkout-summary">

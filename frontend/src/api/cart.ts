@@ -1,14 +1,39 @@
 import type { PartOption } from "./client";
 
-const CART_STORAGE_KEY = "lion_parts_cart";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const SESSION_STORAGE_KEY = "lion_parts_session_id";
 
 export type CartItem = PartOption & {
+  id: number;
   cart_item_id: string;
   quote_id: string;
   part_number: string;
   quantity: number;
 };
 
+export type BackendCart = {
+  id: number;
+  session_id: string;
+  items: CartItem[];
+  total_gel: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export function getSessionId() {
+  const existingSessionId = localStorage.getItem(SESSION_STORAGE_KEY);
+
+  if (existingSessionId) {
+    return existingSessionId;
+  }
+
+  const randomPart = Math.random().toString(36).slice(2);
+  const newSessionId = `guest-${Date.now()}-${randomPart}`;
+
+  localStorage.setItem(SESSION_STORAGE_KEY, newSessionId);
+
+  return newSessionId;
+}
 export function buildCartItemId(params: {
   quote_id: string;
   part_option_id: string;
@@ -17,56 +42,72 @@ export function buildCartItemId(params: {
   return `${params.quote_id}:${params.part_option_id}:${params.part_number}`;
 }
 
-export function getCartItems(): CartItem[] {
-  const rawCart = localStorage.getItem(CART_STORAGE_KEY);
+export async function getCart(): Promise<BackendCart> {
+  const sessionId = getSessionId();
 
-  if (!rawCart) {
-    return [];
-  }
-
-  try {
-    return JSON.parse(rawCart) as CartItem[];
-  } catch {
-    return [];
-  }
-}
-
-export function saveCartItems(items: CartItem[]) {
-  localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
-}
-
-export function addCartItem(item: CartItem) {
-  const currentItems = getCartItems();
-
-  const existingItem = currentItems.find(
-    (cartItem) => cartItem.cart_item_id === item.cart_item_id
+  const response = await fetch(
+    `${API_BASE_URL}/api/cart/?session_id=${encodeURIComponent(sessionId)}`
   );
 
-  if (existingItem) {
-    const updatedItems = currentItems.map((cartItem) =>
-      cartItem.cart_item_id === item.cart_item_id
-        ? { ...cartItem, quantity: cartItem.quantity + item.quantity }
-        : cartItem
-    );
-
-    saveCartItems(updatedItems);
-    return updatedItems;
+  if (!response.ok) {
+    throw new Error("Cart load failed");
   }
 
-  const updatedItems = [...currentItems, item];
-  saveCartItems(updatedItems);
-  return updatedItems;
+  return response.json();
 }
 
-export function removeCartItem(cartItemId: string) {
-  const updatedItems = getCartItems().filter(
-    (item) => item.cart_item_id !== cartItemId
+export async function addCartItem(item: {
+  cart_item_id: string;
+  quote_id: string;
+  part_option_id: string;
+  part_number: string;
+  name: string;
+  condition: string;
+  brand: string;
+  availability: string;
+  eta_days: number;
+  final_price_gel: number;
+  currency: "GEL";
+  note?: string;
+  quantity: number;
+}): Promise<BackendCart> {
+  const sessionId = getSessionId();
+
+  const response = await fetch(`${API_BASE_URL}/api/cart/items/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      session_id: sessionId,
+      ...item,
+      final_price_gel: Number(item.final_price_gel),
+    }),
+  });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || "Add cart item failed");
+    }
+
+  return response.json();
+}
+
+export async function removeCartItem(cartItemId: string): Promise<BackendCart> {
+  const sessionId = getSessionId();
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/cart/items/${encodeURIComponent(
+      cartItemId
+    )}/?session_id=${encodeURIComponent(sessionId)}`,
+    {
+      method: "DELETE",
+    }
   );
 
-  saveCartItems(updatedItems);
-  return updatedItems;
-}
+  if (!response.ok) {
+    throw new Error("Remove cart item failed");
+  }
 
-export function clearCart() {
-  saveCartItems([]);
+  return response.json();
 }
