@@ -527,3 +527,8 @@ textarea {
     justify-items: stretch;
   }
 }
+
+.availability--cart {
+  background: #ecfdf5;
+  color: #047857;
+}

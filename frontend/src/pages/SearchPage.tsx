@@ -19,6 +19,7 @@ function SearchPage() {
   const [searchError, setSearchError] = useState("");
   const [cartMessage, setCartMessage] = useState("");
   const [quote, setQuote] = useState<PartSearchResponse | null>(null);
+  const [addedCartItemIds, setAddedCartItemIds] = useState<string[]>([]);
 
   useEffect(() => {
     getHealthStatus()
@@ -47,6 +48,7 @@ function SearchPage() {
     setIsSearching(true);
     setSearchError("");
     setCartMessage("");
+    setAddedCartItemIds([]);
 
     try {
       const data = await searchParts({
@@ -86,6 +88,7 @@ function SearchPage() {
 
       setSearchError("");
       setCartMessage("ნაწილი დაემატა კალათაში");
+      setAddedCartItemIds((currentIds) => [...currentIds, cartItemId]);
     } catch (error) {
       console.error("Add to cart failed", error);
       setCartMessage("");
@@ -144,27 +147,45 @@ function SearchPage() {
             </div>
           </div>
 
-          {quote.results.map((item) => (
-            <article className="part-option" key={item.part_option_id}>
-              <div>
-                <h3>{item.name}</h3>
-                <p className="muted">
-                  {item.brand} · {item.condition} · ETA: {item.eta_days} დღე
-                </p>
-                <p className="muted">{item.note}</p>
-              </div>
+          {quote.results.map((item) => {
+            const cartItemId = buildCartItemId({
+              quote_id: quote.quote_id,
+              part_option_id: item.part_option_id,
+              part_number: quote.part_number,
+            });
 
-              <div className="part-option__side">
-                <span className="availability">{item.availability}</span>
-                <strong>
-                  {Number(item.final_price_gel).toLocaleString("ka-GE")} ₾
-                </strong>
-                <button type="button" onClick={() => handleAddToCart(item)}>
-                  კალათაში დამატება
-                </button>
-              </div>
-            </article>
-          ))}
+            const isInCart = addedCartItemIds.includes(cartItemId);
+
+            return (
+              <article className="part-option" key={cartItemId}>
+                <div>
+                  <h3>{item.name}</h3>
+                  <p className="muted">
+                    {item.brand} · {item.condition} · ETA: {item.eta_days} დღე
+                  </p>
+                  <p className="muted">{item.note}</p>
+                </div>
+
+                <div className="part-option__side">
+                  <span className={isInCart ? "availability availability--cart" : "availability"}>
+                    {isInCart ? "კალათაშია" : item.availability}
+                  </span>
+
+                  <strong>
+                    {Number(item.final_price_gel).toLocaleString("ka-GE")} ₾
+                  </strong>
+
+                  <button
+                    type="button"
+                    onClick={() => handleAddToCart(item)}
+                    disabled={isInCart}
+                  >
+                    {isInCart ? "დამატებულია" : "კალათაში დამატება"}
+                  </button>
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
     </section>
