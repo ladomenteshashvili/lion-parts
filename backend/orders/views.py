@@ -12,6 +12,7 @@ from rest_framework import status
 from cart.models import Cart
 from .models import Order, OrderItem
 from .serializers import OrderSerializer
+from django.shortcuts import get_object_or_404
 
 
 def generate_order_number():
@@ -33,6 +34,26 @@ def list_orders(request):
     serializer = OrderSerializer(orders, many=True)
     return Response(serializer.data)
 
+
+@api_view(["GET"])
+def get_order_detail(request, order_number):
+    session_id = request.query_params.get("session_id", "").strip()
+
+    if not session_id:
+        return Response(
+            {"detail": "session_id is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    order = get_object_or_404(
+        Order.objects.prefetch_related("items"),
+        order_number=order_number,
+        session_id=session_id,
+    )
+
+    serializer = OrderSerializer(order)
+    return Response(serializer.data)
+    
 
 @api_view(["POST"])
 def checkout(request):

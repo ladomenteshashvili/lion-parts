@@ -60,3 +60,19 @@ export async function checkoutOrder(payload: {
 
   return response.json();
 }
+
+export async function getOrderDetail(orderNumber: string): Promise<BackendOrder> {
+  const sessionId = getSessionId();
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/orders/${encodeURIComponent(
+      orderNumber
+    )}/?session_id=${encodeURIComponent(sessionId)}`
+  );
+
+  if (!response.ok) {
+    throw new Error("Order detail load failed");
+  }
+
+  return response.json();
+}

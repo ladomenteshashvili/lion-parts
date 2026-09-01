@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { getOrders, type BackendOrder } from "../api/orders";
 
@@ -74,6 +75,9 @@ function OrdersPage() {
             <div className="order-card__side">
               <span className="availability">{order.status_label}</span>
               <strong>{Number(order.total_gel).toLocaleString("ka-GE")} ₾</strong>
+              <Link className="button-link button-link--small" to={`/orders/${order.order_number}`}>
+                დეტალები
+              </Link>
             </div>
           </article>
         ))}
