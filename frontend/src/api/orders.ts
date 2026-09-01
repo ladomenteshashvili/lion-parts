@@ -15,7 +15,30 @@ export type BackendOrder = {
   status: string;
   status_label: string;
   total_gel: string;
-  items: CartItem[];
+  items: OrderItem[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type OrderItem = {
+  id: number;
+  cart_item_id: string;
+  quote_id: string;
+  part_option_id: string;
+  part_number: string;
+  name: string;
+  condition: string;
+  brand: string;
+  availability: string;
+  eta_days: number | null;
+  final_price_gel: string;
+  currency: string;
+  note: string;
+  quantity: number;
+  item_status: string;
+  action_required: boolean;
+  action_type: string;
+  action_message: string;
   created_at: string;
   updated_at: string;
 };

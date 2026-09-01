@@ -182,3 +182,33 @@
     border-right-color: var(--border);
   }
 }
+
+.action-required-card {
+  margin: 18px 0;
+  padding: 16px;
+  border-radius: 16px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  display: grid;
+  gap: 6px;
+}
+
+.action-required-card strong {
+  color: #9a3412;
+}
+
+.item-status {
+  display: inline-flex;
+  width: fit-content;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.item-status--action {
+  background: #fff7ed;
+  color: #9a3412;
+}

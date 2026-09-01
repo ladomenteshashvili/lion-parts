@@ -1,4 +1,5 @@
 from rest_framework import serializers
+
 from .models import Order, OrderItem
 
 
@@ -20,6 +21,12 @@ class OrderItemSerializer(serializers.ModelSerializer):
             "currency",
             "note",
             "quantity",
+            "item_status",
+            "action_required",
+            "action_type",
+            "action_message",
+            "created_at",
+            "updated_at",
         ]
 
 

@@ -2,6 +2,10 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getOrderDetail, type BackendOrder } from "../api/orders";
 import { getOrderStatusLabel } from "../utils/orderStatus";
+import {
+  getActionTypeLabel,
+  getOrderItemStatusLabel,
+} from "../utils/orderItemStatus";
 
 function OrderDetailPage() {
   const { orderNumber } = useParams<{ orderNumber: string }>();
@@ -52,6 +56,10 @@ function OrderDetailPage() {
     );
   }
 
+  const actionRequiredItems = order.items.filter(
+    (item) => item.action_required
+  );
+
   return (
     <section className="card">
       <Link className="back-link" to="/orders">
@@ -69,22 +77,37 @@ function OrderDetailPage() {
         </div>
 
         <div className="order-detail-status">
-          <span className="availability">{getOrderStatusLabel(order.status)}</span>
+          <span className="availability">
+            {getOrderStatusLabel(order.status)}
+          </span>
           <strong>{Number(order.total_gel).toLocaleString("ka-GE")} ₾</strong>
         </div>
       </div>
+
+      {actionRequiredItems.length > 0 && (
+        <div className="action-required-card">
+          <strong>საჭიროა თქვენი მოქმედება</strong>
+          <span>
+            {actionRequiredItems.length} ნაწილზე საჭიროა თქვენი პასუხი.
+          </span>
+          <span className="muted">
+            გახსენით შესაბამისი ნაწილი და ნახეთ მიზეზი.
+          </span>
+        </div>
+      )}
 
       {order.status === "payment_pending" && (
         <div className="payment-demo-box">
           <strong>გადახდა მოსალოდნელია</strong>
           <span>
-            Demo რეჟიმში შეკვეთა შეიქმნა Payment pending სტატუსით. რეალურ სისტემაში აქ იქნება payment gateway.
+            Demo რეჟიმში შეკვეთა შეიქმნა Payment pending სტატუსით. რეალურ
+            სისტემაში აქ იქნება payment gateway.
           </span>
         </div>
       )}
 
       <div className="tracking-timeline">
-        <h2>შეკვეთის პროგრესი</h2>
+        <h2>შეკვეთის საერთო პროგრესი</h2>
 
         <div className="timeline-step timeline-step--active">
           <span className="timeline-dot" />
@@ -100,31 +123,31 @@ function OrderDetailPage() {
           <span className="timeline-dot" />
           <div>
             <strong>გადახდა დასადასტურებელია</strong>
-            <p className="muted">შემდეგ ეტაპზე დაემატება online payment confirmation.</p>
+            <p className="muted">
+              შემდეგ ეტაპზე დაემატება online payment confirmation.
+            </p>
           </div>
         </div>
 
         <div className="timeline-step">
           <span className="timeline-dot" />
           <div>
-            <strong>შესყიდვა / დამუშავება</strong>
-            <p className="muted">ოპერატორი გადაამოწმებს availability, ETA და თავსებადობას.</p>
+            <strong>შეკვეთა მუშავდება</strong>
+            <p className="muted">
+              ეს არის მთლიანი შეკვეთის საერთო სტატუსი. თითოეულ ნაწილს თავისი
+              ცალკე სტატუსი აქვს ქვემოთ.
+            </p>
           </div>
         </div>
 
         <div className="timeline-step">
           <span className="timeline-dot" />
           <div>
-            <strong>ტრანსპორტირება საქართველოში</strong>
-            <p className="muted">ამ ეტაპზე გამოჩნდება shipping/import პროგრესი.</p>
-          </div>
-        </div>
-
-        <div className="timeline-step">
-          <span className="timeline-dot" />
-          <div>
-            <strong>მზადაა გაცემისთვის</strong>
-            <p className="muted">მომხმარებელი მიიღებს pickup/payment notice-ს.</p>
+            <strong>დასრულება</strong>
+            <p className="muted">
+              შეკვეთა დასრულდება მაშინ, როცა ყველა ნაწილი გაიცემა ან პროცესი
+              დაიხურება.
+            </p>
           </div>
         </div>
       </div>
@@ -136,18 +159,41 @@ function OrderDetailPage() {
           <article className="cart-item" key={item.id}>
             <div>
               <h3>{item.name}</h3>
+
+              <span
+                className={
+                  item.action_required
+                    ? "item-status item-status--action"
+                    : "item-status"
+                }
+              >
+                {getOrderItemStatusLabel(item.item_status)}
+              </span>
+
               <p className="muted">
                 Part number: {item.part_number} · Quote: {item.quote_id}
               </p>
+
               <p className="muted">
                 {item.brand} · {item.condition} · ETA: {item.eta_days} დღე
               </p>
+
+              {item.action_required && (
+                <p className="form-error">
+                  საჭიროა მოქმედება: {getActionTypeLabel(item.action_type)}
+                  {item.action_message ? ` — ${item.action_message}` : ""}
+                </p>
+              )}
             </div>
 
             <div className="cart-item__side">
               <span>Qty: {item.quantity}</span>
+
               <strong>
-                {(Number(item.final_price_gel) * item.quantity).toLocaleString("ka-GE")} ₾
+                {(Number(item.final_price_gel) * item.quantity).toLocaleString(
+                  "ka-GE"
+                )}{" "}
+                ₾
               </strong>
             </div>
           </article>
