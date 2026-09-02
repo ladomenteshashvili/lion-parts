@@ -103,15 +103,17 @@ function renderEventChanges(event: OrderItemEvent) {
     "proposed_expected_arrival_date"
   );
 
-  const hasChanges = oldPrice || newPrice || oldEta || newEta || oldDate || newDate;
+  const hasPriceChange = newPrice !== null;
+  const hasEtaChange = newEta !== null;
+  const hasDateChange = newDate !== null;
 
-  if (!hasChanges) {
+  if (!hasPriceChange && !hasEtaChange && !hasDateChange) {
     return null;
   }
 
   return (
     <div className="event-change-list">
-      {(oldPrice || newPrice) && (
+      {hasPriceChange && (
         <div className="event-change-row">
           <span>ფასი</span>
           <strong>
@@ -121,7 +123,7 @@ function renderEventChanges(event: OrderItemEvent) {
         </div>
       )}
 
-      {(oldEta || newEta) && (
+      {hasEtaChange && (
         <div className="event-change-row">
           <span>ETA</span>
           <strong>
@@ -130,7 +132,7 @@ function renderEventChanges(event: OrderItemEvent) {
         </div>
       )}
 
-      {(oldDate || newDate) && (
+      {hasDateChange && (
         <div className="event-change-row">
           <span>მოსალოდნელი თარიღი</span>
           <strong>
