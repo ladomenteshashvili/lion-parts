@@ -122,6 +122,21 @@ function OrderDetailPage() {
     return stepIndex <= currentIndex;
   }
 
+
+  function isOrderPaymentConfirmed(order: BackendOrder) {
+  return ["paid", "processing", "action_required", "completed"].includes(
+    order.status
+  );
+}
+
+function isOrderProcessing(order: BackendOrder) {
+  return ["processing", "action_required", "completed"].includes(order.status);
+}
+
+function isOrderCompleted(order: BackendOrder) {
+  return order.status === "completed";
+}
+
   function getEventValue(
     value: Record<string, unknown> | null,
     key: string
@@ -376,17 +391,35 @@ function OrderDetailPage() {
           </div>
         </div>
 
-        <div className="timeline-step">
+        <div
+          className={
+            isOrderPaymentConfirmed(order)
+              ? "timeline-step timeline-step--active"
+              : "timeline-step"
+          }
+        >
           <span className="timeline-dot" />
           <div>
-            <strong>გადახდა დასადასტურებელია</strong>
+            <strong>
+              {isOrderPaymentConfirmed(order)
+                ? "გადახდა დადასტურებულია"
+                : "გადახდა დასადასტურებელია"}
+            </strong>
             <p className="muted">
-              შემდეგ ეტაპზე დაემატება online payment confirmation.
+              {isOrderPaymentConfirmed(order)
+                ? "გადახდის შემდეგ შეკვეთა გადავიდა დამუშავების ეტაპზე."
+                : "შემდეგ ეტაპზე დაემატება online payment confirmation."}
             </p>
           </div>
         </div>
 
-        <div className="timeline-step">
+        <div
+          className={
+            isOrderProcessing(order)
+              ? "timeline-step timeline-step--active"
+              : "timeline-step"
+          }
+        >
           <span className="timeline-dot" />
           <div>
             <strong>შეკვეთა მუშავდება</strong>
@@ -397,7 +430,13 @@ function OrderDetailPage() {
           </div>
         </div>
 
-        <div className="timeline-step">
+        <div
+          className={
+            isOrderCompleted(order)
+              ? "timeline-step timeline-step--active"
+              : "timeline-step"
+          }
+        >
           <span className="timeline-dot" />
           <div>
             <strong>დასრულება</strong>
