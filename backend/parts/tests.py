@@ -1,7 +1,4 @@
 from django.test import TestCase
-
-# Create your tests here.
-from django.test import TestCase
 from rest_framework.test import APIClient
 
 
@@ -39,7 +36,7 @@ class PartsSearchApiTests(TestCase):
         self.assertIsNone(response.data["vin"])
 
         self.assertIn("results", response.data)
-        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(len(response.data["results"]), 3)
 
         result = response.data["results"][0]
 
@@ -53,8 +50,26 @@ class PartsSearchApiTests(TestCase):
         self.assertEqual(result["currency"], "GEL")
         self.assertEqual(
             result["note"],
-            "Demo offer. Supplier integration will be added later.",
+            "Original new part. Demo offer. Supplier integration will be added later.",
         )
+
+    def test_search_returns_multiple_demo_offers(self):
+        response = self.client.post(
+            "/api/parts/search/",
+            {
+                "part_number": "1565461",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        results = response.data["results"]
+
+        self.assertEqual(len(results), 3)
+        self.assertEqual(results[0]["part_option_id"], "P-DEMO-001")
+        self.assertEqual(results[1]["part_option_id"], "P-DEMO-002")
+        self.assertEqual(results[2]["part_option_id"], "P-DEMO-003")
 
     def test_search_returns_vin_when_provided(self):
         response = self.client.post(
@@ -95,11 +110,10 @@ class PartsSearchApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
 
-        result = response.data["results"][0]
-
-        self.assertIn("final_price_gel", result)
-        self.assertIn("currency", result)
-        self.assertEqual(result["currency"], "GEL")
-        self.assertNotIn("supplier_price", result)
-        self.assertNotIn("shipping_price", result)
-        self.assertNotIn("internal_cost", result)
+        for result in response.data["results"]:
+            self.assertIn("final_price_gel", result)
+            self.assertIn("currency", result)
+            self.assertEqual(result["currency"], "GEL")
+            self.assertNotIn("supplier_price", result)
+            self.assertNotIn("shipping_price", result)
+            self.assertNotIn("internal_cost", result)
