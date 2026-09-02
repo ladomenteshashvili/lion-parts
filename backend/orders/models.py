@@ -159,3 +159,71 @@ class OrderItem(models.Model):
 
     def __str__(self):
         return f"{self.part_number} x {self.quantity}"
+
+
+
+class OrderItemEvent(models.Model):
+    EVENT_TYPE_CREATED = "created"
+    EVENT_TYPE_STATUS_CHANGED = "status_changed"
+    EVENT_TYPE_PRICE_CHANGE_REQUESTED = "price_change_requested"
+    EVENT_TYPE_ETA_CHANGE_REQUESTED = "eta_change_requested"
+    EVENT_TYPE_CHANGE_REQUESTED = "change_requested"
+    EVENT_TYPE_ACTION_RESOLVED = "action_resolved"
+    EVENT_TYPE_NOTE_ADDED = "note_added"
+
+    EVENT_TYPE_CHOICES = [
+        (EVENT_TYPE_CREATED, "Created"),
+        (EVENT_TYPE_STATUS_CHANGED, "Status changed"),
+        (EVENT_TYPE_PRICE_CHANGE_REQUESTED, "Price change requested"),
+        (EVENT_TYPE_ETA_CHANGE_REQUESTED, "ETA change requested"),
+        (EVENT_TYPE_CHANGE_REQUESTED, "Change requested"),
+        (EVENT_TYPE_ACTION_RESOLVED, "Action resolved"),
+        (EVENT_TYPE_NOTE_ADDED, "Note added"),
+    ]
+
+    ACTOR_TYPE_SYSTEM = "system"
+    ACTOR_TYPE_CUSTOMER = "customer"
+    ACTOR_TYPE_OPERATOR = "operator"
+    ACTOR_TYPE_ADMIN = "admin"
+
+    ACTOR_TYPE_CHOICES = [
+        (ACTOR_TYPE_SYSTEM, "System"),
+        (ACTOR_TYPE_CUSTOMER, "Customer"),
+        (ACTOR_TYPE_OPERATOR, "Operator"),
+        (ACTOR_TYPE_ADMIN, "Admin"),
+    ]
+
+    item = models.ForeignKey(
+        OrderItem,
+        on_delete=models.CASCADE,
+        related_name="events",
+    )
+
+    event_type = models.CharField(
+        max_length=60,
+        choices=EVENT_TYPE_CHOICES,
+        db_index=True,
+    )
+
+    title = models.CharField(max_length=255)
+    message = models.TextField(blank=True)
+
+    old_value = models.JSONField(null=True, blank=True)
+    new_value = models.JSONField(null=True, blank=True)
+
+    actor_type = models.CharField(
+        max_length=30,
+        choices=ACTOR_TYPE_CHOICES,
+        default=ACTOR_TYPE_SYSTEM,
+    )
+    actor_name = models.CharField(max_length=120, blank=True)
+
+    visible_to_customer = models.BooleanField(default=False)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.item.part_number} · {self.event_type}"

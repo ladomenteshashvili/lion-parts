@@ -9,7 +9,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from cart.models import Cart
-from .models import Order, OrderItem
+from .models import Order, OrderItem, OrderItemEvent
 from .serializers import OrderSerializer
 
 
@@ -27,6 +27,28 @@ def recalculate_order_total(order):
     order.total_gel = total_gel
     order.save(update_fields=["total_gel", "updated_at"])
     return order
+
+def create_order_item_event(
+    item,
+    event_type,
+    title,
+    message="",
+    old_value=None,
+    new_value=None,
+    actor_type=OrderItemEvent.ACTOR_TYPE_SYSTEM,
+    actor_name="",
+):
+    return OrderItemEvent.objects.create(
+        item=item,
+        event_type=event_type,
+        title=title,
+        message=message,
+        old_value=old_value,
+        new_value=new_value,
+        actor_type=actor_type,
+        actor_name=actor_name,
+        visible_to_customer=False,
+    )
 
 
 @api_view(["GET"])
@@ -125,7 +147,7 @@ def checkout(request):
         )
 
         for item in cart_items:
-            OrderItem.objects.create(
+            order_item = OrderItem.objects.create(
                 order=order,
                 cart_item_id=item.cart_item_id,
                 quote_id=item.quote_id,
@@ -141,11 +163,6 @@ def checkout(request):
                     if item.eta_days is not None
                     else None
                 ),
-                proposed_expected_arrival_date=(
-                    timezone.localdate() + timedelta(days=item.proposed_eta_days)
-                    if item.proposed_eta_days is not None
-                    else None
-                ),
                 final_price_gel=item.final_price_gel,
                 currency=item.currency,
                 note=item.note,
@@ -154,6 +171,23 @@ def checkout(request):
                 action_required=False,
                 action_type=OrderItem.ACTION_TYPE_NONE,
                 action_message="",
+            )
+
+            create_order_item_event(
+                item=order_item,
+                event_type=OrderItemEvent.EVENT_TYPE_CREATED,
+                title="ნაწილი შეკვეთაში დაემატა",
+                message="ნაწილი დაფიქსირდა შეკვეთაში.",
+                new_value={
+                    "item_status": order_item.item_status,
+                    "final_price_gel": str(order_item.final_price_gel),
+                    "eta_days": order_item.eta_days,
+                    "expected_arrival_date": (
+                        order_item.expected_arrival_date.isoformat()
+                        if order_item.expected_arrival_date
+                        else None
+                    ),
+                },
             )
 
         cart.items.all().delete()
@@ -184,6 +218,32 @@ def demo_resolve_item_action(request, item_id):
 
     order = item.order
 
+    old_value = {
+        "item_status": item.item_status,
+        "action_required": item.action_required,
+        "action_type": item.action_type,
+        "action_message": item.action_message,
+        "final_price_gel": str(item.final_price_gel),
+        "proposed_final_price_gel": (
+            str(item.proposed_final_price_gel)
+            if item.proposed_final_price_gel is not None
+            else None
+        ),
+        "eta_days": item.eta_days,
+        "proposed_eta_days": item.proposed_eta_days,
+        "expected_arrival_date": (
+            item.expected_arrival_date.isoformat()
+            if item.expected_arrival_date
+            else None
+        ),
+        "proposed_expected_arrival_date": (
+            item.proposed_expected_arrival_date.isoformat()
+            if item.proposed_expected_arrival_date
+            else None
+        ),
+    }
+
+
     if item.proposed_final_price_gel is not None:
         item.final_price_gel = item.proposed_final_price_gel
 
@@ -205,6 +265,31 @@ def demo_resolve_item_action(request, item_id):
 
     recalculate_order_total(order)
 
+    create_order_item_event(
+        item=item,
+        event_type=OrderItemEvent.EVENT_TYPE_ACTION_RESOLVED,
+        title="მომხმარებლის მოქმედება დადასტურდა",
+        message="ცვლილება დადასტურდა და პროცესი გაგრძელდა.",
+        old_value=old_value,
+        new_value={
+            "item_status": item.item_status,
+            "action_required": item.action_required,
+            "action_type": item.action_type,
+            "action_message": item.action_message,
+            "final_price_gel": str(item.final_price_gel),
+            "eta_days": item.eta_days,
+            "expected_arrival_date": (
+                item.expected_arrival_date.isoformat()
+                if item.expected_arrival_date
+                else None
+            ),
+        },
+        actor_type=OrderItemEvent.ACTOR_TYPE_CUSTOMER,
+        actor_name="Customer",
+    )
+
+
+
     has_other_action_items = order.items.filter(action_required=True).exists()
 
     if not has_other_action_items and order.status == Order.STATUS_ACTION_REQUIRED:
@@ -222,7 +307,6 @@ def demo_request_item_change(request, item_id):
     action_message = request.data.get("action_message", "").strip()
     proposed_final_price_gel = request.data.get("proposed_final_price_gel")
     proposed_eta_days = request.data.get("proposed_eta_days")
-    proposed_expected_arrival_date = request.data.get("proposed_expected_arrival_date")
 
     if not session_id:
         return Response(
@@ -254,27 +338,67 @@ def demo_request_item_change(request, item_id):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    old_value = {
+        "item_status": item.item_status,
+        "action_required": item.action_required,
+        "action_type": item.action_type,
+        "action_message": item.action_message,
+        "final_price_gel": str(item.final_price_gel),
+        "proposed_final_price_gel": (
+            str(item.proposed_final_price_gel)
+            if item.proposed_final_price_gel is not None
+            else None
+        ),
+        "eta_days": item.eta_days,
+        "proposed_eta_days": item.proposed_eta_days,
+        "expected_arrival_date": (
+            item.expected_arrival_date.isoformat()
+            if item.expected_arrival_date
+            else None
+        ),
+        "proposed_expected_arrival_date": (
+            item.proposed_expected_arrival_date.isoformat()
+            if item.proposed_expected_arrival_date
+            else None
+        ),
+    }
+
+    has_actual_change = False
+
     if proposed_final_price_gel not in [None, ""]:
         try:
-            item.proposed_final_price_gel = Decimal(str(proposed_final_price_gel))
+            parsed_price = Decimal(str(proposed_final_price_gel))
         except Exception:
             return Response(
                 {"detail": "invalid proposed_final_price_gel"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        if parsed_price != item.final_price_gel:
+            item.proposed_final_price_gel = parsed_price
+            has_actual_change = True
+
     if proposed_eta_days not in [None, ""]:
         try:
             parsed_eta_days = int(proposed_eta_days)
-            item.proposed_eta_days = parsed_eta_days
-            item.proposed_expected_arrival_date = (
-                timezone.localdate() + timedelta(days=parsed_eta_days)
-            )
         except Exception:
             return Response(
                 {"detail": "invalid proposed_eta_days"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        if parsed_eta_days != item.eta_days:
+            item.proposed_eta_days = parsed_eta_days
+            item.proposed_expected_arrival_date = (
+                timezone.localdate() + timedelta(days=parsed_eta_days)
+            )
+            has_actual_change = True
+
+    if not has_actual_change:
+        return Response(
+            {"detail": "no actual changes detected"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     item.action_required = True
     item.action_type = action_type
@@ -285,6 +409,48 @@ def demo_request_item_change(request, item_id):
     order = item.order
     order.status = Order.STATUS_ACTION_REQUIRED
     order.save(update_fields=["status", "updated_at"])
+
+    event_type = OrderItemEvent.EVENT_TYPE_CHANGE_REQUESTED
+
+    if action_type == OrderItem.ACTION_TYPE_PRICE_CHANGE:
+        event_type = OrderItemEvent.EVENT_TYPE_PRICE_CHANGE_REQUESTED
+
+    if action_type == OrderItem.ACTION_TYPE_ETA_CHANGE:
+        event_type = OrderItemEvent.EVENT_TYPE_ETA_CHANGE_REQUESTED
+
+    create_order_item_event(
+        item=item,
+        event_type=event_type,
+        title="მომხმარებლის მოქმედება მოთხოვნილია",
+        message=action_message,
+        old_value=old_value,
+        new_value={
+            "item_status": item.item_status,
+            "action_required": item.action_required,
+            "action_type": item.action_type,
+            "action_message": item.action_message,
+            "final_price_gel": str(item.final_price_gel),
+            "proposed_final_price_gel": (
+                str(item.proposed_final_price_gel)
+                if item.proposed_final_price_gel is not None
+                else None
+            ),
+            "eta_days": item.eta_days,
+            "proposed_eta_days": item.proposed_eta_days,
+            "expected_arrival_date": (
+                item.expected_arrival_date.isoformat()
+                if item.expected_arrival_date
+                else None
+            ),
+            "proposed_expected_arrival_date": (
+                item.proposed_expected_arrival_date.isoformat()
+                if item.proposed_expected_arrival_date
+                else None
+            ),
+        },
+        actor_type=OrderItemEvent.ACTOR_TYPE_SYSTEM,
+        actor_name="System",
+    )
 
     serializer = OrderSerializer(order)
     return Response(serializer.data, status=status.HTTP_200_OK)
