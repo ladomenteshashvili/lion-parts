@@ -142,3 +142,31 @@ export async function resolveOrderItemAction(
 
   return response.json();
 }
+
+export async function confirmOrderPayment(
+  orderNumber: string
+): Promise<BackendOrder> {
+  const sessionId = getSessionId();
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/orders/${encodeURIComponent(
+      orderNumber
+    )}/demo-confirm-payment/`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        session_id: sessionId,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Confirm payment failed");
+  }
+
+  return response.json();
+}

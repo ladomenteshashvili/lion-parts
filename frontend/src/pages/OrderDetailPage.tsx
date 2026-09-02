@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import {
+  confirmOrderPayment,
   getOrderDetail,
   resolveOrderItemAction,
   type BackendOrder,
@@ -83,6 +84,7 @@ function OrderDetailPage() {
   const [selectedItem, setSelectedItem] = useState<OrderItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isResolvingAction, setIsResolvingAction] = useState(false);
+  const [isConfirmingPayment, setIsConfirmingPayment] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -246,6 +248,41 @@ function OrderDetailPage() {
     }
   }
 
+  async function handleConfirmPayment() {
+  if (!order) {
+    return;
+  }
+
+  setIsConfirmingPayment(true);
+  setError("");
+
+  try {
+    const updatedOrder = await confirmOrderPayment(order.order_number);
+
+    setOrder(updatedOrder);
+
+    setSelectedItem((currentSelectedItem) => {
+      if (!currentSelectedItem) {
+        return null;
+      }
+
+      return (
+        updatedOrder.items.find((item) => item.id === currentSelectedItem.id) ||
+        null
+      );
+    });
+
+    window.dispatchEvent(new Event("lion-parts-orders-updated"));
+  } catch (error) {
+    console.error("Confirm payment failed", error);
+    setError("გადახდის დადასტურება ვერ მოხერხდა");
+  } finally {
+    setIsConfirmingPayment(false);
+  }
+}
+
+
+
   if (isLoading) {
     return (
       <section className="card">
@@ -315,6 +352,14 @@ function OrderDetailPage() {
             Demo რეჟიმში შეკვეთა შეიქმნა Payment pending სტატუსით. რეალურ
             სისტემაში აქ იქნება payment gateway.
           </span>
+
+          <button
+            type="button"
+            onClick={handleConfirmPayment}
+            disabled={isConfirmingPayment}
+          >
+            {isConfirmingPayment ? "მუშავდება..." : "Demo: გადახდის დადასტურება"}
+          </button>
         </div>
       )}
 
