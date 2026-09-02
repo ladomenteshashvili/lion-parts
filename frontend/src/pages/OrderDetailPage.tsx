@@ -1,12 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
-import { getOrderStatusLabel } from "../utils/orderStatus";
-import {
-  getActionTypeLabel,
-  getOrderItemStatusLabel,
-} from "../utils/orderItemStatus";
-
 import {
   getOrderDetail,
   resolveOrderItemAction,
@@ -15,6 +9,72 @@ import {
   type OrderItemEvent,
 } from "../api/orders";
 import { formatDateKa } from "../utils/dateFormat";
+import { getOrderStatusLabel } from "../utils/orderStatus";
+import {
+  getActionTypeLabel,
+  getOrderItemStatusLabel,
+} from "../utils/orderItemStatus";
+
+const itemStatusOrder = [
+  "created",
+  "payment_confirmed",
+  "checking",
+  "action_required",
+  "purchased",
+  "received_usa",
+  "shipped_to_georgia",
+  "received_georgia",
+  "ready_for_pickup",
+  "completed",
+];
+
+const itemTimelineSteps = [
+  {
+    status: "created",
+    title: "ნაწილი შეკვეთაში დაემატა",
+    description: "ნაწილი დაფიქსირდა ამ შეკვეთაში.",
+  },
+  {
+    status: "payment_confirmed",
+    title: "გადახდა დადასტურებულია",
+    description: "ამ ეტაპის შემდეგ იწყება ნაწილის დამუშავება.",
+  },
+  {
+    status: "checking",
+    title: "მოწმდება",
+    description: "ოპერატორი ამოწმებს availability, ETA, წონას და თავსებადობას.",
+  },
+  {
+    status: "purchased",
+    title: "ნაწილი შეძენილია",
+    description: "ნაწილი შეძენილია მომწოდებელთან.",
+  },
+  {
+    status: "received_usa",
+    title: "მიღებულია აშშ-ში",
+    description: "ნაწილი მივიდა ამერიკის საწყობში.",
+  },
+  {
+    status: "shipped_to_georgia",
+    title: "გამოგზავნილია საქართველოში",
+    description: "ნაწილი გზაშია საქართველოში.",
+  },
+  {
+    status: "received_georgia",
+    title: "ჩამოსულია საქართველოში",
+    description: "ნაწილი მიღებულია საქართველოში.",
+  },
+  {
+    status: "ready_for_pickup",
+    title: "მზადაა გასაცემად",
+    description: "მომხმარებელს შეუძლია ნაწილის მიღება.",
+  },
+  {
+    status: "completed",
+    title: "დასრულებულია",
+    description: "ამ ნაწილზე პროცესი დასრულებულია.",
+  },
+];
 
 function OrderDetailPage() {
   const { orderNumber } = useParams<{ orderNumber: string }>();
@@ -46,21 +106,8 @@ function OrderDetailPage() {
   }, [orderNumber]);
 
   function isTimelineStepActive(item: OrderItem, stepStatus: string) {
-    const statuses = [
-      "created",
-      "payment_confirmed",
-      "checking",
-      "action_required",
-      "purchased",
-      "received_usa",
-      "shipped_to_georgia",
-      "received_georgia",
-      "ready_for_pickup",
-      "completed",
-    ];
-
-    const currentIndex = statuses.indexOf(item.item_status);
-    const stepIndex = statuses.indexOf(stepStatus);
+    const currentIndex = itemStatusOrder.indexOf(item.item_status);
+    const stepIndex = itemStatusOrder.indexOf(stepStatus);
 
     if (item.item_status === "cancelled") {
       return stepStatus === "cancelled";
@@ -73,129 +120,131 @@ function OrderDetailPage() {
     return stepIndex <= currentIndex;
   }
 
-function getEventValue(
-  value: Record<string, unknown> | null,
-  key: string
-): string | number | null {
-  if (!value || value[key] === undefined || value[key] === null) {
-    return null;
+  function getEventValue(
+    value: Record<string, unknown> | null,
+    key: string
+  ): string | number | null {
+    if (!value || value[key] === undefined || value[key] === null) {
+      return null;
+    }
+
+    const fieldValue = value[key];
+
+    if (typeof fieldValue === "string" || typeof fieldValue === "number") {
+      return fieldValue;
+    }
+
+    return String(fieldValue);
   }
 
-  const fieldValue = value[key];
+  function renderEventChanges(event: OrderItemEvent) {
+    const oldPrice = getEventValue(event.old_value, "final_price_gel");
+    const newPrice = getEventValue(event.new_value, "proposed_final_price_gel");
 
-  if (typeof fieldValue === "string" || typeof fieldValue === "number") {
-    return fieldValue;
-  }
+    const oldEta = getEventValue(event.old_value, "eta_days");
+    const newEta = getEventValue(event.new_value, "proposed_eta_days");
 
-  return String(fieldValue);
-}
-
-
-function renderEventChanges(event: OrderItemEvent) {
-  const oldPrice = getEventValue(event.old_value, "final_price_gel");
-  const newPrice = getEventValue(event.new_value, "proposed_final_price_gel");
-
-  const oldEta = getEventValue(event.old_value, "eta_days");
-  const newEta = getEventValue(event.new_value, "proposed_eta_days");
-
-  const oldDate = getEventValue(event.old_value, "expected_arrival_date");
-  const newDate = getEventValue(
-    event.new_value,
-    "proposed_expected_arrival_date"
-  );
-
-  const oldStatus = getEventValue(event.old_value, "item_status");
-  const newStatus = getEventValue(event.new_value, "item_status");
-
-  const hasPriceChange = newPrice !== null;
-  const hasEtaChange = newEta !== null;
-  const hasDateChange = newDate !== null;
-  const hasStatusChange =
-    oldStatus !== null && newStatus !== null && oldStatus !== newStatus;
-
-  if (
-    !hasPriceChange &&
-    !hasEtaChange &&
-    !hasDateChange &&
-    !hasStatusChange
-  ) {
-    return null;
-  }
-
-  return (
-    <div className="event-change-list">
-      {hasPriceChange && (
-        <div className="event-change-row">
-          <span>ფასი</span>
-          <strong>
-            {oldPrice ? `${Number(oldPrice).toLocaleString("ka-GE")} ₾` : "—"} →{" "}
-            {newPrice ? `${Number(newPrice).toLocaleString("ka-GE")} ₾` : "—"}
-          </strong>
-        </div>
-      )}
-
-      {hasEtaChange && (
-        <div className="event-change-row">
-          <span>ETA</span>
-          <strong>
-            {oldEta ? `${oldEta} დღე` : "—"} → {newEta ? `${newEta} დღე` : "—"}
-          </strong>
-        </div>
-      )}
-
-      {hasDateChange && (
-        <div className="event-change-row">
-          <span>მოსალოდნელი თარიღი</span>
-          <strong>
-            {oldDate ? formatDateKa(String(oldDate)) : "—"} →{" "}
-            {newDate ? formatDateKa(String(newDate)) : "—"}
-          </strong>
-        </div>
-      )}
-
-      {hasStatusChange && (
-        <div className="event-change-row">
-          <span>სტატუსი</span>
-          <strong>
-            {getOrderItemStatusLabel(String(oldStatus))} →{" "}
-            {getOrderItemStatusLabel(String(newStatus))}
-          </strong>
-        </div>
-      )}
-    </div>
-  );
-}
-
-
-
-  async function handleResolveItemAction() {
-  if (!selectedItem) {
-    return;
-  }
-
-  setIsResolvingAction(true);
-  setError("");
-
-  try {
-    const updatedOrder = await resolveOrderItemAction(selectedItem.id);
-
-    setOrder(updatedOrder);
-
-    const updatedSelectedItem = updatedOrder.items.find(
-      (item) => item.id === selectedItem.id
+    const oldDate = getEventValue(event.old_value, "expected_arrival_date");
+    const newDate = getEventValue(
+      event.new_value,
+      "proposed_expected_arrival_date"
     );
 
-    setSelectedItem(updatedSelectedItem || null);
+    const oldStatus = getEventValue(event.old_value, "item_status");
+    const newStatus = getEventValue(event.new_value, "item_status");
 
-    window.dispatchEvent(new Event("lion-parts-orders-updated"));
-  } catch (error) {
-    console.error("Resolve item action failed", error);
-    setError("მოქმედების დადასტურება ვერ მოხერხდა");
-  } finally {
-    setIsResolvingAction(false);
+    const hasPriceChange = newPrice !== null;
+    const hasEtaChange = newEta !== null;
+    const hasDateChange = newDate !== null;
+    const hasStatusChange =
+      oldStatus !== null && newStatus !== null && oldStatus !== newStatus;
+
+    if (
+      !hasPriceChange &&
+      !hasEtaChange &&
+      !hasDateChange &&
+      !hasStatusChange
+    ) {
+      return null;
+    }
+
+    return (
+      <div className="event-change-list">
+        {hasPriceChange && (
+          <div className="event-change-row">
+            <span>ფასი</span>
+            <strong>
+              {oldPrice
+                ? `${Number(oldPrice).toLocaleString("ka-GE")} ₾`
+                : "—"}{" "}
+              →{" "}
+              {newPrice
+                ? `${Number(newPrice).toLocaleString("ka-GE")} ₾`
+                : "—"}
+            </strong>
+          </div>
+        )}
+
+        {hasEtaChange && (
+          <div className="event-change-row">
+            <span>ETA</span>
+            <strong>
+              {oldEta ? `${oldEta} დღე` : "—"} →{" "}
+              {newEta ? `${newEta} დღე` : "—"}
+            </strong>
+          </div>
+        )}
+
+        {hasDateChange && (
+          <div className="event-change-row">
+            <span>მოსალოდნელი თარიღი</span>
+            <strong>
+              {oldDate ? formatDateKa(String(oldDate)) : "—"} →{" "}
+              {newDate ? formatDateKa(String(newDate)) : "—"}
+            </strong>
+          </div>
+        )}
+
+        {hasStatusChange && (
+          <div className="event-change-row">
+            <span>სტატუსი</span>
+            <strong>
+              {getOrderItemStatusLabel(String(oldStatus))} →{" "}
+              {getOrderItemStatusLabel(String(newStatus))}
+            </strong>
+          </div>
+        )}
+      </div>
+    );
   }
-}
 
+  async function handleResolveItemAction() {
+    if (!selectedItem) {
+      return;
+    }
+
+    setIsResolvingAction(true);
+    setError("");
+
+    try {
+      const updatedOrder = await resolveOrderItemAction(selectedItem.id);
+
+      setOrder(updatedOrder);
+
+      const updatedSelectedItem = updatedOrder.items.find(
+        (item) => item.id === selectedItem.id
+      );
+
+      setSelectedItem(updatedSelectedItem || null);
+
+      window.dispatchEvent(new Event("lion-parts-orders-updated"));
+    } catch (error) {
+      console.error("Resolve item action failed", error);
+      setError("მოქმედების დადასტურება ვერ მოხერხდა");
+    } finally {
+      setIsResolvingAction(false);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -343,7 +392,8 @@ function renderEventChanges(event: OrderItemEvent) {
               </p>
 
               <p className="muted">
-                მოსალოდნელი ჩამოსვლა: {formatDateKa(item.expected_arrival_date)}
+                მოსალოდნელი ჩამოსვლა:{" "}
+                {formatDateKa(item.expected_arrival_date)}
               </p>
 
               {item.action_required && (
@@ -357,7 +407,10 @@ function renderEventChanges(event: OrderItemEvent) {
                     <p className="muted">
                       ახალი ფასი:{" "}
                       <strong>
-                        {Number(item.proposed_final_price_gel).toLocaleString("ka-GE")} ₾
+                        {Number(item.proposed_final_price_gel).toLocaleString(
+                          "ka-GE"
+                        )}{" "}
+                        ₾
                       </strong>
                     </p>
                   )}
@@ -398,7 +451,10 @@ function renderEventChanges(event: OrderItemEvent) {
 
       {selectedItem && (
         <div className="modal-backdrop" onClick={() => setSelectedItem(null)}>
-          <div className="modal-card" onClick={(event) => event.stopPropagation()}>
+          <div
+            className="modal-card"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="modal-header">
               <div>
                 <p className="eyebrow">ნაწილის დეტალები</p>
@@ -450,13 +506,17 @@ function renderEventChanges(event: OrderItemEvent) {
                       <div className="proposed-change-row">
                         <span>არსებული ფასი</span>
                         <strong>
-                          {Number(selectedItem.final_price_gel).toLocaleString("ka-GE")} ₾
-                        </strong>
-                        <span>ახალი ფასი</span>
-                        <strong>
-                          {Number(selectedItem.proposed_final_price_gel).toLocaleString(
+                          {Number(selectedItem.final_price_gel).toLocaleString(
                             "ka-GE"
                           )}{" "}
+                          ₾
+                        </strong>
+
+                        <span>ახალი ფასი</span>
+                        <strong>
+                          {Number(
+                            selectedItem.proposed_final_price_gel
+                          ).toLocaleString("ka-GE")}{" "}
                           ₾
                         </strong>
                       </div>
@@ -472,14 +532,18 @@ function renderEventChanges(event: OrderItemEvent) {
                         </strong>
 
                         <span>არსებული მოსალოდნელი თარიღი</span>
-                        <strong>{formatDateKa(selectedItem.expected_arrival_date)}</strong>
+                        <strong>
+                          {formatDateKa(selectedItem.expected_arrival_date)}
+                        </strong>
 
                         <span>ახალი ETA</span>
                         <strong>{selectedItem.proposed_eta_days} დღე</strong>
 
                         <span>ახალი მოსალოდნელი თარიღი</span>
                         <strong>
-                          {formatDateKa(selectedItem.proposed_expected_arrival_date)}
+                          {formatDateKa(
+                            selectedItem.proposed_expected_arrival_date
+                          )}
                         </strong>
                       </div>
                     )}
@@ -491,51 +555,22 @@ function renderEventChanges(event: OrderItemEvent) {
             <div className="tracking-timeline tracking-timeline--modal">
               <h3>ნაწილის პროგრესი</h3>
 
-              <div
-                className={
-                  isTimelineStepActive(selectedItem, "created")
-                    ? "timeline-step timeline-step--active"
-                    : "timeline-step"
-                }
-              >
-                <span className="timeline-dot" />
-                <div>
-                  <strong>ნაწილი შეკვეთაში დაემატა</strong>
-                  <p className="muted">ნაწილი დაფიქსირდა ამ შეკვეთაში.</p>
+              {itemTimelineSteps.map((step) => (
+                <div
+                  className={
+                    isTimelineStepActive(selectedItem, step.status)
+                      ? "timeline-step timeline-step--active"
+                      : "timeline-step"
+                  }
+                  key={step.status}
+                >
+                  <span className="timeline-dot" />
+                  <div>
+                    <strong>{step.title}</strong>
+                    <p className="muted">{step.description}</p>
+                  </div>
                 </div>
-              </div>
-
-              <div
-                className={
-                  isTimelineStepActive(selectedItem, "payment_confirmed")
-                    ? "timeline-step timeline-step--active"
-                    : "timeline-step"
-                }
-              >
-                <span className="timeline-dot" />
-                <div>
-                  <strong>გადახდა დადასტურებულია</strong>
-                  <p className="muted">
-                    ამ ეტაპის შემდეგ იწყება ნაწილის დამუშავება.
-                  </p>
-                </div>
-              </div>
-
-              <div
-                className={
-                  isTimelineStepActive(selectedItem, "checking")
-                    ? "timeline-step timeline-step--active"
-                    : "timeline-step"
-                }
-              >
-                <span className="timeline-dot" />
-                <div>
-                  <strong>მოწმდება</strong>
-                  <p className="muted">
-                    ოპერატორი ამოწმებს availability, ETA, წონას და თავსებადობას.
-                  </p>
-                </div>
-              </div>
+              ))}
 
               {selectedItem.action_required && (
                 <div className="timeline-step timeline-step--warning">
@@ -548,104 +583,7 @@ function renderEventChanges(event: OrderItemEvent) {
                   </div>
                 </div>
               )}
-
-              <div
-                className={
-                  isTimelineStepActive(selectedItem, "purchased")
-                    ? "timeline-step timeline-step--active"
-                    : "timeline-step"
-                }
-              >
-                <span className="timeline-dot" />
-                <div>
-                  <strong>ნაწილი შეძენილია</strong>
-                  <p className="muted">
-                    ნაწილი შეძენილია მომწოდებელთან.
-                  </p>
-                </div>
-              </div>
-
-              <div
-                className={
-                  isTimelineStepActive(selectedItem, "received_usa")
-                    ? "timeline-step timeline-step--active"
-                    : "timeline-step"
-                }
-              >
-                <span className="timeline-dot" />
-                <div>
-                  <strong>მიღებულია აშშ-ში</strong>
-                  <p className="muted">
-                    ნაწილი მივიდა ამერიკის საწყობში.
-                  </p>
-                </div>
-              </div>
-
-              <div
-                className={
-                  isTimelineStepActive(selectedItem, "shipped_to_georgia")
-                    ? "timeline-step timeline-step--active"
-                    : "timeline-step"
-                }
-              >
-                <span className="timeline-dot" />
-                <div>
-                  <strong>გამოგზავნილია საქართველოში</strong>
-                  <p className="muted">
-                    ნაწილი გზაშია საქართველოში.
-                  </p>
-                </div>
-              </div>
-
-              <div
-                className={
-                  isTimelineStepActive(selectedItem, "received_georgia")
-                    ? "timeline-step timeline-step--active"
-                    : "timeline-step"
-                }
-              >
-                <span className="timeline-dot" />
-                <div>
-                  <strong>ჩამოსულია საქართველოში</strong>
-                  <p className="muted">
-                    ნაწილი მიღებულია საქართველოში.
-                  </p>
-                </div>
-              </div>
-
-              <div
-                className={
-                  isTimelineStepActive(selectedItem, "ready_for_pickup")
-                    ? "timeline-step timeline-step--active"
-                    : "timeline-step"
-                }
-              >
-                <span className="timeline-dot" />
-                <div>
-                  <strong>მზადაა გასაცემად</strong>
-                  <p className="muted">
-                    მომხმარებელს შეუძლია ნაწილის მიღება.
-                  </p>
-                </div>
-              </div>
-
-              <div
-                className={
-                  isTimelineStepActive(selectedItem, "completed")
-                    ? "timeline-step timeline-step--active"
-                    : "timeline-step"
-                }
-              >
-                <span className="timeline-dot" />
-                <div>
-                  <strong>დასრულებულია</strong>
-                  <p className="muted">
-                    ამ ნაწილზე პროცესი დასრულებულია.
-                  </p>
-                </div>
-              </div>
             </div>
-
 
             <div className="item-history">
               <h3>ნაწილის ისტორია</h3>
@@ -666,7 +604,7 @@ function renderEventChanges(event: OrderItemEvent) {
 
                       {event.message && <p>{event.message}</p>}
 
-                    {renderEventChanges(event)}
+                      {renderEventChanges(event)}
                     </article>
                   ))}
                 </div>
