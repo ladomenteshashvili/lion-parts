@@ -454,3 +454,88 @@ def demo_request_item_change(request, item_id):
 
     serializer = OrderSerializer(order)
     return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+def demo_update_item_status(request, item_id):
+    session_id = request.data.get("session_id", "").strip()
+    new_status = request.data.get("item_status", "").strip()
+    message = request.data.get("message", "").strip()
+
+    if not session_id:
+        return Response(
+            {"detail": "session_id is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if new_status not in dict(OrderItem.ITEM_STATUS_CHOICES):
+        return Response(
+            {"detail": "invalid item_status"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        item = OrderItem.objects.select_related("order").get(
+            id=item_id,
+            order__session_id=session_id,
+        )
+    except OrderItem.DoesNotExist:
+        return Response(
+            {"detail": "order item not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    old_status = item.item_status
+    order = item.order
+
+    if old_status == new_status:
+        return Response(
+            {"detail": "status is already set"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    old_value = {
+        "item_status": old_status,
+    }
+
+    item.item_status = new_status
+
+    if new_status != OrderItem.ITEM_STATUS_ACTION_REQUIRED:
+        item.action_required = False
+        item.action_type = OrderItem.ACTION_TYPE_NONE
+        item.action_message = ""
+
+    item.save()
+
+    create_order_item_event(
+        item=item,
+        event_type=OrderItemEvent.EVENT_TYPE_STATUS_CHANGED,
+        title="ნაწილის სტატუსი შეიცვალა",
+        message=message or f"სტატუსი შეიცვალა: {old_status} → {new_status}",
+        old_value=old_value,
+        new_value={
+            "item_status": item.item_status,
+        },
+        actor_type=OrderItemEvent.ACTOR_TYPE_SYSTEM,
+        actor_name="System",
+    )
+
+    if new_status == OrderItem.ITEM_STATUS_COMPLETED:
+        all_items_completed = not order.items.exclude(
+            item_status=OrderItem.ITEM_STATUS_COMPLETED
+        ).exists()
+
+        if all_items_completed:
+            order.status = Order.STATUS_COMPLETED
+            order.save(update_fields=["status", "updated_at"])
+
+    elif order.status not in [
+        Order.STATUS_PAYMENT_PENDING,
+        Order.STATUS_ACTION_REQUIRED,
+        Order.STATUS_CANCELLED,
+    ]:
+        order.status = Order.STATUS_PROCESSING
+        order.save(update_fields=["status", "updated_at"])
+
+    serializer = OrderSerializer(order)
+    return Response(serializer.data, status=status.HTTP_200_OK)

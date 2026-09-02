@@ -7,6 +7,7 @@ from .views import (
     demo_resolve_item_action,
     get_order_detail,
     list_orders,
+    demo_update_item_status,
 )
 
 urlpatterns = [
@@ -22,5 +23,10 @@ urlpatterns = [
         "items/<int:item_id>/demo-request-change/",
         demo_request_item_change,
         name="orders-item-demo-request-change",
+    ),
+    path(
+        "items/<int:item_id>/demo-update-status/",
+        demo_update_item_status,
+        name="orders-item-demo-update-status",
     ),
 ]
