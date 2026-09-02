@@ -10,6 +10,7 @@ class Customer(models.Model):
     phone = models.CharField(max_length=40, db_index=True)
 
     is_phone_verified = models.BooleanField(default=False)
+    can_request_quote = models.BooleanField(default=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

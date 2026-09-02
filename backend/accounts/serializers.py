@@ -14,6 +14,7 @@ class CustomerSerializer(serializers.ModelSerializer):
             "customer_name",
             "customer_phone",
             "is_phone_verified",
+            "can_request_quote",
             "created_at",
             "updated_at",
         ]

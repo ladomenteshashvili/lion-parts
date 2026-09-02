@@ -2,6 +2,8 @@ from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
+from accounts.models import Customer
+
 from .serializers import PartQuoteRequestSerializer
 
 
@@ -62,6 +64,22 @@ def search_parts(request):
 
 @api_view(["POST"])
 def create_quote_request(request):
+    session_id = request.data.get("session_id", "").strip()
+
+    if not session_id:
+        return Response(
+            {"session_id": ["This field is required."]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    customer = Customer.objects.filter(session_id=session_id).first()
+
+    if not customer or not customer.can_request_quote:
+        return Response(
+            {"detail": "quote request is not enabled for this customer"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
     serializer = PartQuoteRequestSerializer(data=request.data)
 
     if not serializer.is_valid():

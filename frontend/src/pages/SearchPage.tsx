@@ -8,7 +8,7 @@ import {
 } from "../api/client";
 import type { PartSearchResponse } from "../api/client";
 import { addCartItem, buildCartItemId, getSessionId } from "../api/cart";
-
+import { getProfile } from "../api/profile";
 type HealthStatus = {
   status: string;
   service: string;
@@ -36,6 +36,7 @@ function SearchPage() {
     useState(false);
   const [quoteRequestMessage, setQuoteRequestMessage] = useState("");
   const [quoteRequestError, setQuoteRequestError] = useState("");
+  const [canRequestQuote, setCanRequestQuote] = useState(false);
 
   useEffect(() => {
     getHealthStatus()
@@ -48,6 +49,25 @@ function SearchPage() {
         setHealthError("Backend connection failed");
       });
   }, []);
+
+
+    useEffect(() => {
+    getProfile()
+      .then((profile) => {
+        if (!profile) {
+          setCanRequestQuote(false);
+          return;
+        }
+
+        setCanRequestQuote(profile.can_request_quote);
+        setQuoteRequestName(profile.customer_name);
+        setQuoteRequestPhone(profile.customer_phone);
+      })
+      .catch(() => {
+        setCanRequestQuote(false);
+      });
+  }, []);
+
 
   async function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -124,6 +144,13 @@ function SearchPage() {
 
   async function handleQuoteRequestSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+        if (!canRequestQuote) {
+      setQuoteRequestError(
+        "შეთავაზების მოთხოვნა თქვენს ანგარიშზე ჩართული არ არის"
+      );
+      return;
+    }
 
     const cleanPartNumber = partNumber.trim();
     const cleanVin = vin.trim();
@@ -311,59 +338,73 @@ function SearchPage() {
         </div>
       )}
 
-      <div className="quote-request-box">
-        <div>
-          <p className="eyebrow">ვერ იპოვე სასურველი ვარიანტი?</p>
-          <h2>მოითხოვე შეთავაზება ოპერატორისგან</h2>
+            {canRequestQuote ? (
+        <div className="quote-request-box">
+          <div>
+            <p className="eyebrow">ვერ იპოვე სასურველი ვარიანტი?</p>
+            <h2>მოითხოვე შეთავაზება ოპერატორისგან</h2>
+            <p className="muted">
+              თუ ძიებაში არ ჩანს სწორი ნაწილი, ფასი არ გაწყობს ან VIN-ით
+              გადამოწმება გჭირდება, დატოვე მოთხოვნა და ოპერატორი გადაამოწმებს.
+            </p>
+          </div>
+
+          <form
+            className="quote-request-form"
+            onSubmit={handleQuoteRequestSubmit}
+          >
+            <input
+              value={quoteRequestName}
+              onChange={(event) => setQuoteRequestName(event.target.value)}
+              placeholder="სახელი — არასავალდებულო"
+            />
+
+            <input
+              value={quoteRequestPhone}
+              onChange={(event) => setQuoteRequestPhone(event.target.value)}
+              placeholder="ტელეფონი"
+            />
+
+            <textarea
+              className="quote-request-form__full"
+              value={quoteRequestComment}
+              onChange={(event) => setQuoteRequestComment(event.target.value)}
+              placeholder="კომენტარი — მაგ: მინდა მხოლოდ ორიგინალი, მარჯვენა მხარე, ფერი შავი..."
+            />
+
+            {quoteRequestError && (
+              <p className="form-error quote-request-form__full">
+                {quoteRequestError}
+              </p>
+            )}
+
+            {quoteRequestMessage && (
+              <p className="form-success quote-request-form__full">
+                {quoteRequestMessage}
+              </p>
+            )}
+
+            <button
+              className="quote-request-form__full"
+              type="submit"
+              disabled={isQuoteRequestSubmitting}
+            >
+              {isQuoteRequestSubmitting
+                ? "იგზავნება..."
+                : "შეთავაზების მოთხოვნა"}
+            </button>
+          </form>
+        </div>
+      ) : (
+        <div className="quote-request-box quote-request-box--locked">
+          <p className="eyebrow">შეთავაზების მოთხოვნა</p>
+          <h2>ეს ფუნქცია ჩართულია მხოლოდ შერჩეულ მომხმარებლებზე</h2>
           <p className="muted">
-            თუ ძიებაში არ ჩანს სწორი ნაწილი, ფასი არ გაწყობს ან VIN-ით
-            გადამოწმება გჭირდება, დატოვე მოთხოვნა და ოპერატორი გადაამოწმებს.
+            თუ ხშირად უკვეთავთ ნაწილებს ან გჭირდებათ ოპერატორის ხელით ძიება,
+            შეგვიძლია ეს ფუნქცია თქვენს ანგარიშზე ჩავრთოთ.
           </p>
         </div>
-
-        <form className="quote-request-form" onSubmit={handleQuoteRequestSubmit}>
-          <input
-            value={quoteRequestName}
-            onChange={(event) => setQuoteRequestName(event.target.value)}
-            placeholder="სახელი — არასავალდებულო"
-          />
-
-          <input
-            value={quoteRequestPhone}
-            onChange={(event) => setQuoteRequestPhone(event.target.value)}
-            placeholder="ტელეფონი"
-          />
-
-          <textarea
-            className="quote-request-form__full"
-            value={quoteRequestComment}
-            onChange={(event) => setQuoteRequestComment(event.target.value)}
-            placeholder="კომენტარი — მაგ: მინდა მხოლოდ ორიგინალი, მარჯვენა მხარე, ფერი შავი..."
-          />
-
-          {quoteRequestError && (
-            <p className="form-error quote-request-form__full">
-              {quoteRequestError}
-            </p>
-          )}
-
-          {quoteRequestMessage && (
-            <p className="form-success quote-request-form__full">
-              {quoteRequestMessage}
-            </p>
-          )}
-
-          <button
-            className="quote-request-form__full"
-            type="submit"
-            disabled={isQuoteRequestSubmitting}
-          >
-            {isQuoteRequestSubmitting
-              ? "იგზავნება..."
-              : "შეთავაზების მოთხოვნა"}
-          </button>
-        </form>
-      </div>
+      )}
     </section>
   );
 }

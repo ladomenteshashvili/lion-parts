@@ -8,6 +8,7 @@ export type CustomerProfile = {
   customer_name: string;
   customer_phone: string;
   is_phone_verified: boolean;
+  can_request_quote: boolean;
   created_at: string;
   updated_at: string;
 };

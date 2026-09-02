@@ -888,3 +888,7 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+.quote-request-box--locked {
+  opacity: 0.8;
+}

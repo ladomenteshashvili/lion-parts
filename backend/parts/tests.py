@@ -2,6 +2,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from .models import PartQuoteRequest
+from accounts.models import Customer
 
 
 class PartsSearchApiTests(TestCase):
@@ -120,16 +121,23 @@ class PartsSearchApiTests(TestCase):
             self.assertNotIn("shipping_price", result)
             self.assertNotIn("internal_cost", result)
 
-
 class PartQuoteRequestApiTests(TestCase):
     def setUp(self):
         self.client = APIClient()
+        self.session_id = "guest-test-session"
+
+        Customer.objects.create(
+            session_id=self.session_id,
+            name="Test Customer",
+            phone="+995555123456",
+            can_request_quote=True,
+        )
 
     def test_create_quote_request(self):
         response = self.client.post(
             "/api/parts/quote-requests/",
             {
-                "session_id": "guest-test-session",
+                "session_id": self.session_id,
                 "part_number": "51118070648",
                 "vin": "WBA12345678901234",
                 "customer_name": "Test Customer",
@@ -145,7 +153,7 @@ class PartQuoteRequestApiTests(TestCase):
 
         quote_request = PartQuoteRequest.objects.first()
 
-        self.assertEqual(quote_request.session_id, "guest-test-session")
+        self.assertEqual(quote_request.session_id, self.session_id)
         self.assertEqual(quote_request.part_number, "51118070648")
         self.assertEqual(quote_request.vin, "WBA12345678901234")
         self.assertEqual(quote_request.customer_name, "Test Customer")
@@ -155,6 +163,32 @@ class PartQuoteRequestApiTests(TestCase):
 
         self.assertEqual(response.data["part_number"], "51118070648")
         self.assertEqual(response.data["status"], PartQuoteRequest.STATUS_NEW)
+
+    def test_create_quote_request_requires_enabled_customer(self):
+        disabled_session_id = "disabled-test-session"
+
+        Customer.objects.create(
+            session_id=disabled_session_id,
+            name="Disabled Customer",
+            phone="+995599999999",
+            can_request_quote=False,
+        )
+
+        response = self.client.post(
+            "/api/parts/quote-requests/",
+            {
+                "session_id": disabled_session_id,
+                "part_number": "51118070648",
+                "customer_phone": "+995599999999",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(
+            response.data["detail"],
+            "quote request is not enabled for this customer",
+        )
 
     def test_create_quote_request_requires_session_id(self):
         response = self.client.post(
@@ -173,7 +207,7 @@ class PartQuoteRequestApiTests(TestCase):
         response = self.client.post(
             "/api/parts/quote-requests/",
             {
-                "session_id": "guest-test-session",
+                "session_id": self.session_id,
                 "part_number": "",
                 "customer_phone": "+995555123456",
             },
@@ -187,7 +221,7 @@ class PartQuoteRequestApiTests(TestCase):
         response = self.client.post(
             "/api/parts/quote-requests/",
             {
-                "session_id": "guest-test-session",
+                "session_id": self.session_id,
                 "part_number": "51118070648",
             },
             format="json",
