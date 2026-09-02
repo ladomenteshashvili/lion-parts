@@ -34,7 +34,31 @@ export type PartSearchResponse = {
   results: PartOption[];
 };
 
-export async function searchParts(payload: PartSearchPayload): Promise<PartSearchResponse> {
+export type PartQuoteRequestPayload = {
+  session_id: string;
+  part_number: string;
+  vin?: string;
+  customer_name?: string;
+  customer_phone: string;
+  comment?: string;
+};
+
+export type PartQuoteRequestResponse = {
+  id: number;
+  session_id: string;
+  part_number: string;
+  vin: string;
+  customer_name: string;
+  customer_phone: string;
+  comment: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function searchParts(
+  payload: PartSearchPayload
+): Promise<PartSearchResponse> {
   const response = await fetch(`${API_BASE_URL}/api/parts/search/`, {
     method: "POST",
     headers: {
@@ -45,6 +69,25 @@ export async function searchParts(payload: PartSearchPayload): Promise<PartSearc
 
   if (!response.ok) {
     throw new Error("Part search failed");
+  }
+
+  return response.json();
+}
+
+export async function createPartQuoteRequest(
+  payload: PartQuoteRequestPayload
+): Promise<PartQuoteRequestResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/parts/quote-requests/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Quote request failed");
   }
 
   return response.json();

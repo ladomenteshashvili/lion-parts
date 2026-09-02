@@ -289,7 +289,7 @@ button:disabled {
     .part-price-box {
     justify-items: stretch;
   }
-  
+
     .part-quantity {
     justify-items: stretch;
   }
@@ -844,6 +844,47 @@ textarea {
 
 @media (max-width: 720px) {
   .event-change-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+textarea {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 14px;
+  padding: 14px 16px;
+  font-family: inherit;
+  font-size: 16px;
+  resize: vertical;
+  min-height: 110px;
+}
+
+.quote-request-box {
+  margin-top: 28px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 18px;
+  padding: 18px;
+  background: #f8fafc;
+}
+
+.quote-request-box h2 {
+  margin: 0 0 8px;
+  font-size: 24px;
+}
+
+.quote-request-form {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.quote-request-form__full {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 720px) {
+  .quote-request-form {
     grid-template-columns: 1fr;
   }
 }

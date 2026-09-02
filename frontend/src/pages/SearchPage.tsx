@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 
-import { getHealthStatus, searchParts } from "../api/client";
+import {
+  createPartQuoteRequest,
+  getHealthStatus,
+  searchParts,
+} from "../api/client";
 import type { PartSearchResponse } from "../api/client";
-import { addCartItem, buildCartItemId } from "../api/cart";
+import { addCartItem, buildCartItemId, getSessionId } from "../api/cart";
 
 type HealthStatus = {
   status: string;
@@ -24,6 +28,14 @@ function SearchPage() {
   const [quantitiesByCartItemId, setQuantitiesByCartItemId] = useState<
     Record<string, number>
   >({});
+
+  const [quoteRequestName, setQuoteRequestName] = useState("");
+  const [quoteRequestPhone, setQuoteRequestPhone] = useState("");
+  const [quoteRequestComment, setQuoteRequestComment] = useState("");
+  const [isQuoteRequestSubmitting, setIsQuoteRequestSubmitting] =
+    useState(false);
+  const [quoteRequestMessage, setQuoteRequestMessage] = useState("");
+  const [quoteRequestError, setQuoteRequestError] = useState("");
 
   useEffect(() => {
     getHealthStatus()
@@ -52,6 +64,8 @@ function SearchPage() {
     setIsSearching(true);
     setSearchError("");
     setCartMessage("");
+    setQuoteRequestMessage("");
+    setQuoteRequestError("");
     setAddedCartItemIds([]);
     setQuantitiesByCartItemId({});
 
@@ -105,6 +119,49 @@ function SearchPage() {
       console.error("Add to cart failed", error);
       setCartMessage("");
       setSearchError("კალათაში დამატება ვერ მოხერხდა");
+    }
+  }
+
+  async function handleQuoteRequestSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const cleanPartNumber = partNumber.trim();
+    const cleanVin = vin.trim();
+    const cleanPhone = quoteRequestPhone.trim();
+
+    if (!cleanPartNumber) {
+      setQuoteRequestError("Part number აუცილებელია");
+      return;
+    }
+
+    if (!cleanPhone) {
+      setQuoteRequestError("ტელეფონის ნომერი აუცილებელია");
+      return;
+    }
+
+    setIsQuoteRequestSubmitting(true);
+    setQuoteRequestError("");
+    setQuoteRequestMessage("");
+
+    try {
+      const request = await createPartQuoteRequest({
+        session_id: getSessionId(),
+        part_number: cleanPartNumber,
+        vin: cleanVin || undefined,
+        customer_name: quoteRequestName.trim(),
+        customer_phone: cleanPhone,
+        comment: quoteRequestComment.trim(),
+      });
+
+      setQuoteRequestMessage(
+        `მოთხოვნა მიღებულია. Request #${request.id}. ოპერატორი გადაამოწმებს და დაგიკავშირდებათ.`
+      );
+      setQuoteRequestComment("");
+    } catch (error) {
+      console.error("Quote request failed", error);
+      setQuoteRequestError("მოთხოვნის გაგზავნა ვერ მოხერხდა");
+    } finally {
+      setIsQuoteRequestSubmitting(false);
     }
   }
 
@@ -253,6 +310,60 @@ function SearchPage() {
           })}
         </div>
       )}
+
+      <div className="quote-request-box">
+        <div>
+          <p className="eyebrow">ვერ იპოვე სასურველი ვარიანტი?</p>
+          <h2>მოითხოვე შეთავაზება ოპერატორისგან</h2>
+          <p className="muted">
+            თუ ძიებაში არ ჩანს სწორი ნაწილი, ფასი არ გაწყობს ან VIN-ით
+            გადამოწმება გჭირდება, დატოვე მოთხოვნა და ოპერატორი გადაამოწმებს.
+          </p>
+        </div>
+
+        <form className="quote-request-form" onSubmit={handleQuoteRequestSubmit}>
+          <input
+            value={quoteRequestName}
+            onChange={(event) => setQuoteRequestName(event.target.value)}
+            placeholder="სახელი — არასავალდებულო"
+          />
+
+          <input
+            value={quoteRequestPhone}
+            onChange={(event) => setQuoteRequestPhone(event.target.value)}
+            placeholder="ტელეფონი"
+          />
+
+          <textarea
+            className="quote-request-form__full"
+            value={quoteRequestComment}
+            onChange={(event) => setQuoteRequestComment(event.target.value)}
+            placeholder="კომენტარი — მაგ: მინდა მხოლოდ ორიგინალი, მარჯვენა მხარე, ფერი შავი..."
+          />
+
+          {quoteRequestError && (
+            <p className="form-error quote-request-form__full">
+              {quoteRequestError}
+            </p>
+          )}
+
+          {quoteRequestMessage && (
+            <p className="form-success quote-request-form__full">
+              {quoteRequestMessage}
+            </p>
+          )}
+
+          <button
+            className="quote-request-form__full"
+            type="submit"
+            disabled={isQuoteRequestSubmitting}
+          >
+            {isQuoteRequestSubmitting
+              ? "იგზავნება..."
+              : "შეთავაზების მოთხოვნა"}
+          </button>
+        </form>
+      </div>
     </section>
   );
 }
