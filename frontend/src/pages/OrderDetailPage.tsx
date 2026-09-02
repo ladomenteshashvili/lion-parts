@@ -324,6 +324,39 @@ function isOrderCompleted(order: BackendOrder) {
     (item) => item.action_required
   );
 
+    const orderTimelineSteps = [
+    {
+      key: "created",
+      isActive: true,
+      title: "შეკვეთა შექმნილია",
+      description: new Date(order.created_at).toLocaleString("ka-GE"),
+    },
+    {
+      key: "payment",
+      isActive: isOrderPaymentConfirmed(order),
+      title: isOrderPaymentConfirmed(order)
+        ? "გადახდა დადასტურებულია"
+        : "გადახდა დასადასტურებელია",
+      description: isOrderPaymentConfirmed(order)
+        ? "გადახდის შემდეგ შეკვეთა გადავიდა დამუშავების ეტაპზე."
+        : "შემდეგ ეტაპზე დაემატება online payment confirmation.",
+    },
+    {
+      key: "processing",
+      isActive: isOrderProcessing(order),
+      title: "შეკვეთა მუშავდება",
+      description:
+        "ეს არის მთლიანი შეკვეთის საერთო სტატუსი. თითოეულ ნაწილს თავისი ცალკე სტატუსი აქვს ქვემოთ.",
+    },
+    {
+      key: "completed",
+      isActive: isOrderCompleted(order),
+      title: "დასრულება",
+      description:
+        "შეკვეთა დასრულდება მაშინ, როცა ყველა ნაწილი გაიცემა ან პროცესი დაიხურება.",
+    },
+  ];
+
   return (
     <section className="card">
       <Link className="back-link" to="/orders">
@@ -378,74 +411,25 @@ function isOrderCompleted(order: BackendOrder) {
         </div>
       )}
 
-      <div className="tracking-timeline">
+            <div className="tracking-timeline">
         <h2>შეკვეთის საერთო პროგრესი</h2>
 
-        <div className="timeline-step timeline-step--active">
-          <span className="timeline-dot" />
-          <div>
-            <strong>შეკვეთა შექმნილია</strong>
-            <p className="muted">
-              {new Date(order.created_at).toLocaleString("ka-GE")}
-            </p>
+        {orderTimelineSteps.map((step) => (
+          <div
+            className={
+              step.isActive
+                ? "timeline-step timeline-step--active"
+                : "timeline-step"
+            }
+            key={step.key}
+          >
+            <span className="timeline-dot" />
+            <div>
+              <strong>{step.title}</strong>
+              <p className="muted">{step.description}</p>
+            </div>
           </div>
-        </div>
-
-        <div
-          className={
-            isOrderPaymentConfirmed(order)
-              ? "timeline-step timeline-step--active"
-              : "timeline-step"
-          }
-        >
-          <span className="timeline-dot" />
-          <div>
-            <strong>
-              {isOrderPaymentConfirmed(order)
-                ? "გადახდა დადასტურებულია"
-                : "გადახდა დასადასტურებელია"}
-            </strong>
-            <p className="muted">
-              {isOrderPaymentConfirmed(order)
-                ? "გადახდის შემდეგ შეკვეთა გადავიდა დამუშავების ეტაპზე."
-                : "შემდეგ ეტაპზე დაემატება online payment confirmation."}
-            </p>
-          </div>
-        </div>
-
-        <div
-          className={
-            isOrderProcessing(order)
-              ? "timeline-step timeline-step--active"
-              : "timeline-step"
-          }
-        >
-          <span className="timeline-dot" />
-          <div>
-            <strong>შეკვეთა მუშავდება</strong>
-            <p className="muted">
-              ეს არის მთლიანი შეკვეთის საერთო სტატუსი. თითოეულ ნაწილს თავისი
-              ცალკე სტატუსი აქვს ქვემოთ.
-            </p>
-          </div>
-        </div>
-
-        <div
-          className={
-            isOrderCompleted(order)
-              ? "timeline-step timeline-step--active"
-              : "timeline-step"
-          }
-        >
-          <span className="timeline-dot" />
-          <div>
-            <strong>დასრულება</strong>
-            <p className="muted">
-              შეკვეთა დასრულდება მაშინ, როცა ყველა ნაწილი გაიცემა ან პროცესი
-              დაიხურება.
-            </p>
-          </div>
-        </div>
+        ))}
       </div>
 
       <div className="order-items">
