@@ -1,6 +1,8 @@
 from django.test import TestCase
 from rest_framework.test import APIClient
 
+from .models import PartQuoteRequest
+
 
 class PartsSearchApiTests(TestCase):
     def setUp(self):
@@ -117,3 +119,79 @@ class PartsSearchApiTests(TestCase):
             self.assertNotIn("supplier_price", result)
             self.assertNotIn("shipping_price", result)
             self.assertNotIn("internal_cost", result)
+
+
+class PartQuoteRequestApiTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+
+    def test_create_quote_request(self):
+        response = self.client.post(
+            "/api/parts/quote-requests/",
+            {
+                "session_id": "guest-test-session",
+                "part_number": "51118070648",
+                "vin": "WBA12345678901234",
+                "customer_name": "Test Customer",
+                "customer_phone": "+995555123456",
+                "comment": "Need front bumper cover",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+
+        self.assertEqual(PartQuoteRequest.objects.count(), 1)
+
+        quote_request = PartQuoteRequest.objects.first()
+
+        self.assertEqual(quote_request.session_id, "guest-test-session")
+        self.assertEqual(quote_request.part_number, "51118070648")
+        self.assertEqual(quote_request.vin, "WBA12345678901234")
+        self.assertEqual(quote_request.customer_name, "Test Customer")
+        self.assertEqual(quote_request.customer_phone, "+995555123456")
+        self.assertEqual(quote_request.comment, "Need front bumper cover")
+        self.assertEqual(quote_request.status, PartQuoteRequest.STATUS_NEW)
+
+        self.assertEqual(response.data["part_number"], "51118070648")
+        self.assertEqual(response.data["status"], PartQuoteRequest.STATUS_NEW)
+
+    def test_create_quote_request_requires_session_id(self):
+        response = self.client.post(
+            "/api/parts/quote-requests/",
+            {
+                "part_number": "51118070648",
+                "customer_phone": "+995555123456",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("session_id", response.data)
+
+    def test_create_quote_request_requires_part_number(self):
+        response = self.client.post(
+            "/api/parts/quote-requests/",
+            {
+                "session_id": "guest-test-session",
+                "part_number": "",
+                "customer_phone": "+995555123456",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("part_number", response.data)
+
+    def test_create_quote_request_requires_customer_phone(self):
+        response = self.client.post(
+            "/api/parts/quote-requests/",
+            {
+                "session_id": "guest-test-session",
+                "part_number": "51118070648",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("customer_phone", response.data)
