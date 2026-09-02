@@ -1,16 +1,19 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import {
-  getOrderDetail,
-  resolveOrderItemAction,
-  type BackendOrder,
-  type OrderItem,
-} from "../api/orders";
+
 import { getOrderStatusLabel } from "../utils/orderStatus";
 import {
   getActionTypeLabel,
   getOrderItemStatusLabel,
 } from "../utils/orderItemStatus";
+
+import {
+  getOrderDetail,
+  resolveOrderItemAction,
+  type BackendOrder,
+  type OrderItem,
+  type OrderItemEvent,
+} from "../api/orders";
 import { formatDateKa } from "../utils/dateFormat";
 
 function OrderDetailPage() {
@@ -69,6 +72,78 @@ function OrderDetailPage() {
 
     return stepIndex <= currentIndex;
   }
+
+function getEventValue(
+  value: Record<string, unknown> | null,
+  key: string
+): string | number | null {
+  if (!value || value[key] === undefined || value[key] === null) {
+    return null;
+  }
+
+  const fieldValue = value[key];
+
+  if (typeof fieldValue === "string" || typeof fieldValue === "number") {
+    return fieldValue;
+  }
+
+  return String(fieldValue);
+}
+
+function renderEventChanges(event: OrderItemEvent) {
+  const oldPrice = getEventValue(event.old_value, "final_price_gel");
+  const newPrice = getEventValue(event.new_value, "proposed_final_price_gel");
+
+  const oldEta = getEventValue(event.old_value, "eta_days");
+  const newEta = getEventValue(event.new_value, "proposed_eta_days");
+
+  const oldDate = getEventValue(event.old_value, "expected_arrival_date");
+  const newDate = getEventValue(
+    event.new_value,
+    "proposed_expected_arrival_date"
+  );
+
+  const hasChanges = oldPrice || newPrice || oldEta || newEta || oldDate || newDate;
+
+  if (!hasChanges) {
+    return null;
+  }
+
+  return (
+    <div className="event-change-list">
+      {(oldPrice || newPrice) && (
+        <div className="event-change-row">
+          <span>ფასი</span>
+          <strong>
+            {oldPrice ? `${Number(oldPrice).toLocaleString("ka-GE")} ₾` : "—"} →{" "}
+            {newPrice ? `${Number(newPrice).toLocaleString("ka-GE")} ₾` : "—"}
+          </strong>
+        </div>
+      )}
+
+      {(oldEta || newEta) && (
+        <div className="event-change-row">
+          <span>ETA</span>
+          <strong>
+            {oldEta ? `${oldEta} დღე` : "—"} → {newEta ? `${newEta} დღე` : "—"}
+          </strong>
+        </div>
+      )}
+
+      {(oldDate || newDate) && (
+        <div className="event-change-row">
+          <span>მოსალოდნელი თარიღი</span>
+          <strong>
+            {oldDate ? formatDateKa(String(oldDate)) : "—"} →{" "}
+            {newDate ? formatDateKa(String(newDate)) : "—"}
+          </strong>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 
   async function handleResolveItemAction() {
   if (!selectedItem) {
@@ -546,6 +621,33 @@ function OrderDetailPage() {
                   </p>
                 </div>
               </div>
+            </div>
+
+
+            <div className="item-history">
+              <h3>ნაწილის ისტორია</h3>
+
+              {selectedItem.events.length === 0 ? (
+                <p className="muted">ისტორია ჯერ არ არის.</p>
+              ) : (
+                <div className="item-history-list">
+                  {selectedItem.events.map((event) => (
+                    <article className="item-history-entry" key={event.id}>
+                      <div>
+                        <strong>{event.title}</strong>
+                        <p className="muted">
+                          {new Date(event.created_at).toLocaleString("ka-GE")}
+                          {event.actor_name ? ` · ${event.actor_name}` : ""}
+                        </p>
+                      </div>
+
+                      {event.message && <p>{event.message}</p>}
+
+                    {renderEventChanges(event)}
+                    </article>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="modal-actions">

@@ -2,6 +2,19 @@ import { getSessionId } from "./cart";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
+export type OrderItemEvent = {
+  id: number;
+  event_type: string;
+  title: string;
+  message: string;
+  old_value: Record<string, unknown> | null;
+  new_value: Record<string, unknown> | null;
+  actor_type: string;
+  actor_name: string;
+  visible_to_customer: boolean;
+  created_at: string;
+};
+
 export type OrderItem = {
   id: number;
   cart_item_id: string;
@@ -25,6 +38,7 @@ export type OrderItem = {
   action_required: boolean;
   action_type: string;
   action_message: string;
+  events: OrderItemEvent[];
   created_at: string;
   updated_at: string;
 };
