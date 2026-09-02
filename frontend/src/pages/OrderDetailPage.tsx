@@ -90,6 +90,7 @@ function getEventValue(
   return String(fieldValue);
 }
 
+
 function renderEventChanges(event: OrderItemEvent) {
   const oldPrice = getEventValue(event.old_value, "final_price_gel");
   const newPrice = getEventValue(event.new_value, "proposed_final_price_gel");
@@ -103,11 +104,21 @@ function renderEventChanges(event: OrderItemEvent) {
     "proposed_expected_arrival_date"
   );
 
+  const oldStatus = getEventValue(event.old_value, "item_status");
+  const newStatus = getEventValue(event.new_value, "item_status");
+
   const hasPriceChange = newPrice !== null;
   const hasEtaChange = newEta !== null;
   const hasDateChange = newDate !== null;
+  const hasStatusChange =
+    oldStatus !== null && newStatus !== null && oldStatus !== newStatus;
 
-  if (!hasPriceChange && !hasEtaChange && !hasDateChange) {
+  if (
+    !hasPriceChange &&
+    !hasEtaChange &&
+    !hasDateChange &&
+    !hasStatusChange
+  ) {
     return null;
   }
 
@@ -138,6 +149,16 @@ function renderEventChanges(event: OrderItemEvent) {
           <strong>
             {oldDate ? formatDateKa(String(oldDate)) : "—"} →{" "}
             {newDate ? formatDateKa(String(newDate)) : "—"}
+          </strong>
+        </div>
+      )}
+
+      {hasStatusChange && (
+        <div className="event-change-row">
+          <span>სტატუსი</span>
+          <strong>
+            {getOrderItemStatusLabel(String(oldStatus))} →{" "}
+            {getOrderItemStatusLabel(String(newStatus))}
           </strong>
         </div>
       )}
