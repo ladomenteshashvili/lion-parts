@@ -1,18 +1,23 @@
 from django.urls import path
 
-from django.urls import path
 from .views import (
     checkout,
+    demo_confirm_payment,
     demo_request_item_change,
     demo_resolve_item_action,
+    demo_update_item_status,
     get_order_detail,
     list_orders,
-    demo_update_item_status,
 )
 
 urlpatterns = [
     path("", list_orders, name="orders-list"),
     path("checkout/", checkout, name="orders-checkout"),
+    path(
+        "<str:order_number>/demo-confirm-payment/",
+        demo_confirm_payment,
+        name="orders-demo-confirm-payment",
+    ),
     path("<str:order_number>/", get_order_detail, name="orders-detail"),
     path(
         "items/<int:item_id>/demo-resolve-action/",

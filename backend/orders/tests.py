@@ -249,3 +249,45 @@ class OrderFlowTests(TestCase):
         item = order.items.first()
 
         return order, item
+
+
+    def test_demo_confirm_payment_updates_order_items_and_creates_events(self):
+        order, item = self._create_order_from_cart()
+
+        response = self.client.post(
+            f"/api/orders/{order.order_number}/demo-confirm-payment/",
+            {
+                "session_id": self.session_id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        order.refresh_from_db()
+        item.refresh_from_db()
+
+        self.assertEqual(order.status, Order.STATUS_PROCESSING)
+        self.assertEqual(item.item_status, OrderItem.ITEM_STATUS_PAYMENT_CONFIRMED)
+        self.assertFalse(item.action_required)
+        self.assertEqual(item.action_type, OrderItem.ACTION_TYPE_NONE)
+        self.assertEqual(item.action_message, "")
+
+        event = item.events.order_by("id").last()
+
+        self.assertIsNotNone(event)
+        self.assertEqual(event.event_type, OrderItemEvent.EVENT_TYPE_STATUS_CHANGED)
+        self.assertEqual(event.title, "გადახდა დადასტურებულია")
+        self.assertEqual(event.message, "შეკვეთის გადახდა დადასტურდა.")
+        self.assertEqual(event.old_value["item_status"], OrderItem.ITEM_STATUS_CREATED)
+        self.assertEqual(
+            event.new_value["item_status"],
+            OrderItem.ITEM_STATUS_PAYMENT_CONFIRMED,
+        )
+        self.assertFalse(event.visible_to_customer)
+
+        self.assertEqual(response.data["status"], Order.STATUS_PROCESSING)
+        self.assertEqual(
+            response.data["items"][0]["item_status"],
+            OrderItem.ITEM_STATUS_PAYMENT_CONFIRMED,
+        )

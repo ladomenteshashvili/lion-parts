@@ -195,6 +195,85 @@ def checkout(request):
     serializer = OrderSerializer(order)
     return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+
+
+@api_view(["POST"])
+def demo_confirm_payment(request, order_number):
+    session_id = request.data.get("session_id", "").strip()
+
+    if not session_id:
+        return Response(
+            {"detail": "session_id is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        with transaction.atomic():
+            order = Order.objects.select_for_update().get(
+                order_number=order_number,
+                session_id=session_id,
+            )
+
+            if order.status != Order.STATUS_PAYMENT_PENDING:
+                return Response(
+                    {"detail": "order is not payment pending"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            old_order_status = order.status
+
+            order.status = Order.STATUS_PROCESSING
+            order.save(update_fields=["status", "updated_at"])
+
+            for item in order.items.select_for_update().all():
+                old_item_status = item.item_status
+
+                item.item_status = OrderItem.ITEM_STATUS_PAYMENT_CONFIRMED
+                item.action_required = False
+                item.action_type = OrderItem.ACTION_TYPE_NONE
+                item.action_message = ""
+                item.save(
+                    update_fields=[
+                        "item_status",
+                        "action_required",
+                        "action_type",
+                        "action_message",
+                        "updated_at",
+                    ]
+                )
+
+                create_order_item_event(
+                    item=item,
+                    event_type=OrderItemEvent.EVENT_TYPE_STATUS_CHANGED,
+                    title="გადახდა დადასტურებულია",
+                    message="შეკვეთის გადახდა დადასტურდა.",
+                    old_value={
+                        "order_status": old_order_status,
+                        "item_status": old_item_status,
+                    },
+                    new_value={
+                        "order_status": order.status,
+                        "item_status": item.item_status,
+                    },
+                    actor_type=OrderItemEvent.ACTOR_TYPE_SYSTEM,
+                    actor_name="System",
+                )
+
+    except Order.DoesNotExist:
+        return Response(
+            {"detail": "order not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    updated_order = Order.objects.prefetch_related("items__events").get(
+        order_number=order_number,
+        session_id=session_id,
+    )
+
+    serializer = OrderSerializer(updated_order)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
 @api_view(["POST"])
 def demo_resolve_item_action(request, item_id):
     session_id = request.data.get("session_id", "").strip()
