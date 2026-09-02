@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
+
 import { getHealthStatus, searchParts } from "../api/client";
 import type { PartSearchResponse } from "../api/client";
 import { addCartItem, buildCartItemId } from "../api/cart";
@@ -20,7 +21,6 @@ function SearchPage() {
   const [cartMessage, setCartMessage] = useState("");
   const [quote, setQuote] = useState<PartSearchResponse | null>(null);
   const [addedCartItemIds, setAddedCartItemIds] = useState<string[]>([]);
-
   const [quantitiesByCartItemId, setQuantitiesByCartItemId] = useState<
     Record<string, number>
   >({});
@@ -53,7 +53,6 @@ function SearchPage() {
     setSearchError("");
     setCartMessage("");
     setAddedCartItemIds([]);
-
     setQuantitiesByCartItemId({});
 
     try {
@@ -71,7 +70,7 @@ function SearchPage() {
     }
   }
 
-       async function handleAddToCart(
+  async function handleAddToCart(
     item: PartSearchResponse["results"][number],
     quantity: number
   ) {
@@ -96,6 +95,7 @@ function SearchPage() {
         final_price_gel: Number(item.final_price_gel),
         quantity,
       });
+
       window.dispatchEvent(new Event("lion-parts-cart-updated"));
 
       setSearchError("");
@@ -108,8 +108,7 @@ function SearchPage() {
     }
   }
 
-
-    function getQuantity(cartItemId: string) {
+  function getQuantity(cartItemId: string) {
     return quantitiesByCartItemId[cartItemId] ?? 1;
   }
 
@@ -126,7 +125,6 @@ function SearchPage() {
       [cartItemId]: nextQuantity,
     }));
   }
-
 
   return (
     <section className="card">
@@ -153,11 +151,13 @@ function SearchPage() {
           onChange={(event) => setPartNumber(event.target.value)}
           placeholder="მაგ: 51118070648"
         />
+
         <input
           value={vin}
           onChange={(event) => setVin(event.target.value)}
           placeholder="VIN — არასავალდებულო"
         />
+
         <button type="submit" disabled={isSearching}>
           {isSearching ? "იძებნება..." : "ძებნა"}
         </button>
@@ -188,25 +188,45 @@ function SearchPage() {
 
             const isInCart = addedCartItemIds.includes(cartItemId);
             const quantity = getQuantity(cartItemId);
+            const lineTotalGel = Number(item.final_price_gel) * quantity;
 
             return (
               <article className="part-option" key={cartItemId}>
                 <div>
                   <h3>{item.name}</h3>
+
                   <p className="muted">
                     {item.brand} · {item.condition} · ETA: {item.eta_days} დღე
                   </p>
+
                   <p className="muted">{item.note}</p>
                 </div>
 
                 <div className="part-option__side">
-                  <span className={isInCart ? "availability availability--cart" : "availability"}>
+                  <span
+                    className={
+                      isInCart
+                        ? "availability availability--cart"
+                        : "availability"
+                    }
+                  >
                     {isInCart ? "კალათაშია" : item.availability}
                   </span>
 
-                  <strong>
-                    {Number(item.final_price_gel).toLocaleString("ka-GE")} ₾
-                  </strong>
+                  <div className="part-price-box">
+                    <span>ერთეულის ფასი</span>
+                    <strong>
+                      {Number(item.final_price_gel).toLocaleString("ka-GE")} ₾
+                    </strong>
+
+                    {quantity > 1 && (
+                      <>
+                        <span>ჯამი</span>
+                        <strong>{lineTotalGel.toLocaleString("ka-GE")} ₾</strong>
+                      </>
+                    )}
+                  </div>
+
                   <label className="part-quantity">
                     <span>რაოდენობა</span>
                     <input

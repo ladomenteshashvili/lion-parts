@@ -229,6 +229,22 @@ button {
   font-size: 26px;
 }
 
+.part-price-box {
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+}
+
+.part-price-box span {
+  color: #6b7280;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.part-price-box strong {
+  font-size: 24px;
+}
+
 
 .part-quantity {
   display: grid;
@@ -270,6 +286,10 @@ button:disabled {
     justify-items: stretch;
   }
 
+    .part-price-box {
+    justify-items: stretch;
+  }
+  
     .part-quantity {
     justify-items: stretch;
   }
@@ -277,7 +297,7 @@ button:disabled {
   .part-quantity input {
     max-width: none;
   }
-  
+
   .part-option__side button {
     width: 100%;
   }
