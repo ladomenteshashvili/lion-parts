@@ -1,9 +1,28 @@
 from rest_framework import serializers
 
-from .models import Order, OrderItem
+from .models import Order, OrderItem, OrderItemEvent
+
+
+class OrderItemEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OrderItemEvent
+        fields = [
+            "id",
+            "event_type",
+            "title",
+            "message",
+            "old_value",
+            "new_value",
+            "actor_type",
+            "actor_name",
+            "visible_to_customer",
+            "created_at",
+        ]
 
 
 class OrderItemSerializer(serializers.ModelSerializer):
+    events = OrderItemEventSerializer(many=True, read_only=True)
+
     class Meta:
         model = OrderItem
         fields = [
@@ -29,6 +48,7 @@ class OrderItemSerializer(serializers.ModelSerializer):
             "action_required",
             "action_type",
             "action_message",
+            "events",
             "created_at",
             "updated_at",
         ]
