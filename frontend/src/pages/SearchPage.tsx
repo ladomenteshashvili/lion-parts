@@ -21,6 +21,10 @@ function SearchPage() {
   const [quote, setQuote] = useState<PartSearchResponse | null>(null);
   const [addedCartItemIds, setAddedCartItemIds] = useState<string[]>([]);
 
+  const [quantitiesByCartItemId, setQuantitiesByCartItemId] = useState<
+    Record<string, number>
+  >({});
+
   useEffect(() => {
     getHealthStatus()
       .then((data) => {
@@ -50,6 +54,8 @@ function SearchPage() {
     setCartMessage("");
     setAddedCartItemIds([]);
 
+    setQuantitiesByCartItemId({});
+
     try {
       const data = await searchParts({
         part_number: cleanPartNumber,
@@ -65,25 +71,30 @@ function SearchPage() {
     }
   }
 
-  async function handleAddToCart(item: PartSearchResponse["results"][number]) {
-    if (!quote) {
+       async function handleAddToCart(
+    item: PartSearchResponse["results"][number],
+    quantity: number
+  ) {
+    const currentQuote = quote;
+
+    if (!currentQuote) {
       return;
     }
 
     const cartItemId = buildCartItemId({
-      quote_id: quote.quote_id,
+      quote_id: currentQuote.quote_id,
       part_option_id: item.part_option_id,
-      part_number: quote.part_number,
+      part_number: currentQuote.part_number,
     });
 
     try {
       await addCartItem({
         ...item,
         cart_item_id: cartItemId,
-        quote_id: quote.quote_id,
-        part_number: quote.part_number,
+        quote_id: currentQuote.quote_id,
+        part_number: currentQuote.part_number,
         final_price_gel: Number(item.final_price_gel),
-        quantity: 1,
+        quantity,
       });
       window.dispatchEvent(new Event("lion-parts-cart-updated"));
 
@@ -96,6 +107,26 @@ function SearchPage() {
       setSearchError("კალათაში დამატება ვერ მოხერხდა");
     }
   }
+
+
+    function getQuantity(cartItemId: string) {
+    return quantitiesByCartItemId[cartItemId] ?? 1;
+  }
+
+  function handleQuantityChange(cartItemId: string, value: string) {
+    const parsedQuantity = Number(value);
+
+    const nextQuantity =
+      Number.isFinite(parsedQuantity) && parsedQuantity > 0
+        ? Math.floor(parsedQuantity)
+        : 1;
+
+    setQuantitiesByCartItemId((currentQuantities) => ({
+      ...currentQuantities,
+      [cartItemId]: nextQuantity,
+    }));
+  }
+
 
   return (
     <section className="card">
@@ -156,6 +187,7 @@ function SearchPage() {
             });
 
             const isInCart = addedCartItemIds.includes(cartItemId);
+            const quantity = getQuantity(cartItemId);
 
             return (
               <article className="part-option" key={cartItemId}>
@@ -175,10 +207,22 @@ function SearchPage() {
                   <strong>
                     {Number(item.final_price_gel).toLocaleString("ka-GE")} ₾
                   </strong>
+                  <label className="part-quantity">
+                    <span>რაოდენობა</span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={quantity}
+                      onChange={(event) =>
+                        handleQuantityChange(cartItemId, event.target.value)
+                      }
+                      disabled={isInCart}
+                    />
+                  </label>
 
                   <button
                     type="button"
-                    onClick={() => handleAddToCart(item)}
+                    onClick={() => handleAddToCart(item, quantity)}
                     disabled={isInCart}
                   >
                     {isInCart ? "დამატებულია" : "კალათაში დამატება"}

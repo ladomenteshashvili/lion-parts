@@ -229,6 +229,23 @@ button {
   font-size: 26px;
 }
 
+
+.part-quantity {
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.part-quantity input {
+  max-width: 110px;
+  padding: 10px 12px;
+  text-align: center;
+}
+
+
 .availability {
   display: inline-flex;
   border-radius: 999px;
@@ -253,6 +270,14 @@ button:disabled {
     justify-items: stretch;
   }
 
+    .part-quantity {
+    justify-items: stretch;
+  }
+
+  .part-quantity input {
+    max-width: none;
+  }
+  
   .part-option__side button {
     width: 100%;
   }
