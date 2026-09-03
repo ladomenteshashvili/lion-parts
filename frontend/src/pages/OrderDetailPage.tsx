@@ -43,7 +43,7 @@ const itemTimelineSteps = [
   {
     status: "checking",
     title: "მოწმდება",
-    description: "ოპერატორი ამოწმებს availability, ETA, წონას და თავსებადობას.",
+    description: "მოწმდება ნაწილის ხელმისაწვდომობა, მიწოდების დრო და თავსებადობა.",
   },
   {
     status: "purchased",

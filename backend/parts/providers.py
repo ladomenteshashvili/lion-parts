@@ -13,7 +13,12 @@ from .pricing import calculate_final_price_gel
 class PartsProviderError(Exception):
     pass
 
-
+CUSTOMER_WEIGHT_NOTICE = (
+    "ფასი დათვლილია თქვენს მიერ შეყვანილი სავარაუდო წონით. "
+    "საბოლოო წონა დადგინდება აშშ-ის საწყობში მიღების შემდეგ. "
+    "თუ რეალური წონა განსხვავებული იქნება, საბოლოო თანხა შეიძლება დაკორექტირდეს — "
+    "შესაძლოა დაემატოს ან დაბრუნდეს თანხა."
+)
 
 def _save_part_search_log(
     *,
@@ -225,7 +230,7 @@ def _build_amt_part_option(
     if requires_weight_input:
         note_parts.append("ფასის დასათვლელად საჭიროა წონის შეყვანა.")
     elif manual_weight_kg is not None:
-        note_parts.append("ფასი დათვლილია მომხმარებლის მიერ შეყვანილი წონით.")
+        note_parts.append("ფასი დათვლილია მომხმარებლის მიერ შეყვანილი სავარაუდო წონით.")
 
     replacement = _clean_api_text(row.get("replace"))
 
@@ -249,7 +254,7 @@ def _build_amt_part_option(
         else None,
         "weight_source": "customer" if manual_weight_kg is not None else "api",
         "customer_notice": (
-            "ფასი დათვლილია თქვენს მიერ შეყვანილი წონით. საბოლოო შემოწმება მოხდება ოპერატორის მიერ."
+            CUSTOMER_WEIGHT_NOTICE
             if manual_weight_kg is not None
             else ""
         ),        
