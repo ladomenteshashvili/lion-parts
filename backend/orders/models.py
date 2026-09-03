@@ -32,8 +32,7 @@ class Order(models.Model):
     vin = models.CharField(max_length=40, blank=True)
 
     note = models.TextField(blank=True)
-    customer_notice = models.TextField(blank=True)
-    weight_source = models.CharField(max_length=30, blank=True)
+
     payment_type = models.CharField(
         max_length=20,
         choices=PAYMENT_CHOICES,
