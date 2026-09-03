@@ -79,6 +79,23 @@ def _to_decimal(value: Any) -> Decimal | None:
         return None
 
 
+def _clean_api_text(value: Any) -> str:
+    if value in ("", None):
+        return ""
+
+    if isinstance(value, dict):
+        return ""
+
+    return str(value).strip()
+
+
+def _is_no_part_found_row(row: dict[str, Any]) -> bool:
+    description = _clean_api_text(row.get("descr")).upper()
+    price = row.get("list_price")
+
+    return description == "NO_PART_FOUND" or price in ("", None)
+
+
 def search_amt_parts(part_number: str, vin: str | None = None) -> dict[str, Any]:
     try:
         rows = get_price_by_oem(part_number)
@@ -89,8 +106,14 @@ def search_amt_parts(part_number: str, vin: str | None = None) -> dict[str, Any]
     results = []
 
     for index, row in enumerate(rows, start=1):
+        if _is_no_part_found_row(row):
+            continue
+
         api_price_usd = _to_decimal(row.get("list_price"))
         weight_kg = _to_decimal(row.get("weight"))
+
+        if api_price_usd is None:
+            continue
 
         requires_weight_input = weight_kg is None or weight_kg <= 0
 
@@ -103,17 +126,19 @@ def search_amt_parts(part_number: str, vin: str | None = None) -> dict[str, Any]
                 usd_to_gel_rate=usd_to_gel_rate,
             )
 
-        oem = row.get("oem") or part_number
-        description = row.get("descr") or f"Part {oem}"
-        brand = row.get("brand") or "Unknown"
+        oem = _clean_api_text(row.get("oem")) or part_number
+        description = _clean_api_text(row.get("descr")) or f"Part {oem}"
+        brand = _clean_api_text(row.get("brand")) or "Unknown"
 
         note_parts = []
 
         if requires_weight_input:
             note_parts.append("ფასის დასათვლელად საჭიროა წონის შეყვანა.")
 
-        if row.get("replace"):
-            note_parts.append(f"Replace: {row.get('replace')}")
+        replacement = _clean_api_text(row.get("replace"))
+
+        if replacement:
+            note_parts.append(f"Replace: {replacement}")
 
         results.append(
             {
