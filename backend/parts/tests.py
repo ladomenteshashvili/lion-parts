@@ -1,10 +1,10 @@
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from .models import PartQuoteRequest
 from accounts.models import Customer
 
-
+@override_settings(PARTS_PROVIDER="demo")
 class PartsSearchApiTests(TestCase):
     def setUp(self):
         self.client = APIClient()
