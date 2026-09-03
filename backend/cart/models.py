@@ -29,10 +29,18 @@ class CartItem(models.Model):
     brand = models.CharField(max_length=120, blank=True)
     availability = models.CharField(max_length=120, blank=True)
     eta_days = models.PositiveIntegerField(null=True, blank=True)
+    weight_kg = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )    
 
     final_price_gel = models.DecimalField(max_digits=12, decimal_places=2)
     currency = models.CharField(max_length=10, default="GEL")
     note = models.TextField(blank=True)
+    customer_notice = models.TextField(blank=True)
+    weight_source = models.CharField(max_length=30, blank=True)    
 
     quantity = models.PositiveIntegerField(default=1)
 

@@ -6,7 +6,7 @@ from django.conf import settings
 from accounts.models import Customer
 from .amt_provider import AMTProviderError, get_price_by_oem
 from .exchange_rates import ExchangeRateError, get_usd_sell_rate
-from .models import CarrierService
+from .models import CarrierService, PartSearchLog
 from .pricing import calculate_final_price_gel
 
 
@@ -14,16 +14,60 @@ class PartsProviderError(Exception):
     pass
 
 
-def search_demo_parts(part_number: str, vin: str | None = None) -> dict[str, Any]:
+
+def _save_part_search_log(
+    *,
+    provider: str,
+    part_number: str,
+    vin: str | None,
+    session_id: str | None,
+    raw_response: object,
+    normalized_response: dict[str, Any],
+    status: str = PartSearchLog.STATUS_SUCCESS,
+    error_message: str = "",
+) -> None:
+    try:
+        PartSearchLog.objects.create(
+            provider=provider,
+            part_number=part_number,
+            vin=vin or "",
+            session_id=session_id or "",
+            found_count=len(normalized_response.get("results", [])),
+            status=status,
+            raw_response={"data": raw_response},
+            normalized_response=normalized_response,
+            error_message=error_message,
+        )
+    except Exception:
+        # Search logging must never break customer search.
+        pass
+
+
+def search_demo_parts(
+    part_number: str,
+    vin: str | None = None,
+    session_id: str | None = None,
+) -> dict[str, Any]:
     if part_number.upper().startswith("NF"):
-        return {
+        response = {
             "quote_id": "Q-DEMO-NOT-FOUND",
             "part_number": part_number,
             "vin": vin,
             "results": [],
         }
 
-    return {
+        _save_part_search_log(
+            provider=PartSearchLog.PROVIDER_DEMO,
+            part_number=part_number,
+            vin=vin,
+            session_id=session_id,
+            raw_response=response,
+            normalized_response=response,
+        )
+
+        return response
+
+    response = {
         "quote_id": "Q-DEMO-0001",
         "part_number": part_number,
         "vin": vin,
@@ -39,6 +83,8 @@ def search_demo_parts(part_number: str, vin: str | None = None) -> dict[str, Any
                 "currency": "GEL",
                 "requires_weight_input": False,
                 "weight_kg": 2.00,
+                "weight_source": "api",
+                "customer_notice": "",
                 "note": "Original new part. Demo offer. Supplier integration will be added later.",
             },
             {
@@ -52,6 +98,8 @@ def search_demo_parts(part_number: str, vin: str | None = None) -> dict[str, Any
                 "currency": "GEL",
                 "requires_weight_input": False,
                 "weight_kg": 1.80,
+                "weight_source": "api",
+                "customer_notice": "",
                 "note": "Lower price option. Compatibility must be confirmed before purchase.",
             },
             {
@@ -65,10 +113,23 @@ def search_demo_parts(part_number: str, vin: str | None = None) -> dict[str, Any
                 "currency": "GEL",
                 "requires_weight_input": False,
                 "weight_kg": 2.00,
+                "weight_source": "api",
+                "customer_notice": "",
                 "note": "Faster ETA option. Final availability will be checked after payment.",
             },
         ],
     }
+
+    _save_part_search_log(
+        provider=PartSearchLog.PROVIDER_DEMO,
+        part_number=part_number,
+        vin=vin,
+        session_id=session_id,
+        raw_response=response,
+        normalized_response=response,
+    )
+
+    return response
 
 
 def _to_decimal(value: Any) -> Decimal | None:
@@ -186,6 +247,12 @@ def _build_amt_part_option(
         "weight_kg": float(effective_weight_kg)
         if effective_weight_kg is not None
         else None,
+        "weight_source": "customer" if manual_weight_kg is not None else "api",
+        "customer_notice": (
+            "ფასი დათვლილია თქვენს მიერ შეყვანილი წონით. საბოლოო შემოწმება მოხდება ოპერატორის მიერ."
+            if manual_weight_kg is not None
+            else ""
+        ),        
         "note": " ".join(note_parts),
     }
 
@@ -194,6 +261,7 @@ def search_amt_parts(
     part_number: str,
     vin: str | None = None,
     customer: Customer | None = None,
+    session_id: str | None = None,
 ) -> dict[str, Any]:
     try:
         rows = get_price_by_oem(part_number)
@@ -215,12 +283,23 @@ def search_amt_parts(
         if option:
             results.append(option)
 
-    return {
+    response = {
         "quote_id": f"AMT-{part_number}",
         "part_number": part_number,
         "vin": vin,
         "results": results,
     }
+
+    _save_part_search_log(
+        provider=PartSearchLog.PROVIDER_AMT,
+        part_number=part_number,
+        vin=vin,
+        session_id=session_id or (customer.session_id if customer else ""),
+        raw_response=rows,
+        normalized_response=response,
+    )
+
+    return response
 
 
 def calculate_amt_part_price(
@@ -256,11 +335,12 @@ def search_parts_provider(
     part_number: str,
     vin: str | None = None,
     customer: Customer | None = None,
+    session_id: str | None = None,
 ) -> dict[str, Any]:
     if settings.PARTS_PROVIDER == "amt":
-        return search_amt_parts(part_number, vin, customer)
+        return search_amt_parts(part_number, vin, customer, session_id)
 
-    return search_demo_parts(part_number, vin)
+    return search_demo_parts(part_number, vin, session_id)
 
 
 def calculate_part_price_provider(

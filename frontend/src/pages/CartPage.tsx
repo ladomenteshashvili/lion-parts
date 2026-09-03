@@ -92,6 +92,15 @@ function CartPage() {
               <p className="muted">
                 {item.brand} · {item.condition} · ETA: {item.eta_days} დღე
               </p>
+              {item.weight_kg && (
+                <p className="muted">
+                  წონა: {Number(item.weight_kg).toLocaleString("ka-GE")} კგ
+                </p>
+              )}
+
+              {item.customer_notice && (
+                <p className="customer-notice">{item.customer_notice}</p>
+              )}           
             </div>
 
             <div className="cart-item__side">

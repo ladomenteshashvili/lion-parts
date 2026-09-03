@@ -9,6 +9,7 @@ export type CartItem = PartOption & {
   quote_id: string;
   part_number: string;
   quantity: number;
+  weight_kg?: number | string | null;  
 };
 
 export type BackendCart = {
@@ -67,9 +68,12 @@ export async function addCartItem(item: {
   brand: string;
   availability: string;
   eta_days: number;
+  weight_kg?: number | null;  
   final_price_gel: number;
   currency: "GEL";
   note?: string;
+  weight_source?: "api" | "customer" | "";
+  customer_notice?: string;  
   quantity: number;
 }): Promise<BackendCart> {
   const sessionId = getSessionId();

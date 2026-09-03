@@ -458,7 +458,14 @@ function isOrderCompleted(order: BackendOrder) {
                 {item.brand} · {item.condition} · ETA:{" "}
                 {item.eta_days ? `${item.eta_days} დღე` : "მითითებული არ არის"}
               </p>
-
+              {item.weight_kg && (
+                <p className="muted">
+                  წონა: {Number(item.weight_kg).toLocaleString("ka-GE")} კგ
+                </p>
+              )}
+              {item.customer_notice && (
+                <p className="customer-notice">{item.customer_notice}</p>
+              )}              
               <p className="muted">
                 მოსალოდნელი ჩამოსვლა:{" "}
                 {formatDateKa(item.expected_arrival_date)}
@@ -530,6 +537,15 @@ function isOrderCompleted(order: BackendOrder) {
                 <p className="muted">
                   {selectedItem.brand} · {selectedItem.condition}
                 </p>
+                {selectedItem.weight_kg && (
+                  <p className="muted">
+                    წონა: {Number(selectedItem.weight_kg).toLocaleString("ka-GE")} კგ
+                  </p>
+                  
+                )}        
+              {selectedItem.customer_notice && (
+                <p className="customer-notice">{selectedItem.customer_notice}</p>
+              )}                       
                 <p className="muted">Part number: {selectedItem.part_number}</p>
               </div>
 

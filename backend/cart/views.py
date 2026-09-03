@@ -72,9 +72,12 @@ def add_cart_item(request):
             "brand": request.data.get("brand", ""),
             "availability": request.data.get("availability", ""),
             "eta_days": request.data.get("eta_days"),
+            "weight_kg": request.data.get("weight_kg"),            
             "final_price_gel": request.data["final_price_gel"],
             "currency": request.data.get("currency", "GEL"),
             "note": request.data.get("note", ""),
+            "customer_notice": request.data.get("customer_notice", ""),
+            "weight_source": request.data.get("weight_source", ""),            
             "quantity": request.data.get("quantity", 1),
         },
     )

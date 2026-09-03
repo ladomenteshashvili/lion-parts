@@ -16,9 +16,12 @@ class CartItemSerializer(serializers.ModelSerializer):
             "brand",
             "availability",
             "eta_days",
+            "weight_kg",            
             "final_price_gel",
             "currency",
             "note",
+            "customer_notice",
+            "weight_source",            
             "quantity",
         ]
 

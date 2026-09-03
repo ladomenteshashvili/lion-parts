@@ -32,6 +32,8 @@ export type OrderItem = {
   proposed_final_price_gel: string | null;
   currency: string;
   note: string;
+  customer_notice: string;
+  weight_source: string;  
   quantity: number;
   proposed_eta_days: number | null;
   proposed_expected_arrival_date: string | null;

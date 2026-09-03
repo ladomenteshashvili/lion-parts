@@ -369,6 +369,9 @@ function SearchPage() {
                   </p>
 
                   <p className="muted">{item.note}</p>
+                  {item.customer_notice && (
+                    <p className="customer-notice">{item.customer_notice}</p>
+                  )}                  
                   {needsWeight && (
                     <div className="weight-entry-box">
                       <strong>საჭიროა წონა</strong>

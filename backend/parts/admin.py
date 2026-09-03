@@ -1,7 +1,6 @@
 from django.contrib import admin
 
-from .models import CarrierService, PartQuoteRequest
-
+from .models import CarrierService, PartQuoteRequest, PartSearchLog
 
 @admin.register(CarrierService)
 class CarrierServiceAdmin(admin.ModelAdmin):
@@ -25,6 +24,34 @@ class CarrierServiceAdmin(admin.ModelAdmin):
         "is_default",
     )
     readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(PartSearchLog)
+class PartSearchLogAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "provider",
+        "part_number",
+        "vin",
+        "session_id",
+        "found_count",
+        "status",
+        "created_at",
+    )
+    list_filter = ("provider", "status", "created_at")
+    search_fields = ("part_number", "vin", "session_id")
+    readonly_fields = (
+        "session_id",
+        "provider",
+        "part_number",
+        "vin",
+        "found_count",
+        "status",
+        "raw_response",
+        "normalized_response",
+        "error_message",
+        "created_at",
+    )
 
 
 @admin.register(PartQuoteRequest)

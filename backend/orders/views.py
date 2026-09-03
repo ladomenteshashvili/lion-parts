@@ -163,9 +163,12 @@ def checkout(request):
                     if item.eta_days is not None
                     else None
                 ),
+                weight_kg=item.weight_kg,                
                 final_price_gel=item.final_price_gel,
                 currency=item.currency,
                 note=item.note,
+                customer_notice=item.customer_notice,
+                weight_source=item.weight_source,                
                 quantity=item.quantity,
                 item_status=OrderItem.ITEM_STATUS_CREATED,
                 action_required=False,
@@ -187,6 +190,9 @@ def checkout(request):
                         if order_item.expected_arrival_date
                         else None
                     ),
+                    "weight_kg": str(order_item.weight_kg) if order_item.weight_kg is not None else None,
+                    "weight_source": order_item.weight_source,
+                    "customer_notice": order_item.customer_notice,                    
                 },
             )
 

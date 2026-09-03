@@ -30,8 +30,10 @@ class Order(models.Model):
     customer_name = models.CharField(max_length=120)
     customer_phone = models.CharField(max_length=40)
     vin = models.CharField(max_length=40, blank=True)
-    note = models.TextField(blank=True)
 
+    note = models.TextField(blank=True)
+    customer_notice = models.TextField(blank=True)
+    weight_source = models.CharField(max_length=30, blank=True)
     payment_type = models.CharField(
         max_length=20,
         choices=PAYMENT_CHOICES,
@@ -119,6 +121,12 @@ class OrderItem(models.Model):
     availability = models.CharField(max_length=120, blank=True)
     eta_days = models.PositiveIntegerField(null=True, blank=True)
     expected_arrival_date = models.DateField(null=True, blank=True)
+    weight_kg = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )    
 
     final_price_gel = models.DecimalField(max_digits=12, decimal_places=2)
     proposed_final_price_gel = models.DecimalField(
@@ -129,7 +137,8 @@ class OrderItem(models.Model):
     )
     currency = models.CharField(max_length=10, default="GEL")
     note = models.TextField(blank=True)
-
+    customer_notice = models.TextField(blank=True)
+    weight_source = models.CharField(max_length=30, blank=True)
     quantity = models.PositiveIntegerField(default=1)
     proposed_eta_days = models.PositiveIntegerField(null=True, blank=True)
     proposed_expected_arrival_date = models.DateField(null=True, blank=True)

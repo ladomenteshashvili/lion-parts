@@ -28,6 +28,8 @@ export type PartOption = {
   requires_weight_input?: boolean;
   weight_kg?: number | null;
   note?: string;
+  weight_source?: "api" | "customer" | "";
+  customer_notice?: string;  
 };
 
 export type PartSearchResponse = {

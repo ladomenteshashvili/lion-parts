@@ -36,7 +36,14 @@ def search_parts(request):
     customer = _get_customer_by_session_id(session_id)
 
     try:
-        return Response(search_parts_provider(part_number, vin or None, customer))
+        return Response(
+            search_parts_provider(
+                part_number,
+                vin or None,
+                customer,
+                session_id,
+            )
+        )
     except PartsProviderError:
         return Response(
             {"detail": "parts provider request failed"},
