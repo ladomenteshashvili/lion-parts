@@ -40,7 +40,7 @@ def create_quote_request(request):
 
     customer = Customer.objects.filter(session_id=session_id).first()
 
-    if not customer or not customer.can_request_quote:
+    if not customer or not customer.has_quote_request_permission():
         return Response(
             {"detail": "quote request is not enabled for this customer"},
             status=status.HTTP_403_FORBIDDEN,
