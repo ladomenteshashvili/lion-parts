@@ -51,6 +51,9 @@ function CheckoutPage() {
       0
     );
   }, [items]);
+  const hasCustomerWeightItems = useMemo(() => {
+    return items.some((item) => item.weight_source === "customer");
+  }, [items]);  
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -120,14 +123,79 @@ function CheckoutPage() {
       <h1>შეკვეთის გაფორმება</h1>
 
       <p className="muted">
-        ეს არის backend checkout skeleton. შემდეგ ეტაპზე აქ დაემატება SMS
-        verification და payment.
+        გადაამოწმეთ შეკვეთის დეტალები. შემდეგ ეტაპზე შეკვეთა შეიქმნება
+        Payment pending სტატუსით და გადახდის დადასტურების შემდეგ დაიწყება დამუშავება.
       </p>
 
       <div className="checkout-summary">
         <span>ჯამი გადასახდელი</span>
         <strong>{total.toLocaleString("ka-GE")} ₾</strong>
       </div>
+
+      <div className="checkout-policy-box">
+        <strong>შეკვეთის პირობები</strong>
+
+        <ul>
+          <li>
+            ეკრანზე ნაჩვენები თანხა არის გადასახდელი თანხა შეკვეთის დასაწყებად.
+          </li>
+          <li>
+            ნაწილის ხელმისაწვდომობა, მიწოდების დრო და VIN-თან თავსებადობა
+            დამუშავების ეტაპზე დადასტურდება.
+          </li>
+
+          {hasCustomerWeightItems && (
+            <li>
+              ერთ ან რამდენიმე ნაწილზე ფასი დათვლილია თქვენს მიერ შეყვანილი
+              სავარაუდო წონით. საბოლოო წონა დადგინდება აშშ-ის საწყობში მიღების
+              შემდეგ. თუ რეალური წონა განსხვავებული იქნება, საბოლოო თანხა შეიძლება
+              დაკორექტირდეს — შესაძლოა დაემატოს ან დაბრუნდეს თანხა.
+            </li>
+          )}
+        </ul>
+      </div>   
+
+      <div className="checkout-items">
+        <h2>ნაწილები</h2>
+
+        {items.map((item) => (
+          <article className="cart-item" key={item.cart_item_id}>
+            <div>
+              <h3>{item.name}</h3>
+
+              <p className="muted">
+                Part number: {item.part_number} · Quote: {item.quote_id}
+              </p>
+
+              <p className="muted">
+                {item.brand} · {item.condition} · ETA:{" "}
+                {item.eta_days ? `${item.eta_days} დღე` : "მითითებული არ არის"}
+              </p>
+
+              {item.weight_kg && (
+                <p className="muted">
+                  წონა: {Number(item.weight_kg).toLocaleString("ka-GE")} კგ
+                </p>
+              )}
+
+              {item.customer_notice && (
+                <p className="customer-notice">{item.customer_notice}</p>
+              )}
+            </div>
+
+            <div className="cart-item__side">
+              <span>Qty: {item.quantity}</span>
+
+              <strong>
+                {(Number(item.final_price_gel) * item.quantity).toLocaleString(
+                  "ka-GE"
+                )}{" "}
+                ₾
+              </strong>
+            </div>
+          </article>
+        ))}
+      </div>         
 
       <form className="checkout-form" onSubmit={handleSubmit}>
         <label>

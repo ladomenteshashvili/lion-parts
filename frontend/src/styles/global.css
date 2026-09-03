@@ -938,3 +938,39 @@ textarea {
   color: #1e3a8a;
   font-weight: 600;
 }
+
+
+.checkout-policy-box {
+  margin-top: 18px;
+  margin-bottom: 24px;
+  border-radius: 18px;
+  border: 1px solid #fed7aa;
+  background: #fff7ed;
+  padding: 16px;
+  color: #7c2d12;
+}
+
+.checkout-policy-box strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #9a3412;
+}
+
+.checkout-policy-box ul {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+  line-height: 1.55;
+}
+
+.checkout-items {
+  margin-top: 24px;
+  margin-bottom: 24px;
+  display: grid;
+  gap: 14px;
+}
+
+.checkout-items h2 {
+  margin: 0;
+}
