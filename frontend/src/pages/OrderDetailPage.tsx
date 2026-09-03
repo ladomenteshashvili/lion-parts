@@ -527,6 +527,9 @@ function isOrderCompleted(order: BackendOrder) {
               <div>
                 <p className="eyebrow">ნაწილის დეტალები</p>
                 <h2>{selectedItem.name}</h2>
+                <p className="muted">
+                  {selectedItem.brand} · {selectedItem.condition}
+                </p>
                 <p className="muted">Part number: {selectedItem.part_number}</p>
               </div>
 
