@@ -3,8 +3,10 @@ from typing import Any
 
 from django.conf import settings
 
+from accounts.models import Customer
 from .amt_provider import AMTProviderError, get_price_by_oem
 from .exchange_rates import ExchangeRateError, get_usd_sell_rate
+from .models import CarrierService
 from .pricing import calculate_final_price_gel
 
 
@@ -96,7 +98,103 @@ def _is_no_part_found_row(row: dict[str, Any]) -> bool:
     return description == "NO_PART_FOUND" or price in ("", None)
 
 
-def search_amt_parts(part_number: str, vin: str | None = None) -> dict[str, Any]:
+def _get_customer_markup_percent(customer: Customer | None) -> Decimal:
+    if customer:
+        return customer.get_markup_percent()
+
+    return Decimal(str(settings.DEFAULT_CUSTOMER_MARKUP_PERCENT))
+
+
+def _get_carrier_values() -> tuple[Decimal, int]:
+    carrier = CarrierService.get_default()
+
+    if carrier:
+        return carrier.usd_per_kg, carrier.max_eta_days
+
+    return (
+        Decimal(str(settings.DEFAULT_SHIPPING_USD_PER_KG)),
+        settings.DEFAULT_ETA_DAYS,
+    )
+
+
+def _build_amt_part_option(
+    *,
+    row: dict[str, Any],
+    index: int,
+    part_number: str,
+    usd_to_gel_rate: Decimal,
+    customer: Customer | None,
+    manual_weight_kg: Decimal | None = None,
+) -> dict[str, Any] | None:
+    if _is_no_part_found_row(row):
+        return None
+
+    api_price_usd = _to_decimal(row.get("list_price"))
+
+    if api_price_usd is None:
+        return None
+
+    api_weight_kg = _to_decimal(row.get("weight"))
+    effective_weight_kg = manual_weight_kg if manual_weight_kg is not None else api_weight_kg
+
+    requires_weight_input = (
+        effective_weight_kg is None or effective_weight_kg <= 0
+    )
+
+    shipping_usd_per_kg, eta_days = _get_carrier_values()
+    customer_markup_percent = _get_customer_markup_percent(customer)
+
+    final_price_gel = None
+
+    if not requires_weight_input:
+        final_price_gel = calculate_final_price_gel(
+            api_price_usd=api_price_usd,
+            weight_kg=effective_weight_kg,
+            usd_to_gel_rate=usd_to_gel_rate,
+            shipping_usd_per_kg=shipping_usd_per_kg,
+            customer_markup_percent=customer_markup_percent,
+        )
+
+    oem = _clean_api_text(row.get("oem")) or part_number
+    description = _clean_api_text(row.get("descr")) or f"Part {oem}"
+    brand = _clean_api_text(row.get("brand")) or "Unknown"
+
+    note_parts = []
+
+    if requires_weight_input:
+        note_parts.append("ფასის დასათვლელად საჭიროა წონის შეყვანა.")
+    elif manual_weight_kg is not None:
+        note_parts.append("ფასი დათვლილია მომხმარებლის მიერ შეყვანილი წონით.")
+
+    replacement = _clean_api_text(row.get("replace"))
+
+    if replacement:
+        note_parts.append(f"Replace: {replacement}")
+
+    return {
+        "part_option_id": f"AMT-{index}-{oem}",
+        "name": description,
+        "condition": "New",
+        "brand": brand,
+        "availability": "Price returned",
+        "eta_days": eta_days,
+        "final_price_gel": float(final_price_gel)
+        if final_price_gel is not None
+        else None,
+        "currency": "GEL",
+        "requires_weight_input": requires_weight_input,
+        "weight_kg": float(effective_weight_kg)
+        if effective_weight_kg is not None
+        else None,
+        "note": " ".join(note_parts),
+    }
+
+
+def search_amt_parts(
+    part_number: str,
+    vin: str | None = None,
+    customer: Customer | None = None,
+) -> dict[str, Any]:
     try:
         rows = get_price_by_oem(part_number)
         usd_to_gel_rate = get_usd_sell_rate()
@@ -106,57 +204,16 @@ def search_amt_parts(part_number: str, vin: str | None = None) -> dict[str, Any]
     results = []
 
     for index, row in enumerate(rows, start=1):
-        if _is_no_part_found_row(row):
-            continue
-
-        api_price_usd = _to_decimal(row.get("list_price"))
-        weight_kg = _to_decimal(row.get("weight"))
-
-        if api_price_usd is None:
-            continue
-
-        requires_weight_input = weight_kg is None or weight_kg <= 0
-
-        final_price_gel = None
-
-        if api_price_usd is not None and not requires_weight_input:
-            final_price_gel = calculate_final_price_gel(
-                api_price_usd=api_price_usd,
-                weight_kg=weight_kg,
-                usd_to_gel_rate=usd_to_gel_rate,
-            )
-
-        oem = _clean_api_text(row.get("oem")) or part_number
-        description = _clean_api_text(row.get("descr")) or f"Part {oem}"
-        brand = _clean_api_text(row.get("brand")) or "Unknown"
-
-        note_parts = []
-
-        if requires_weight_input:
-            note_parts.append("ფასის დასათვლელად საჭიროა წონის შეყვანა.")
-
-        replacement = _clean_api_text(row.get("replace"))
-
-        if replacement:
-            note_parts.append(f"Replace: {replacement}")
-
-        results.append(
-            {
-                "part_option_id": f"AMT-{index}-{oem}",
-                "name": description,
-                "condition": "New",
-                "brand": brand,
-                "availability": "Price returned",
-                "eta_days": settings.DEFAULT_ETA_DAYS,
-                "final_price_gel": float(final_price_gel)
-                if final_price_gel is not None
-                else None,
-                "currency": "GEL",
-                "requires_weight_input": requires_weight_input,
-                "weight_kg": float(weight_kg) if weight_kg is not None else None,
-                "note": " ".join(note_parts),
-            }
+        option = _build_amt_part_option(
+            row=row,
+            index=index,
+            part_number=part_number,
+            usd_to_gel_rate=usd_to_gel_rate,
+            customer=customer,
         )
+
+        if option:
+            results.append(option)
 
     return {
         "quote_id": f"AMT-{part_number}",
@@ -166,8 +223,59 @@ def search_amt_parts(part_number: str, vin: str | None = None) -> dict[str, Any]
     }
 
 
-def search_parts_provider(part_number: str, vin: str | None = None) -> dict[str, Any]:
+def calculate_amt_part_price(
+    *,
+    part_number: str,
+    part_option_id: str,
+    weight_kg: Decimal,
+    customer: Customer,
+) -> dict[str, Any]:
+    try:
+        rows = get_price_by_oem(part_number)
+        usd_to_gel_rate = get_usd_sell_rate()
+    except (AMTProviderError, ExchangeRateError) as error:
+        raise PartsProviderError(str(error)) from error
+
+    for index, row in enumerate(rows, start=1):
+        option = _build_amt_part_option(
+            row=row,
+            index=index,
+            part_number=part_number,
+            usd_to_gel_rate=usd_to_gel_rate,
+            customer=customer,
+            manual_weight_kg=weight_kg,
+        )
+
+        if option and option["part_option_id"] == part_option_id:
+            return option
+
+    raise PartsProviderError("part option was not found")
+
+
+def search_parts_provider(
+    part_number: str,
+    vin: str | None = None,
+    customer: Customer | None = None,
+) -> dict[str, Any]:
     if settings.PARTS_PROVIDER == "amt":
-        return search_amt_parts(part_number, vin)
+        return search_amt_parts(part_number, vin, customer)
 
     return search_demo_parts(part_number, vin)
+
+
+def calculate_part_price_provider(
+    *,
+    part_number: str,
+    part_option_id: str,
+    weight_kg: Decimal,
+    customer: Customer,
+) -> dict[str, Any]:
+    if settings.PARTS_PROVIDER != "amt":
+        raise PartsProviderError("manual weight calculation is available only for AMT")
+
+    return calculate_amt_part_price(
+        part_number=part_number,
+        part_option_id=part_option_id,
+        weight_kg=weight_kg,
+        customer=customer,
+    )

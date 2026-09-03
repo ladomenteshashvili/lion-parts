@@ -3,7 +3,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from django.conf import settings
 
 
-def decimal_from_setting(value: str) -> Decimal:
+def decimal_from_setting(value: object) -> Decimal:
     return Decimal(str(value))
 
 
@@ -12,15 +12,27 @@ def calculate_final_price_gel(
     api_price_usd: Decimal,
     weight_kg: Decimal,
     usd_to_gel_rate: Decimal,
+    shipping_usd_per_kg: Decimal | None = None,
+    customer_markup_percent: Decimal | None = None,
+    vat_multiplier: Decimal | None = None,
 ) -> Decimal:
-    shipping_usd_per_kg = decimal_from_setting(settings.DEFAULT_SHIPPING_USD_PER_KG)
-    customer_markup_percent = decimal_from_setting(
-        settings.DEFAULT_CUSTOMER_MARKUP_PERCENT
-    )
-    vat_multiplier = decimal_from_setting(settings.VAT_MULTIPLIER)
+    if shipping_usd_per_kg is None:
+        shipping_usd_per_kg = decimal_from_setting(
+            settings.DEFAULT_SHIPPING_USD_PER_KG
+        )
+
+    if customer_markup_percent is None:
+        customer_markup_percent = decimal_from_setting(
+            settings.DEFAULT_CUSTOMER_MARKUP_PERCENT
+        )
+
+    if vat_multiplier is None:
+        vat_multiplier = decimal_from_setting(settings.VAT_MULTIPLIER)
 
     shipping_usd = weight_kg * shipping_usd_per_kg
-    customer_multiplier = Decimal("1") + (customer_markup_percent / Decimal("100"))
+    customer_multiplier = Decimal("1") + (
+        customer_markup_percent / Decimal("100")
+    )
 
     final_price_gel = (
         (api_price_usd + shipping_usd)

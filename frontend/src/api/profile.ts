@@ -7,10 +7,15 @@ export type CustomerProfile = {
   session_id: string;
   customer_name: string;
   customer_phone: string;
+  customer_tariff_id: number | null;
+  customer_tariff_name: string | null;
+  markup_percent: string;
+  can_enter_weight: boolean;  
   is_phone_verified: boolean;
   can_request_quote: boolean;
   created_at: string;
   updated_at: string;
+  
 };
 
 export async function getProfile(): Promise<CustomerProfile | null> {

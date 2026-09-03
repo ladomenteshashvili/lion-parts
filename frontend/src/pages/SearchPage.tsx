@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 
 import {
+  calculatePartPrice,
   createPartQuoteRequest,
   getHealthStatus,
   searchParts,
@@ -37,6 +38,16 @@ function SearchPage() {
   const [quoteRequestMessage, setQuoteRequestMessage] = useState("");
   const [quoteRequestError, setQuoteRequestError] = useState("");
   const [canRequestQuote, setCanRequestQuote] = useState(false);
+    const [canEnterWeight, setCanEnterWeight] = useState(false);
+  const [manualWeightsByCartItemId, setManualWeightsByCartItemId] = useState<
+    Record<string, string>
+  >({});
+  const [calculatingWeightItemIds, setCalculatingWeightItemIds] = useState<
+    string[]
+  >([]);
+  const [weightErrorsByCartItemId, setWeightErrorsByCartItemId] = useState<
+    Record<string, string>
+  >({});
 
   useEffect(() => {
     getHealthStatus()
@@ -56,10 +67,12 @@ function SearchPage() {
       .then((profile) => {
         if (!profile) {
           setCanRequestQuote(false);
+          setCanEnterWeight(false);
           return;
         }
 
         setCanRequestQuote(profile.can_request_quote);
+        setCanEnterWeight(profile.can_enter_weight);
         setQuoteRequestName(profile.customer_name);
         setQuoteRequestPhone(profile.customer_phone);
       })
@@ -93,6 +106,7 @@ function SearchPage() {
       const data = await searchParts({
         part_number: cleanPartNumber,
         vin: cleanVin || undefined,
+        session_id: getSessionId(),
       });
 
       setQuote(data);
@@ -210,6 +224,69 @@ function SearchPage() {
     }));
   }
 
+  async function handleCalculatePrice(
+    item: PartSearchResponse["results"][number],
+    cartItemId: string
+  ) {
+    const currentQuote = quote;
+
+    if (!currentQuote) {
+      return;
+    }
+
+    const rawWeight = manualWeightsByCartItemId[cartItemId] || "";
+    const weightKg = Number(rawWeight);
+
+    if (!Number.isFinite(weightKg) || weightKg <= 0) {
+      setWeightErrorsByCartItemId((currentErrors) => ({
+        ...currentErrors,
+        [cartItemId]: "შეიყვანე სწორი წონა კილოგრამებში",
+      }));
+      return;
+    }
+
+    setCalculatingWeightItemIds((currentIds) => [...currentIds, cartItemId]);
+    setWeightErrorsByCartItemId((currentErrors) => ({
+      ...currentErrors,
+      [cartItemId]: "",
+    }));
+
+    try {
+      const updatedItem = await calculatePartPrice({
+        session_id: getSessionId(),
+        part_number: currentQuote.part_number,
+        part_option_id: item.part_option_id,
+        weight_kg: weightKg,
+      });
+
+      setQuote((current) => {
+        if (!current) {
+          return current;
+        }
+
+        return {
+          ...current,
+          results: current.results.map((result) =>
+            result.part_option_id === updatedItem.part_option_id
+              ? updatedItem
+              : result
+          ),
+        };
+      });
+    } catch (error) {
+      console.error("Price calculation failed", error);
+      setWeightErrorsByCartItemId((currentErrors) => ({
+        ...currentErrors,
+        [cartItemId]: "ფასის დათვლა ვერ მოხერხდა",
+      }));
+    } finally {
+      setCalculatingWeightItemIds((currentIds) =>
+        currentIds.filter((id) => id !== cartItemId)
+      );
+    }
+  }
+
+  
   return (
     <section className="card">
       <p className="eyebrow">ნაწილების ძიება</p>
@@ -275,6 +352,9 @@ function SearchPage() {
             const hasFinalPrice = item.final_price_gel !== null;
             const needsWeight = item.requires_weight_input === true;
             const canAddToCart = !isInCart && hasFinalPrice && !needsWeight;
+            const weightError = weightErrorsByCartItemId[cartItemId];
+            const isCalculatingWeight =
+              calculatingWeightItemIds.includes(cartItemId);            
             const lineTotalGel = hasFinalPrice
               ? Number(item.final_price_gel) * quantity
               : 0;
@@ -289,6 +369,56 @@ function SearchPage() {
                   </p>
 
                   <p className="muted">{item.note}</p>
+                  {needsWeight && (
+                    <div className="weight-entry-box">
+                      <strong>საჭიროა წონა</strong>
+                      <p className="muted">
+                        API-მ ფასი დააბრუნა, მაგრამ წონა არ დაბრუნდა. თუ
+                        წონის შეყვანის უფლება ჩართული გაქვს, ჩაწერე წონა
+                        კილოგრამებში და ფასი თავიდან დაითვლება.
+                      </p>
+
+                      {canEnterWeight ? (
+                        <div className="weight-entry-form">
+                          <input
+                            type="number"
+                            min="0.1"
+                            step="0.1"
+                            value={manualWeightsByCartItemId[cartItemId] ?? ""}
+                            onChange={(event) =>
+                              setManualWeightsByCartItemId(
+                                (currentWeights) => ({
+                                  ...currentWeights,
+                                  [cartItemId]: event.target.value,
+                                })
+                              )
+                            }
+                            placeholder="მაგ: 2.5"
+                          />
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleCalculatePrice(item, cartItemId)
+                            }
+                            disabled={isCalculatingWeight}
+                          >
+                            {isCalculatingWeight
+                              ? "ითვლება..."
+                              : "ფასის დათვლა"}
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="form-error">
+                          ამ ანგარიშზე წონის შეყვანა ჩართული არ არის.
+                        </p>
+                      )}
+
+                      {weightError && (
+                        <p className="form-error">{weightError}</p>
+                      )}
+                    </div>
+                  )}                  
                 </div>
 
                 <div className="part-option__side">
@@ -310,7 +440,7 @@ function SearchPage() {
                         : "წონა საჭიროა"}
                     </strong>
 
-                    {quantity > 1 && (
+                    {hasFinalPrice && quantity > 1 && (
                       <>
                         <span>ჯამი</span>
                         <strong>{lineTotalGel.toLocaleString("ka-GE")} ₾</strong>

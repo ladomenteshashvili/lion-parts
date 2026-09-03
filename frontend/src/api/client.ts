@@ -13,6 +13,7 @@ export async function getHealthStatus() {
 export type PartSearchPayload = {
   part_number: string;
   vin?: string;
+  session_id?: string;
 };
 
 export type PartOption = {
@@ -90,6 +91,33 @@ export async function createPartQuoteRequest(
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(errorText || "Quote request failed");
+  }
+
+  return response.json();
+}
+
+
+export type CalculatePartPricePayload = {
+  session_id: string;
+  part_number: string;
+  part_option_id: string;
+  weight_kg: number;
+};
+
+export async function calculatePartPrice(
+  payload: CalculatePartPricePayload
+): Promise<PartOption> {
+  const response = await fetch(`${API_BASE_URL}/api/parts/calculate-price/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Part price calculation failed");
   }
 
   return response.json();
