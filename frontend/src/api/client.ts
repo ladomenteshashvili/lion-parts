@@ -22,8 +22,10 @@ export type PartOption = {
   brand: string;
   availability: string;
   eta_days: number;
-  final_price_gel: number;
+  final_price_gel: number | null;
   currency: "GEL";
+  requires_weight_input?: boolean;
+  weight_kg?: number | null;
   note?: string;
 };
 

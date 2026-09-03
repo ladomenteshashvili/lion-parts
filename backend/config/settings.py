@@ -143,3 +143,35 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
+
+
+# External parts provider
+PARTS_PROVIDER = config("PARTS_PROVIDER", default="demo")
+
+AMT_ENDPOINT = config(
+    "AMT_ENDPOINT",
+    default="https://automototrade.com/wsdl/server.php",
+)
+AMT_API_LOGIN = config("AMT_API_LOGIN", default="")
+AMT_API_PASSWORD = config("AMT_API_PASSWORD", default="")
+AMT_VERIFY_SSL = config("AMT_VERIFY_SSL", default=False, cast=bool)
+AMT_TIMEOUT_SECONDS = config("AMT_TIMEOUT_SECONDS", default=15, cast=int)
+
+# Exchange rate provider
+KURSI_PUBLIC_CURRENCIES_URL = config(
+    "KURSI_PUBLIC_CURRENCIES_URL",
+    default="https://api-core.kursi.ge/api/public/currencies",
+)
+
+# Temporary pricing defaults.
+# Later these will move to database models.
+DEFAULT_SHIPPING_USD_PER_KG = config(
+    "DEFAULT_SHIPPING_USD_PER_KG",
+    default="8.00",
+)
+DEFAULT_CUSTOMER_MARKUP_PERCENT = config(
+    "DEFAULT_CUSTOMER_MARKUP_PERCENT",
+    default="20.00",
+)
+VAT_MULTIPLIER = config("VAT_MULTIPLIER", default="1.18")
+DEFAULT_ETA_DAYS = config("DEFAULT_ETA_DAYS", default=14, cast=int)

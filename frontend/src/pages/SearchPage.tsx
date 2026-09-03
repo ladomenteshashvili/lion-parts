@@ -272,7 +272,12 @@ function SearchPage() {
 
             const isInCart = addedCartItemIds.includes(cartItemId);
             const quantity = getQuantity(cartItemId);
-            const lineTotalGel = Number(item.final_price_gel) * quantity;
+            const hasFinalPrice = item.final_price_gel !== null;
+            const needsWeight = item.requires_weight_input === true;
+            const canAddToCart = !isInCart && hasFinalPrice && !needsWeight;
+            const lineTotalGel = hasFinalPrice
+              ? Number(item.final_price_gel) * quantity
+              : 0;
 
             return (
               <article className="part-option" key={cartItemId}>
@@ -300,7 +305,9 @@ function SearchPage() {
                   <div className="part-price-box">
                     <span>ერთეულის ფასი</span>
                     <strong>
-                      {Number(item.final_price_gel).toLocaleString("ka-GE")} ₾
+                      {hasFinalPrice
+                        ? `${Number(item.final_price_gel).toLocaleString("ka-GE")} ₾`
+                        : "წონა საჭიროა"}
                     </strong>
 
                     {quantity > 1 && (
@@ -327,9 +334,13 @@ function SearchPage() {
                   <button
                     type="button"
                     onClick={() => handleAddToCart(item, quantity)}
-                    disabled={isInCart}
+                    disabled={!canAddToCart}
                   >
-                    {isInCart ? "დამატებულია" : "კალათაში დამატება"}
+                    {isInCart
+                      ? "დამატებულია"
+                      : needsWeight
+                        ? "საჭიროა წონა"
+                        : "კალათაში დამატება"}
                   </button>
                 </div>
               </article>
