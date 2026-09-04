@@ -80,8 +80,12 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Build frontend
+      - name: Install Playwright browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Build frontend and run Playwright smoke tests
         working-directory: frontend
         env:
           VITE_API_BASE_URL: http://127.0.0.1:8000
-        run: npm run build
+        run: npm run test:e2e
