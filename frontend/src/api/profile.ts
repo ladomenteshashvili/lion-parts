@@ -23,7 +23,24 @@ export type SendPhoneVerificationResponse = {
   expires_in_seconds?: number;
   retry_after_seconds?: number;
   demo_code?: string;
+  already_sent?: boolean;
 };
+
+export type VerifyPhoneCodeNeedsNameResponse = {
+  detail: string;
+  phone: string;
+  requires_customer_name: true;
+};
+
+export type VerifyPhoneCodeResponse =
+  | CustomerProfile
+  | VerifyPhoneCodeNeedsNameResponse;
+
+export function isCustomerProfile(
+  response: VerifyPhoneCodeResponse
+): response is CustomerProfile {
+  return !("requires_customer_name" in response);
+}
 
 async function getErrorMessage(response: Response, fallback: string) {
   try {
@@ -98,10 +115,10 @@ export async function sendPhoneVerificationCode(payload: {
 }
 
 export async function verifyPhoneCode(payload: {
-  customer_name: string;
   customer_phone: string;
   code: string;
-}): Promise<CustomerProfile> {
+  customer_name?: string;
+}): Promise<VerifyPhoneCodeResponse> {
   const sessionId = getSessionId();
 
   const response = await fetch(`${API_BASE_URL}/api/accounts/verify-code/`, {
@@ -111,9 +128,9 @@ export async function verifyPhoneCode(payload: {
     },
     body: JSON.stringify({
       session_id: sessionId,
-      customer_name: payload.customer_name,
       customer_phone: payload.customer_phone,
       code: payload.code,
+      customer_name: payload.customer_name || "",
     }),
   });
 
