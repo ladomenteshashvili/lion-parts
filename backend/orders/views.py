@@ -18,17 +18,15 @@ from accounts.models import Customer
 
 
 def build_customer_order_access_filter(session_id, prefix=""):
-    access_filter = Q(**{f"{prefix}session_id": session_id})
-
     customer = Customer.objects.filter(
         session_id=session_id,
         is_phone_verified=True,
     ).first()
 
     if customer and customer.phone:
-        access_filter |= Q(**{f"{prefix}customer_phone": customer.phone})
+        return Q(**{f"{prefix}customer_phone": customer.phone})
 
-    return access_filter
+    return Q(pk__isnull=True)
 
 
 def normalize_checkout_phone(phone):
