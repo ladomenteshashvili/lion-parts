@@ -180,7 +180,7 @@ class AccountsApiTests(TestCase):
         self.assertEqual(PhoneVerificationCode.objects.count(), 0)
 
     @override_settings(SENDER_GE_ENABLED=False)
-    def test_send_phone_verification_code_blocks_fast_resend(self):
+    def test_send_phone_verification_code_reuses_recent_code(self):
         first_response = self.client.post(
             "/api/accounts/send-code/",
             {
@@ -201,7 +201,12 @@ class AccountsApiTests(TestCase):
             format="json",
         )
 
-        self.assertEqual(second_response.status_code, 429)
+        self.assertEqual(second_response.status_code, 200)
+        self.assertEqual(second_response.data["detail"], "verification code already sent")
+        self.assertTrue(second_response.data["already_sent"])
+        self.assertEqual(second_response.data["phone"], "555123456")
+        self.assertIn("expires_in_seconds", second_response.data)
+        self.assertEqual(PhoneVerificationCode.objects.count(), 1)
 
     @override_settings(SENDER_GE_ENABLED=False)
     def test_verify_phone_code_creates_verified_customer(self):

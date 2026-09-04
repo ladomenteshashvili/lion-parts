@@ -131,12 +131,20 @@ def send_phone_verification_code(request):
     ).first()
 
     if recent_code:
+        remaining_seconds = max(
+            0,
+            int((recent_code.expires_at - timezone.now()).total_seconds()),
+        )
+
         return Response(
             {
-                "detail": "კოდი უკვე გაგზავნილია. სცადეთ ცოტა ხანში.",
+                "detail": "verification code already sent",
+                "phone": normalized_phone,
+                "expires_in_seconds": remaining_seconds,
                 "retry_after_seconds": settings.PHONE_VERIFICATION_RESEND_SECONDS,
+                "already_sent": True,
             },
-            status=status.HTTP_429_TOO_MANY_REQUESTS,
+            status=status.HTTP_200_OK,
         )
 
     code = generate_sms_code()
