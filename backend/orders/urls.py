@@ -8,11 +8,17 @@ from .views import (
     demo_update_item_status,
     get_order_detail,
     list_orders,
+    verify_payment,
 )
 
 urlpatterns = [
     path("", list_orders, name="orders-list"),
     path("checkout/", checkout, name="orders-checkout"),
+    path(
+        "<str:order_number>/verify-payment/",
+        verify_payment,
+        name="orders-verify-payment",
+    ),
     path(
         "<str:order_number>/demo-confirm-payment/",
         demo_confirm_payment,

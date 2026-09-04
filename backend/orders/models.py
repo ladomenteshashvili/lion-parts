@@ -58,6 +58,73 @@ class Order(models.Model):
         return self.order_number
 
 
+class Payment(models.Model):
+    STATUS_PENDING = "pending"
+    STATUS_PAID = "paid"
+    STATUS_FAILED = "failed"
+    STATUS_CANCELLED = "cancelled"
+    STATUS_UNKNOWN = "unknown"
+
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_PAID, "Paid"),
+        (STATUS_FAILED, "Failed"),
+        (STATUS_CANCELLED, "Cancelled"),
+        (STATUS_UNKNOWN, "Unknown"),
+    ]
+
+    PROVIDER_DEMO = "demo"
+
+    PROVIDER_CHOICES = [
+        (PROVIDER_DEMO, "Demo"),
+    ]
+
+    order = models.OneToOneField(
+        Order,
+        on_delete=models.CASCADE,
+        related_name="payment",
+    )
+
+    payment_reference = models.CharField(
+        max_length=120,
+        unique=True,
+        db_index=True,
+    )
+    external_payment_id = models.CharField(
+        max_length=120,
+        blank=True,
+        db_index=True,
+    )
+
+    provider = models.CharField(
+        max_length=40,
+        choices=PROVIDER_CHOICES,
+        default=PROVIDER_DEMO,
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+        db_index=True,
+    )
+
+    amount_gel = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=10, default="GEL")
+
+    provider_payload = models.JSONField(default=dict, blank=True)
+
+    paid_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.payment_reference} · {self.status}"
+
+
 class OrderItem(models.Model):
     ITEM_STATUS_CREATED = "created"
     ITEM_STATUS_PAYMENT_CONFIRMED = "payment_confirmed"
@@ -125,7 +192,7 @@ class OrderItem(models.Model):
         decimal_places=2,
         null=True,
         blank=True,
-    )    
+    )
 
     final_price_gel = models.DecimalField(max_digits=12, decimal_places=2)
     proposed_final_price_gel = models.DecimalField(
@@ -167,7 +234,6 @@ class OrderItem(models.Model):
 
     def __str__(self):
         return f"{self.part_number} x {self.quantity}"
-
 
 
 class OrderItemEvent(models.Model):
