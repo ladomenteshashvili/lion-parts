@@ -272,7 +272,10 @@ function isOrderCompleted(order: BackendOrder) {
   setError("");
 
   try {
-    const updatedOrder = await confirmOrderPayment(order.order_number);
+      const updatedOrder = await confirmOrderPayment(
+        order.order_number,
+        order.payment?.payment_reference || ""
+      );
 
     setOrder(updatedOrder);
 
@@ -397,8 +400,8 @@ function isOrderCompleted(order: BackendOrder) {
         <div className="payment-demo-box">
           <strong>გადახდა მოსალოდნელია</strong>
           <span>
-            Demo რეჟიმში შეკვეთა შეიქმნა Payment pending სტატუსით. რეალურ
-            სისტემაში აქ იქნება payment gateway.
+            შეკვეთა შექმნილია და გადახდა დასადასტურებელია. გადახდის დადასტურების
+            შემდეგ შეკვეთა გადავა დამუშავების ეტაპზე.
           </span>
 
           <button
@@ -406,7 +409,7 @@ function isOrderCompleted(order: BackendOrder) {
             onClick={handleConfirmPayment}
             disabled={isConfirmingPayment}
           >
-            {isConfirmingPayment ? "მუშავდება..." : "Demo: გადახდის დადასტურება"}
+            {isConfirmingPayment ? "მუშავდება..." : "გადახდის დადასტურება"}
           </button>
         </div>
       )}
