@@ -29,6 +29,22 @@ def generate_sms_code():
     return f"{secrets.randbelow(1000000):06d}"
 
 
+def is_real_customer_name(name, phone):
+    cleaned_name = str(name or "").strip()
+    return bool(cleaned_name) and cleaned_name != phone
+
+
+def get_existing_verified_customer_by_phone(phone):
+    return (
+        Customer.objects.filter(
+            phone=phone,
+            is_phone_verified=True,
+        )
+        .order_by("-updated_at")
+        .first()
+    )
+
+
 @api_view(["GET"])
 def get_profile(request):
     session_id = request.query_params.get("session_id", "").strip()
@@ -131,12 +147,20 @@ def send_phone_verification_code(request):
     ).first()
 
     if recent_code:
+        remaining_seconds = max(
+            0,
+            int((recent_code.expires_at - timezone.now()).total_seconds()),
+        )
+
         return Response(
             {
-                "detail": "კოდი უკვე გაგზავნილია. სცადეთ ცოტა ხანში.",
+                "detail": "verification code already sent",
+                "phone": normalized_phone,
+                "expires_in_seconds": remaining_seconds,
                 "retry_after_seconds": settings.PHONE_VERIFICATION_RESEND_SECONDS,
+                "already_sent": True,
             },
-            status=status.HTTP_429_TOO_MANY_REQUESTS,
+            status=status.HTTP_200_OK,
         )
 
     code = generate_sms_code()
@@ -264,26 +288,55 @@ def verify_phone_code(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    existing_phone_customer = get_existing_verified_customer_by_phone(normalized_phone)
+    existing_session_customer = Customer.objects.filter(session_id=session_id).first()
+
+    final_customer_name = customer_name
+
+    if (
+        not is_real_customer_name(final_customer_name, normalized_phone)
+        and existing_phone_customer
+        and is_real_customer_name(existing_phone_customer.name, normalized_phone)
+    ):
+        final_customer_name = existing_phone_customer.name
+
+    if (
+        not is_real_customer_name(final_customer_name, normalized_phone)
+        and existing_session_customer
+        and existing_session_customer.phone == normalized_phone
+        and is_real_customer_name(existing_session_customer.name, normalized_phone)
+    ):
+        final_customer_name = existing_session_customer.name
+
+    if not is_real_customer_name(final_customer_name, normalized_phone):
+        verification.save(update_fields=["attempts"])
+
+        return Response(
+            {
+                "detail": "customer name is required",
+                "phone": normalized_phone,
+                "requires_customer_name": True,
+            },
+            status=status.HTTP_200_OK,
+        )
+
     verification.status = PhoneVerificationCode.STATUS_VERIFIED
     verification.verified_at = timezone.now()
     verification.save(update_fields=["status", "verified_at", "attempts"])
 
-    existing_customer = Customer.objects.filter(session_id=session_id).first()
-    final_customer_name = customer_name
+    defaults = {
+        "name": final_customer_name,
+        "phone": normalized_phone,
+        "is_phone_verified": True,
+    }
 
-    if not final_customer_name and existing_customer:
-        final_customer_name = existing_customer.name
-
-    if not final_customer_name:
-        final_customer_name = normalized_phone
+    if existing_phone_customer:
+        defaults["tariff"] = existing_phone_customer.tariff
+        defaults["can_request_quote"] = existing_phone_customer.can_request_quote
 
     customer, _created = Customer.objects.update_or_create(
         session_id=session_id,
-        defaults={
-            "name": final_customer_name,
-            "phone": normalized_phone,
-            "is_phone_verified": True,
-        },
+        defaults=defaults,
     )
 
     serializer = CustomerSerializer(customer)

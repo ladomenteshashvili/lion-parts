@@ -3,6 +3,7 @@ from decimal import Decimal
 import uuid
 
 from django.db import transaction
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -13,6 +14,19 @@ from cart.models import Cart
 from .models import Order, OrderItem, OrderItemEvent, Payment
 from .serializers import OrderSerializer
 from accounts.models import Customer
+
+
+
+def build_customer_order_access_filter(session_id, prefix=""):
+    customer = Customer.objects.filter(
+        session_id=session_id,
+        is_phone_verified=True,
+    ).first()
+
+    if customer and customer.phone:
+        return Q(**{f"{prefix}customer_phone": customer.phone})
+
+    return Q(pk__isnull=True)
 
 
 def normalize_checkout_phone(phone):
@@ -157,7 +171,7 @@ def list_orders(request):
         )
 
     orders = (
-        Order.objects.filter(session_id=session_id)
+        Order.objects.filter(build_customer_order_access_filter(session_id))
         .select_related("payment")
         .prefetch_related("items__events")
     )
@@ -177,8 +191,8 @@ def get_order_detail(request, order_number):
 
     order = get_object_or_404(
         Order.objects.select_related("payment").prefetch_related("items__events"),
+        build_customer_order_access_filter(session_id),
         order_number=order_number,
-        session_id=session_id,
     )
 
     serializer = OrderSerializer(order)
@@ -491,8 +505,8 @@ def demo_resolve_item_action(request, item_id):
 
     try:
         item = OrderItem.objects.select_related("order").get(
+            build_customer_order_access_filter(session_id, prefix="order__"),
             id=item_id,
-            order__session_id=session_id,
         )
     except OrderItem.DoesNotExist:
         return Response(

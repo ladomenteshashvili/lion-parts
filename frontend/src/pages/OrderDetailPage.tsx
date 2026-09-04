@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import {
-  
   getOrderDetail,
   resolveOrderItemAction,
   type BackendOrder,
@@ -15,6 +14,8 @@ import {
   getActionTypeLabel,
   getOrderItemStatusLabel,
 } from "../utils/orderItemStatus";
+import { getProfile } from "../api/profile";
+import VerifiedPhoneRequiredCard from "../components/VerifiedPhoneRequiredCard";
 
 const itemStatusOrder = [
   "created",
@@ -84,27 +85,44 @@ function OrderDetailPage() {
   const [selectedItem, setSelectedItem] = useState<OrderItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isResolvingAction, setIsResolvingAction] = useState(false);
+  const [needsVerification, setNeedsVerification] = useState(false);
 
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    if (!orderNumber) {
-      setError("Order number ვერ მოიძებნა");
-      setIsLoading(false);
-      return;
+    useEffect(() => {
+    async function loadOrderDetail() {
+      if (!orderNumber) {
+        setError("Order number ვერ მოიძებნა");
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const profile = await getProfile();
+
+        if (!profile?.is_phone_verified) {
+          setNeedsVerification(true);
+          setOrder(null);
+          setError("");
+          return;
+        }
+
+        const data = await getOrderDetail(orderNumber);
+
+        setOrder(data);
+        setNeedsVerification(false);
+        setError("");
+      } catch (error) {
+        console.error("Order detail load failed", error);
+        setNeedsVerification(false);
+        setOrder(null);
+        setError("შეკვეთა ვერ მოიძებნა ან ამ ტელეფონის ნომერზე არ არის მიბმული.");
+      } finally {
+        setIsLoading(false);
+      }
     }
 
-    getOrderDetail(orderNumber)
-      .then((data) => {
-        setOrder(data);
-        setError("");
-      })
-      .catch(() => {
-        setError("შეკვეთის დეტალების ჩატვირთვა ვერ მოხერხდა");
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
+    loadOrderDetail();
   }, [orderNumber]);
 
   function isTimelineStepActive(item: OrderItem, stepStatus: string) {
@@ -264,20 +282,22 @@ function isOrderCompleted(order: BackendOrder) {
   }
 
 
-
-  setError("");
-
-  
-
-
-
-
   if (isLoading) {
     return (
       <section className="card">
         <p className="eyebrow">Tracking</p>
         <h1>იტვირთება...</h1>
       </section>
+    );
+  }
+
+    
+  if (needsVerification) {
+    return (
+      <VerifiedPhoneRequiredCard
+        eyebrow="Tracking"
+        description="ამ შეკვეთის სანახავად ჯერ უნდა დაადასტუროთ ტელეფონის ნომერი SMS კოდით. დადასტურების შემდეგ გამოჩნდება მხოლოდ ამ ნომერზე მიბმული შეკვეთა."
+      />
     );
   }
 

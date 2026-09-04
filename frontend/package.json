@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:e2e": "npm run test:e2e:mock",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:mock": "npm run build && playwright test tests/e2e",
+    "test:e2e:real": "npm run build && playwright test tests/real-e2e"
   },
   "dependencies": {
     "react": "^19.2.8",
@@ -15,6 +19,7 @@
     "react-router-dom": "^7.18.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",

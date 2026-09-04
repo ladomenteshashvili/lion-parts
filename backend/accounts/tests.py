@@ -180,7 +180,7 @@ class AccountsApiTests(TestCase):
         self.assertEqual(PhoneVerificationCode.objects.count(), 0)
 
     @override_settings(SENDER_GE_ENABLED=False)
-    def test_send_phone_verification_code_blocks_fast_resend(self):
+    def test_send_phone_verification_code_reuses_recent_code(self):
         first_response = self.client.post(
             "/api/accounts/send-code/",
             {
@@ -201,7 +201,12 @@ class AccountsApiTests(TestCase):
             format="json",
         )
 
-        self.assertEqual(second_response.status_code, 429)
+        self.assertEqual(second_response.status_code, 200)
+        self.assertEqual(second_response.data["detail"], "verification code already sent")
+        self.assertTrue(second_response.data["already_sent"])
+        self.assertEqual(second_response.data["phone"], "555123456")
+        self.assertIn("expires_in_seconds", second_response.data)
+        self.assertEqual(PhoneVerificationCode.objects.count(), 1)
 
     @override_settings(SENDER_GE_ENABLED=False)
     def test_verify_phone_code_creates_verified_customer(self):
@@ -297,3 +302,96 @@ class AccountsApiTests(TestCase):
 
         verification.refresh_from_db()
         self.assertEqual(verification.status, PhoneVerificationCode.STATUS_EXPIRED)
+
+    @override_settings(SENDER_GE_ENABLED=False)
+    def test_verify_phone_code_uses_existing_customer_name_without_requiring_name(self):
+        Customer.objects.create(
+            session_id="old-session",
+            name="Existing Customer",
+            phone="555123456",
+            is_phone_verified=True,
+            can_request_quote=True,
+        )
+
+        send_response = self.client.post(
+            "/api/accounts/send-code/",
+            {
+                "session_id": self.session_id,
+                "customer_phone": "+995555123456",
+            },
+            format="json",
+        )
+
+        code = send_response.data["demo_code"]
+
+        verify_response = self.client.post(
+            "/api/accounts/verify-code/",
+            {
+                "session_id": self.session_id,
+                "customer_phone": "+995555123456",
+                "code": code,
+            },
+            format="json",
+        )
+
+        self.assertEqual(verify_response.status_code, 200)
+        self.assertEqual(verify_response.data["customer_name"], "Existing Customer")
+        self.assertEqual(verify_response.data["customer_phone"], "555123456")
+        self.assertTrue(verify_response.data["is_phone_verified"])
+
+        customer = Customer.objects.get(session_id=self.session_id)
+        self.assertEqual(customer.name, "Existing Customer")
+        self.assertEqual(customer.phone, "555123456")
+        self.assertTrue(customer.is_phone_verified)
+        self.assertTrue(customer.can_request_quote)
+
+    @override_settings(SENDER_GE_ENABLED=False)
+    def test_verify_phone_code_requires_name_for_new_phone(self):
+        send_response = self.client.post(
+            "/api/accounts/send-code/",
+            {
+                "session_id": self.session_id,
+                "customer_phone": "+995555123456",
+            },
+            format="json",
+        )
+
+        code = send_response.data["demo_code"]
+
+        first_verify_response = self.client.post(
+            "/api/accounts/verify-code/",
+            {
+                "session_id": self.session_id,
+                "customer_phone": "+995555123456",
+                "code": code,
+            },
+            format="json",
+        )
+
+        self.assertEqual(first_verify_response.status_code, 200)
+        self.assertTrue(first_verify_response.data["requires_customer_name"])
+        self.assertEqual(first_verify_response.data["phone"], "555123456")
+        self.assertEqual(Customer.objects.count(), 0)
+
+        verification = PhoneVerificationCode.objects.get()
+        self.assertEqual(verification.status, PhoneVerificationCode.STATUS_PENDING)
+
+        second_verify_response = self.client.post(
+            "/api/accounts/verify-code/",
+            {
+                "session_id": self.session_id,
+                "customer_name": "New Customer",
+                "customer_phone": "+995555123456",
+                "code": code,
+            },
+            format="json",
+        )
+
+        self.assertEqual(second_verify_response.status_code, 200)
+        self.assertEqual(second_verify_response.data["customer_name"], "New Customer")
+        self.assertEqual(second_verify_response.data["customer_phone"], "555123456")
+        self.assertTrue(second_verify_response.data["is_phone_verified"])
+
+        verification.refresh_from_db()
+        self.assertEqual(verification.status, PhoneVerificationCode.STATUS_VERIFIED)
+
