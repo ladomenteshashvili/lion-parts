@@ -133,6 +133,7 @@ function ProfilePage() {
       setExpiresInSeconds(null);
 
       showFeedback("success", "ტელეფონის ნომერი დადასტურებულია");
+      window.dispatchEvent(new Event("lion-parts-orders-updated"));
     } catch (error) {
       const errorMessage =
         error instanceof Error

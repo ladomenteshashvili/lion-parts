@@ -25,6 +25,7 @@ function OrdersPage() {
         const data = await getOrders();
         setOrders(data);
         setError("");
+        window.dispatchEvent(new Event("lion-parts-orders-updated"));
       } catch (error) {
         console.error("Orders page load failed", error);
         setError("შეკვეთების ჩატვირთვა ვერ მოხერხდა");
