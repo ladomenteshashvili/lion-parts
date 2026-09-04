@@ -1,5 +1,6 @@
 from datetime import timedelta
 from decimal import Decimal
+import uuid
 
 from django.db import transaction
 from django.shortcuts import get_object_or_404
@@ -9,13 +10,19 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from cart.models import Cart
-from .models import Order, OrderItem, OrderItemEvent
+from .models import Order, OrderItem, OrderItemEvent, Payment
 from .serializers import OrderSerializer
 
 
 def generate_order_number():
     timestamp = timezone.now().strftime("%Y%m%d%H%M%S")
     return f"LP-{timestamp}"
+
+
+def generate_payment_reference():
+    timestamp = timezone.now().strftime("%Y%m%d%H%M%S")
+    random_part = uuid.uuid4().hex[:8].upper()
+    return f"PAY-{timestamp}-{random_part}"
 
 
 def recalculate_order_total(order):
@@ -27,6 +34,7 @@ def recalculate_order_total(order):
     order.total_gel = total_gel
     order.save(update_fields=["total_gel", "updated_at"])
     return order
+
 
 def create_order_item_event(
     item,
@@ -51,6 +59,80 @@ def create_order_item_event(
     )
 
 
+def get_or_create_order_payment(order):
+    payment, _created = Payment.objects.select_for_update().get_or_create(
+        order=order,
+        defaults={
+            "payment_reference": generate_payment_reference(),
+            "provider": Payment.PROVIDER_DEMO,
+            "status": Payment.STATUS_PENDING,
+            "amount_gel": order.total_gel,
+            "currency": "GEL",
+        },
+    )
+    return payment
+
+
+def confirm_order_payment(order, payment, source="demo_verification"):
+    old_order_status = order.status
+    old_payment_status = payment.status
+
+    payment.status = Payment.STATUS_PAID
+    payment.paid_at = payment.paid_at or timezone.now()
+    payment.provider_payload = {
+        "source": source,
+        "payment_reference": payment.payment_reference,
+    }
+    payment.save(
+        update_fields=[
+            "status",
+            "paid_at",
+            "provider_payload",
+            "updated_at",
+        ]
+    )
+
+    order.status = Order.STATUS_PROCESSING
+    order.save(update_fields=["status", "updated_at"])
+
+    for item in order.items.select_for_update().all():
+        old_item_status = item.item_status
+
+        item.item_status = OrderItem.ITEM_STATUS_PAYMENT_CONFIRMED
+        item.action_required = False
+        item.action_type = OrderItem.ACTION_TYPE_NONE
+        item.action_message = ""
+        item.save(
+            update_fields=[
+                "item_status",
+                "action_required",
+                "action_type",
+                "action_message",
+                "updated_at",
+            ]
+        )
+
+        create_order_item_event(
+            item=item,
+            event_type=OrderItemEvent.EVENT_TYPE_STATUS_CHANGED,
+            title="გადახდა დადასტურებულია",
+            message="შეკვეთის გადახდა დადასტურდა.",
+            old_value={
+                "order_status": old_order_status,
+                "item_status": old_item_status,
+                "payment_status": old_payment_status,
+            },
+            new_value={
+                "order_status": order.status,
+                "item_status": item.item_status,
+                "payment_status": payment.status,
+                "payment_reference": payment.payment_reference,
+            },
+            actor_type=OrderItemEvent.ACTOR_TYPE_SYSTEM,
+            actor_name="System",
+        )
+
+
 @api_view(["GET"])
 def list_orders(request):
     session_id = request.query_params.get("session_id", "").strip()
@@ -61,7 +143,11 @@ def list_orders(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    orders = Order.objects.filter(session_id=session_id).prefetch_related("items")
+    orders = (
+        Order.objects.filter(session_id=session_id)
+        .select_related("payment")
+        .prefetch_related("items__events")
+    )
     serializer = OrderSerializer(orders, many=True)
     return Response(serializer.data)
 
@@ -77,7 +163,7 @@ def get_order_detail(request, order_number):
         )
 
     order = get_object_or_404(
-        Order.objects.prefetch_related("items"),
+        Order.objects.select_related("payment").prefetch_related("items__events"),
         order_number=order_number,
         session_id=session_id,
     )
@@ -146,6 +232,15 @@ def checkout(request):
             total_gel=total_gel,
         )
 
+        Payment.objects.create(
+            order=order,
+            payment_reference=generate_payment_reference(),
+            provider=Payment.PROVIDER_DEMO,
+            status=Payment.STATUS_PENDING,
+            amount_gel=total_gel,
+            currency="GEL",
+        )
+
         for item in cart_items:
             order_item = OrderItem.objects.create(
                 order=order,
@@ -163,12 +258,12 @@ def checkout(request):
                     if item.eta_days is not None
                     else None
                 ),
-                weight_kg=item.weight_kg,                
+                weight_kg=item.weight_kg,
                 final_price_gel=item.final_price_gel,
                 currency=item.currency,
                 note=item.note,
                 customer_notice=item.customer_notice,
-                weight_source=item.weight_source,                
+                weight_source=item.weight_source,
                 quantity=item.quantity,
                 item_status=OrderItem.ITEM_STATUS_CREATED,
                 action_required=False,
@@ -190,17 +285,96 @@ def checkout(request):
                         if order_item.expected_arrival_date
                         else None
                     ),
-                    "weight_kg": str(order_item.weight_kg) if order_item.weight_kg is not None else None,
+                    "weight_kg": (
+                        str(order_item.weight_kg)
+                        if order_item.weight_kg is not None
+                        else None
+                    ),
                     "weight_source": order_item.weight_source,
-                    "customer_notice": order_item.customer_notice,                    
+                    "customer_notice": order_item.customer_notice,
                 },
             )
 
         cart.items.all().delete()
 
-    serializer = OrderSerializer(order)
+    updated_order = (
+        Order.objects.select_related("payment")
+        .prefetch_related("items__events")
+        .get(id=order.id)
+    )
+
+    serializer = OrderSerializer(updated_order)
     return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+
+@api_view(["POST"])
+def verify_payment(request, order_number):
+    session_id = request.data.get("session_id", "").strip()
+    payment_reference = request.data.get("payment_reference", "").strip()
+
+    if not session_id:
+        return Response(
+            {"detail": "session_id is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        with transaction.atomic():
+            order = Order.objects.select_for_update().get(
+                order_number=order_number,
+                session_id=session_id,
+            )
+            payment = Payment.objects.select_for_update().get(order=order)
+
+            if payment_reference and payment_reference != payment.payment_reference:
+                return Response(
+                    {"detail": "payment_reference does not match this order"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if payment.status == Payment.STATUS_PAID:
+                updated_order = (
+                    Order.objects.select_related("payment")
+                    .prefetch_related("items__events")
+                    .get(id=order.id)
+                )
+                serializer = OrderSerializer(updated_order)
+                return Response(serializer.data, status=status.HTTP_200_OK)
+
+            if order.status != Order.STATUS_PAYMENT_PENDING:
+                return Response(
+                    {"detail": "order is not payment pending"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            confirm_order_payment(
+                order=order,
+                payment=payment,
+                source="demo_verification",
+            )
+
+    except Order.DoesNotExist:
+        return Response(
+            {"detail": "order not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    except Payment.DoesNotExist:
+        return Response(
+            {"detail": "payment not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    updated_order = (
+        Order.objects.select_related("payment")
+        .prefetch_related("items__events")
+        .get(
+            order_number=order_number,
+            session_id=session_id,
+        )
+    )
+
+    serializer = OrderSerializer(updated_order)
+    return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 @api_view(["POST"])
@@ -220,50 +394,28 @@ def demo_confirm_payment(request, order_number):
                 session_id=session_id,
             )
 
+            payment = get_or_create_order_payment(order)
+
+            if payment.status == Payment.STATUS_PAID:
+                updated_order = (
+                    Order.objects.select_related("payment")
+                    .prefetch_related("items__events")
+                    .get(id=order.id)
+                )
+                serializer = OrderSerializer(updated_order)
+                return Response(serializer.data, status=status.HTTP_200_OK)
+
             if order.status != Order.STATUS_PAYMENT_PENDING:
                 return Response(
                     {"detail": "order is not payment pending"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            old_order_status = order.status
-
-            order.status = Order.STATUS_PROCESSING
-            order.save(update_fields=["status", "updated_at"])
-
-            for item in order.items.select_for_update().all():
-                old_item_status = item.item_status
-
-                item.item_status = OrderItem.ITEM_STATUS_PAYMENT_CONFIRMED
-                item.action_required = False
-                item.action_type = OrderItem.ACTION_TYPE_NONE
-                item.action_message = ""
-                item.save(
-                    update_fields=[
-                        "item_status",
-                        "action_required",
-                        "action_type",
-                        "action_message",
-                        "updated_at",
-                    ]
-                )
-
-                create_order_item_event(
-                    item=item,
-                    event_type=OrderItemEvent.EVENT_TYPE_STATUS_CHANGED,
-                    title="გადახდა დადასტურებულია",
-                    message="შეკვეთის გადახდა დადასტურდა.",
-                    old_value={
-                        "order_status": old_order_status,
-                        "item_status": old_item_status,
-                    },
-                    new_value={
-                        "order_status": order.status,
-                        "item_status": item.item_status,
-                    },
-                    actor_type=OrderItemEvent.ACTOR_TYPE_SYSTEM,
-                    actor_name="System",
-                )
+            confirm_order_payment(
+                order=order,
+                payment=payment,
+                source="legacy_demo_confirm_payment",
+            )
 
     except Order.DoesNotExist:
         return Response(
@@ -271,9 +423,13 @@ def demo_confirm_payment(request, order_number):
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    updated_order = Order.objects.prefetch_related("items__events").get(
-        order_number=order_number,
-        session_id=session_id,
+    updated_order = (
+        Order.objects.select_related("payment")
+        .prefetch_related("items__events")
+        .get(
+            order_number=order_number,
+            session_id=session_id,
+        )
     )
 
     serializer = OrderSerializer(updated_order)
@@ -328,7 +484,6 @@ def demo_resolve_item_action(request, item_id):
         ),
     }
 
-
     if item.proposed_final_price_gel is not None:
         item.final_price_gel = item.proposed_final_price_gel
 
@@ -336,7 +491,7 @@ def demo_resolve_item_action(request, item_id):
         item.eta_days = item.proposed_eta_days
 
     if item.proposed_expected_arrival_date is not None:
-        item.expected_arrival_date = item.proposed_expected_arrival_date        
+        item.expected_arrival_date = item.proposed_expected_arrival_date
 
     item.proposed_final_price_gel = None
     item.proposed_eta_days = None
@@ -372,8 +527,6 @@ def demo_resolve_item_action(request, item_id):
         actor_type=OrderItemEvent.ACTOR_TYPE_CUSTOMER,
         actor_name="Customer",
     )
-
-
 
     has_other_action_items = order.items.filter(action_required=True).exists()
 

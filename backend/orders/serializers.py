@@ -1,6 +1,23 @@
 from rest_framework import serializers
 
-from .models import Order, OrderItem, OrderItemEvent
+from .models import Order, OrderItem, OrderItemEvent, Payment
+
+
+class PaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Payment
+        fields = [
+            "id",
+            "payment_reference",
+            "external_payment_id",
+            "provider",
+            "status",
+            "amount_gel",
+            "currency",
+            "paid_at",
+            "created_at",
+            "updated_at",
+        ]
 
 
 class OrderItemEventSerializer(serializers.ModelSerializer):
@@ -37,13 +54,13 @@ class OrderItemSerializer(serializers.ModelSerializer):
             "availability",
             "eta_days",
             "expected_arrival_date",
-            "weight_kg",            
+            "weight_kg",
             "final_price_gel",
             "proposed_final_price_gel",
             "currency",
             "note",
             "customer_notice",
-            "weight_source",            
+            "weight_source",
             "quantity",
             "proposed_eta_days",
             "proposed_expected_arrival_date",
@@ -59,6 +76,7 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
+    payment = PaymentSerializer(read_only=True)
     status_label = serializers.CharField(source="get_status_display", read_only=True)
 
     class Meta:
@@ -72,6 +90,7 @@ class OrderSerializer(serializers.ModelSerializer):
             "vin",
             "note",
             "payment_type",
+            "payment",
             "status",
             "status_label",
             "total_gel",
