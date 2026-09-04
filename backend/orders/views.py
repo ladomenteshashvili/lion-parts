@@ -12,6 +12,19 @@ from rest_framework.response import Response
 from cart.models import Cart
 from .models import Order, OrderItem, OrderItemEvent, Payment
 from .serializers import OrderSerializer
+from accounts.models import Customer
+
+
+def normalize_checkout_phone(phone):
+    digits = "".join(ch for ch in str(phone or "") if ch.isdigit())
+
+    if digits.startswith("995"):
+        digits = digits[3:]
+
+    if len(digits) != 9 or not digits.startswith("5"):
+        raise ValueError("customer_phone must be a Georgian mobile number")
+
+    return digits
 
 
 def generate_order_number():
@@ -197,6 +210,36 @@ def checkout(request):
             {"detail": "customer_phone is required"},
             status=status.HTTP_400_BAD_REQUEST,
         )
+
+    try:
+        normalized_customer_phone = normalize_checkout_phone(customer_phone)
+    except ValueError:
+        return Response(
+            {
+                "detail": (
+                    "ტელეფონის ნომერი უნდა იყოს ქართული მობილური ნომერი, "
+                    "მაგ: 555123456 ან +995555123456"
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    customer = Customer.objects.filter(session_id=session_id).first()
+
+    if not customer or not customer.is_phone_verified:
+        return Response(
+            {"detail": "phone verification required"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    if customer.phone != normalized_customer_phone:
+        return Response(
+            {"detail": "checkout phone must match verified phone"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    customer_name = customer.name
+    customer_phone = customer.phone        
 
     try:
         cart = Cart.objects.prefetch_related("items").get(session_id=session_id)
