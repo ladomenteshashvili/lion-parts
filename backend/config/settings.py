@@ -175,3 +175,31 @@ DEFAULT_CUSTOMER_MARKUP_PERCENT = config(
 )
 VAT_MULTIPLIER = config("VAT_MULTIPLIER", default="1.18")
 DEFAULT_ETA_DAYS = config("DEFAULT_ETA_DAYS", default=14, cast=int)
+
+
+# Sender.ge SMS
+SENDER_GE_ENABLED = config("SENDER_GE_ENABLED", default=False, cast=bool)
+SENDER_GE_API_KEY = config("SENDER_GE_API_KEY", default="")
+SENDER_GE_SEND_URL = config(
+    "SENDER_GE_SEND_URL",
+    default="https://sender.ge/api/send.php",
+)
+SENDER_GE_SMSNO = config("SENDER_GE_SMSNO", default=2, cast=int)
+SENDER_GE_PRIORITY = config("SENDER_GE_PRIORITY", default=0, cast=int)
+
+# Phone verification
+PHONE_VERIFICATION_CODE_TTL_MINUTES = config(
+    "PHONE_VERIFICATION_CODE_TTL_MINUTES",
+    default=5,
+    cast=int,
+)
+PHONE_VERIFICATION_RESEND_SECONDS = config(
+    "PHONE_VERIFICATION_RESEND_SECONDS",
+    default=60,
+    cast=int,
+)
+PHONE_VERIFICATION_MAX_ATTEMPTS = config(
+    "PHONE_VERIFICATION_MAX_ATTEMPTS",
+    default=5,
+    cast=int,
+)
