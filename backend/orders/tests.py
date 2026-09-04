@@ -7,13 +7,19 @@ from rest_framework.test import APIClient
 
 from cart.models import Cart, CartItem
 from orders.models import Order, OrderItem, OrderItemEvent, Payment
+from accounts.models import Customer
 
 
 class OrderFlowTests(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.session_id = "test-session-automated"
-
+        self.customer = Customer.objects.create(
+            session_id=self.session_id,
+            name="Lado",
+            phone="599123456",
+            is_phone_verified=True,
+        )
         self.cart = Cart.objects.create(session_id=self.session_id)
 
         self.cart_item = CartItem.objects.create(
@@ -84,6 +90,49 @@ class OrderFlowTests(TestCase):
         self.assertEqual(response.data["payment"]["status"], Payment.STATUS_PENDING)
         self.assertEqual(response.data["payment"]["currency"], "GEL")
         self.assertTrue(response.data["payment"]["payment_reference"].startswith("PAY-"))
+
+
+
+    def test_checkout_requires_verified_phone(self):
+        self.customer.is_phone_verified = False
+        self.customer.save(update_fields=["is_phone_verified"])
+
+        response = self.client.post(
+            "/api/orders/checkout/",
+            {
+                "session_id": self.session_id,
+                "customer_name": "Lado",
+                "customer_phone": "599123456",
+                "vin": "",
+                "note": "",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data["detail"], "phone verification required")
+        self.assertEqual(Order.objects.count(), 0)
+
+    def test_checkout_requires_phone_to_match_verified_profile(self):
+        response = self.client.post(
+            "/api/orders/checkout/",
+            {
+                "session_id": self.session_id,
+                "customer_name": "Lado",
+                "customer_phone": "599000000",
+                "vin": "",
+                "note": "",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.data["detail"],
+            "checkout phone must match verified phone",
+        )
+        self.assertEqual(Order.objects.count(), 0)
+
 
     def test_duplicate_eta_change_is_blocked(self):
         order, item = self._create_order_from_cart()

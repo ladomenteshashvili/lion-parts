@@ -1,13 +1,29 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { getProfile, saveProfile } from "../api/profile";
+
+import {
+  getProfile,
+  sendPhoneVerificationCode,
+  verifyPhoneCode,
+} from "../api/profile";
+
+type FeedbackType = "success" | "error" | "info";
 
 function ProfilePage() {
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
+
   const [isPhoneVerified, setIsPhoneVerified] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
+  const [isSendingCode, setIsSendingCode] = useState(false);
+  const [isVerifyingCode, setIsVerifyingCode] = useState(false);
+
+  const [isCodeSent, setIsCodeSent] = useState(false);
+  const [demoCode, setDemoCode] = useState("");
+  const [expiresInSeconds, setExpiresInSeconds] = useState<number | null>(null);
+
+  const [feedbackType, setFeedbackType] = useState<FeedbackType>("info");
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -20,47 +36,117 @@ function ProfilePage() {
         }
       })
       .catch(() => {
-        setMessage("პროფილის ჩატვირთვა ვერ მოხერხდა");
+        showFeedback("error", "პროფილის ჩატვირთვა ვერ მოხერხდა");
       })
       .finally(() => {
         setIsLoading(false);
       });
   }, []);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  function showFeedback(type: FeedbackType, text: string) {
+    setFeedbackType(type);
+    setMessage(text);
+  }
+
+  function resetVerificationState() {
+    setIsPhoneVerified(false);
+    setIsCodeSent(false);
+    setVerificationCode("");
+    setDemoCode("");
+    setExpiresInSeconds(null);
+  }
+
+  async function handleSendCode() {
+    if (!customerPhone.trim()) {
+      showFeedback("error", "ტელეფონის ნომერი აუცილებელია");
+      return;
+    }
+
+    setIsSendingCode(true);
+    setMessage("");
+    setVerificationCode("");
+    setDemoCode("");
+    setExpiresInSeconds(null);
+
+    try {
+      const response = await sendPhoneVerificationCode({
+        customer_phone: customerPhone.trim(),
+      });
+
+      setIsCodeSent(true);
+      setExpiresInSeconds(response.expires_in_seconds || null);
+
+      if (response.demo_code) {
+        setDemoCode(response.demo_code);
+      }
+
+      showFeedback(
+        "success",
+        "SMS კოდი გაგზავნილია. შეიყვანეთ მიღებული კოდი დასადასტურებლად."
+      );
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "SMS კოდის გაგზავნა ვერ მოხერხდა";
+
+      showFeedback("error", errorMessage);
+    } finally {
+      setIsSendingCode(false);
+    }
+  }
+
+  async function handleVerifyCode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!customerName.trim()) {
-      setMessage("სახელი აუცილებელია");
+      showFeedback("error", "სახელი აუცილებელია");
       return;
     }
 
     if (!customerPhone.trim()) {
-      setMessage("ტელეფონის ნომერი აუცილებელია");
+      showFeedback("error", "ტელეფონის ნომერი აუცილებელია");
       return;
     }
 
-    setIsSaving(true);
+    if (!verificationCode.trim()) {
+      showFeedback("error", "SMS კოდი აუცილებელია");
+      return;
+    }
+
+    setIsVerifyingCode(true);
     setMessage("");
 
     try {
-      const profile = await saveProfile({
+      const profile = await verifyPhoneCode({
         customer_name: customerName.trim(),
         customer_phone: customerPhone.trim(),
+        code: verificationCode.trim(),
       });
 
       setCustomerName(profile.customer_name);
       setCustomerPhone(profile.customer_phone);
       setIsPhoneVerified(profile.is_phone_verified);
-      setMessage("პროფილი შენახულია backend-ში");
-    } catch {
-      setMessage("პროფილის შენახვა ვერ მოხერხდა");
+      setIsCodeSent(false);
+      setVerificationCode("");
+      setDemoCode("");
+      setExpiresInSeconds(null);
+
+      showFeedback("success", "ტელეფონის ნომერი დადასტურებულია");
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "SMS კოდის დადასტურება ვერ მოხერხდა";
+
+      showFeedback("error", errorMessage);
     } finally {
-      setIsSaving(false);
+      setIsVerifyingCode(false);
     }
   }
 
   const hasProfile = Boolean(customerName && customerPhone);
+  const canEditPhone = !isSendingCode && !isVerifyingCode;
 
   if (isLoading) {
     return (
@@ -74,28 +160,33 @@ function ProfilePage() {
   return (
     <section className="card">
       <p className="eyebrow">პროფილი</p>
-      <h1>მომხმარებლის პროფილი</h1>
+      <h1>ტელეფონით შესვლა</h1>
+
       <p className="muted">
-        ეს არის backend profile skeleton. შემდეგ ეტაპზე აქ დაემატება SMS verification.
+        შეიყვანეთ სახელი და ქართული მობილური ნომერი. ნომერზე მიიღებთ SMS კოდს,
+        რომლის დადასტურების შემდეგ პროფილი გააქტიურდება.
       </p>
 
       {hasProfile && (
         <div className="profile-status">
-          <strong>Profile saved</strong>
-          <span>{customerName} · {customerPhone}</span>
+          <strong>{isPhoneVerified ? "ტელეფონი დადასტურებულია" : "პროფილი"}</strong>
           <span>
-            Phone verification: {isPhoneVerified ? "Verified" : "Not verified"}
+            {customerName} · {customerPhone}
+          </span>
+          <span>
+            სტატუსი: {isPhoneVerified ? "Verified" : "Not verified"}
           </span>
         </div>
       )}
 
-      <form className="checkout-form" onSubmit={handleSubmit}>
+      <form className="checkout-form" onSubmit={handleVerifyCode}>
         <label>
           სახელი
           <input
             value={customerName}
             onChange={(event) => setCustomerName(event.target.value)}
             placeholder="მაგ: ლადო"
+            disabled={isVerifyingCode}
           />
         </label>
 
@@ -103,18 +194,64 @@ function ProfilePage() {
           ტელეფონის ნომერი
           <input
             value={customerPhone}
-            onChange={(event) => setCustomerPhone(event.target.value)}
-            placeholder="მაგ: 599123456"
+            onChange={(event) => {
+              setCustomerPhone(event.target.value);
+              resetVerificationState();
+            }}
+            placeholder="მაგ: 599123456 ან +995599123456"
+            disabled={!canEditPhone}
           />
         </label>
 
-        {message && <p className="form-success">{message}</p>}
-
         <div className="profile-actions">
-          <button type="submit" disabled={isSaving}>
-            {isSaving ? "ინახება..." : "პროფილის შენახვა"}
+          <button
+            type="button"
+            onClick={handleSendCode}
+            disabled={isSendingCode || isVerifyingCode}
+          >
+            {isSendingCode ? "იგზავნება..." : "SMS კოდის გაგზავნა"}
           </button>
         </div>
+
+        {isCodeSent && (
+          <>
+            <label>
+              SMS კოდი
+              <input
+                value={verificationCode}
+                onChange={(event) => setVerificationCode(event.target.value)}
+                placeholder="6-ნიშნა კოდი"
+                inputMode="numeric"
+                maxLength={6}
+                disabled={isVerifyingCode}
+              />
+            </label>
+
+            {expiresInSeconds && (
+              <p className="muted">
+                კოდი მოქმედებს დაახლოებით {Math.round(expiresInSeconds / 60)} წუთი.
+              </p>
+            )}
+
+            {demoCode && (
+              <p className="muted">
+                სატესტო კოდი: <strong>{demoCode}</strong>
+              </p>
+            )}
+
+            <div className="profile-actions">
+              <button type="submit" disabled={isVerifyingCode}>
+                {isVerifyingCode ? "მოწმდება..." : "კოდის დადასტურება"}
+              </button>
+            </div>
+          </>
+        )}
+
+        {message && (
+          <p className={feedbackType === "error" ? "form-error" : "form-success"}>
+            {message}
+          </p>
+        )}
       </form>
     </section>
   );

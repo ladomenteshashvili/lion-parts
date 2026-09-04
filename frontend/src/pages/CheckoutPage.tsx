@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
+
 import { getCart, type CartItem } from "../api/cart";
 import { checkoutOrder } from "../api/orders";
-import { getProfile } from "../api/profile";
+import { getProfile, type CustomerProfile } from "../api/profile";
 
 function CheckoutPage() {
   const navigate = useNavigate();
 
   const [items, setItems] = useState<CartItem[]>([]);
+  const [profile, setProfile] = useState<CustomerProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const [customerName, setCustomerName] = useState("");
@@ -20,29 +22,31 @@ function CheckoutPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    getCart()
-      .then((cart) => {
+    async function loadCheckoutData() {
+      try {
+        const cart = await getCart();
         setItems(cart.items);
-      })
-      .catch(() => {
-        setError("კალათის ჩატვირთვა ვერ მოხერხდა");
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
-  }, []);
 
-  useEffect(() => {
-    getProfile()
-      .then((profile) => {
-        if (profile) {
-          setCustomerName(profile.customer_name);
-          setCustomerPhone(profile.customer_phone);
+        try {
+          const loadedProfile = await getProfile();
+
+          if (loadedProfile) {
+            setProfile(loadedProfile);
+            setCustomerName(loadedProfile.customer_name);
+            setCustomerPhone(loadedProfile.customer_phone);
+          }
+        } catch {
+          // Profile is optional for loading checkout,
+          // but verified profile is required before order submit.
         }
-      })
-      .catch(() => {
-        // Profile is optional at this stage.
-      });
+      } catch {
+        setError("კალათის ჩატვირთვა ვერ მოხერხდა");
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadCheckoutData();
   }, []);
 
   const total = useMemo(() => {
@@ -51,9 +55,12 @@ function CheckoutPage() {
       0
     );
   }, [items]);
+
   const hasCustomerWeightItems = useMemo(() => {
     return items.some((item) => item.weight_source === "customer");
-  }, [items]);  
+  }, [items]);
+
+  const isVerifiedProfile = Boolean(profile?.is_phone_verified);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -63,13 +70,8 @@ function CheckoutPage() {
       return;
     }
 
-    if (!customerName.trim()) {
-      setError("სახელი აუცილებელია");
-      return;
-    }
-
-    if (!customerPhone.trim()) {
-      setError("ტელეფონის ნომერი აუცილებელია");
+    if (!profile || !profile.is_phone_verified) {
+      setError("შეკვეთის გასაფორმებლად ჯერ ტელეფონის ნომერი უნდა დაადასტუროთ.");
       return;
     }
 
@@ -78,8 +80,8 @@ function CheckoutPage() {
 
     try {
       const order = await checkoutOrder({
-        customer_name: customerName.trim(),
-        customer_phone: customerPhone.trim(),
+        customer_name: profile.customer_name,
+        customer_phone: profile.customer_phone,
         vin: vin.trim() || undefined,
         note: note.trim() || undefined,
       });
@@ -90,7 +92,13 @@ function CheckoutPage() {
       navigate(`/orders/${order.order_number}`);
     } catch (error) {
       console.error("Checkout failed", error);
-      setError("შეკვეთის შექმნა ვერ მოხერხდა");
+
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "შეკვეთის შექმნა ვერ მოხერხდა";
+
+      setError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -123,9 +131,31 @@ function CheckoutPage() {
       <h1>შეკვეთის გაფორმება</h1>
 
       <p className="muted">
-        გადაამოწმეთ შეკვეთის დეტალები. შემდეგ ეტაპზე შეკვეთა შეიქმნება
-        Payment pending სტატუსით და გადახდის დადასტურების შემდეგ დაიწყება დამუშავება.
+        გადაამოწმეთ შეკვეთის დეტალები. შეკვეთა შეიქმნება გადახდის მოლოდინში
+        და გადახდის დადასტურების შემდეგ დაიწყება დამუშავება.
       </p>
+
+      {!isVerifiedProfile && (
+        <div className="action-required-card">
+          <strong>ტელეფონის დადასტურება საჭიროა</strong>
+          <span>
+            შეკვეთის გასაფორმებლად ჯერ პროფილში უნდა დაადასტუროთ ქართული
+            მობილური ნომერი SMS კოდით.
+          </span>
+          <button type="button" onClick={() => navigate("/profile")}>
+            პროფილზე გადასვლა
+          </button>
+        </div>
+      )}
+
+      {isVerifiedProfile && (
+        <div className="profile-status">
+          <strong>ტელეფონი დადასტურებულია</strong>
+          <span>
+            {profile?.customer_name} · {profile?.customer_phone}
+          </span>
+        </div>
+      )}
 
       <div className="checkout-summary">
         <span>ჯამი გადასახდელი</span>
@@ -153,7 +183,7 @@ function CheckoutPage() {
             </li>
           )}
         </ul>
-      </div>   
+      </div>
 
       <div className="checkout-items">
         <h2>ნაწილები</h2>
@@ -195,7 +225,7 @@ function CheckoutPage() {
             </div>
           </article>
         ))}
-      </div>         
+      </div>
 
       <form className="checkout-form" onSubmit={handleSubmit}>
         <label>
@@ -204,6 +234,7 @@ function CheckoutPage() {
             value={customerName}
             onChange={(event) => setCustomerName(event.target.value)}
             placeholder="მაგ: ლადო"
+            disabled={isVerifiedProfile}
           />
         </label>
 
@@ -213,6 +244,7 @@ function CheckoutPage() {
             value={customerPhone}
             onChange={(event) => setCustomerPhone(event.target.value)}
             placeholder="მაგ: 599123456"
+            disabled={isVerifiedProfile}
           />
         </label>
 
@@ -244,7 +276,7 @@ function CheckoutPage() {
 
         {error && <p className="form-error">{error}</p>}
 
-        <button type="submit" disabled={isSubmitting}>
+        <button type="submit" disabled={isSubmitting || !isVerifiedProfile}>
           {isSubmitting ? "იქმნება..." : "შეკვეთის შექმნა"}
         </button>
       </form>
