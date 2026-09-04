@@ -236,7 +236,10 @@ function CheckoutPage() {
 
         <div className="payment-demo-box">
           <strong>გადახდა</strong>
-          <span>Demo რეჟიმი: 100% გადახდა, status — Payment pending</span>
+          <span>
+            შეკვეთა შეიქმნება გადახდის მოლოდინში. გადახდის დადასტურების შემდეგ
+            დამუშავება დაიწყება.
+          </span>
         </div>
 
         {error && <p className="form-error">{error}</p>}
