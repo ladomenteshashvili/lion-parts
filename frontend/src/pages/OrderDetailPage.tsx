@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import {
-  
   getOrderDetail,
   resolveOrderItemAction,
   type BackendOrder,
@@ -90,7 +89,7 @@ function OrderDetailPage() {
 
   const [error, setError] = useState("");
 
-  useEffect(() => {
+    useEffect(() => {
     async function loadOrderDetail() {
       if (!orderNumber) {
         setError("Order number ვერ მოიძებნა");
@@ -109,11 +108,14 @@ function OrderDetailPage() {
         }
 
         const data = await getOrderDetail(orderNumber);
+
         setOrder(data);
         setNeedsVerification(false);
         setError("");
       } catch (error) {
         console.error("Order detail load failed", error);
+        setNeedsVerification(false);
+        setOrder(null);
         setError("შეკვეთა ვერ მოიძებნა ან ამ ტელეფონის ნომერზე არ არის მიბმული.");
       } finally {
         setIsLoading(false);
@@ -280,14 +282,6 @@ function isOrderCompleted(order: BackendOrder) {
   }
 
 
-
-  setError("");
-
-  
-
-
-
-
   if (isLoading) {
     return (
       <section className="card">
@@ -297,6 +291,7 @@ function isOrderCompleted(order: BackendOrder) {
     );
   }
 
+    
   if (needsVerification) {
     return (
       <VerifiedPhoneRequiredCard
