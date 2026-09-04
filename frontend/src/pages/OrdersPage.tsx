@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { getOrders, type BackendOrder } from "../api/orders";
 import { getProfile, type CustomerProfile } from "../api/profile";
 import { getOrderStatusLabel } from "../utils/orderStatus";
+import VerifiedPhoneRequiredCard from "../components/VerifiedPhoneRequiredCard";
 
 function OrdersPage() {
   const [orders, setOrders] = useState<BackendOrder[]>([]);
@@ -58,18 +59,10 @@ function OrdersPage() {
 
   if (!profile?.is_phone_verified) {
     return (
-      <section className="card">
-        <p className="eyebrow">შეკვეთები</p>
-        <h1>ტელეფონის დადასტურება საჭიროა</h1>
-        <p className="muted">
-          შეკვეთების სანახავად ჯერ უნდა დაადასტუროთ ტელეფონის ნომერი SMS
-          კოდით. დადასტურების შემდეგ ამ ნომერზე შექმნილი შეკვეთები გამოჩნდება.
-        </p>
-
-        <Link className="button-link" to="/profile">
-          ტელეფონის დადასტურება
-        </Link>
-      </section>
+      <VerifiedPhoneRequiredCard
+        eyebrow="შეკვეთები"
+        description="შეკვეთების სანახავად ჯერ უნდა დაადასტუროთ ტელეფონის ნომერი SMS კოდით. დადასტურების შემდეგ ამ ნომერზე შექმნილი შეკვეთები გამოჩნდება."
+      />
     );
   }
 
