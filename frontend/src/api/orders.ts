@@ -27,13 +27,13 @@ export type OrderItem = {
   availability: string;
   eta_days: number | null;
   expected_arrival_date: string | null;
-  weight_kg: string | null;  
+  weight_kg: string | null;
   final_price_gel: string;
   proposed_final_price_gel: string | null;
   currency: string;
   note: string;
   customer_notice: string;
-  weight_source: string;  
+  weight_source: string;
   quantity: number;
   proposed_eta_days: number | null;
   proposed_expected_arrival_date: string | null;
@@ -42,6 +42,19 @@ export type OrderItem = {
   action_type: string;
   action_message: string;
   events: OrderItemEvent[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type OrderPayment = {
+  id: number;
+  payment_reference: string;
+  external_payment_id: string;
+  provider: string;
+  status: string;
+  amount_gel: string;
+  currency: string;
+  paid_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -55,6 +68,7 @@ export type BackendOrder = {
   vin: string;
   note: string;
   payment_type: "full";
+  payment: OrderPayment | null;
   status: string;
   status_label: string;
   total_gel: string;
@@ -147,14 +161,15 @@ export async function resolveOrderItemAction(
 }
 
 export async function confirmOrderPayment(
-  orderNumber: string
+  orderNumber: string,
+  paymentReference = ""
 ): Promise<BackendOrder> {
   const sessionId = getSessionId();
 
   const response = await fetch(
     `${API_BASE_URL}/api/orders/${encodeURIComponent(
       orderNumber
-    )}/demo-confirm-payment/`,
+    )}/verify-payment/`,
     {
       method: "POST",
       headers: {
@@ -162,13 +177,14 @@ export async function confirmOrderPayment(
       },
       body: JSON.stringify({
         session_id: sessionId,
+        payment_reference: paymentReference,
       }),
     }
   );
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(errorText || "Confirm payment failed");
+    throw new Error(errorText || "Verify payment failed");
   }
 
   return response.json();
