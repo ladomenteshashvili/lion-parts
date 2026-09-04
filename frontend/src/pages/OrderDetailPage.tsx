@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import {
-  confirmOrderPayment,
+  
   getOrderDetail,
   resolveOrderItemAction,
   type BackendOrder,
@@ -84,7 +84,7 @@ function OrderDetailPage() {
   const [selectedItem, setSelectedItem] = useState<OrderItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isResolvingAction, setIsResolvingAction] = useState(false);
-  const [isConfirmingPayment, setIsConfirmingPayment] = useState(false);
+
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -263,41 +263,12 @@ function isOrderCompleted(order: BackendOrder) {
     }
   }
 
-  async function handleConfirmPayment() {
-  if (!order) {
-    return;
-  }
 
-  setIsConfirmingPayment(true);
+
   setError("");
 
-  try {
-      const updatedOrder = await confirmOrderPayment(
-        order.order_number,
-        order.payment?.payment_reference || ""
-      );
+  
 
-    setOrder(updatedOrder);
-
-    setSelectedItem((currentSelectedItem) => {
-      if (!currentSelectedItem) {
-        return null;
-      }
-
-      return (
-        updatedOrder.items.find((item) => item.id === currentSelectedItem.id) ||
-        null
-      );
-    });
-
-    window.dispatchEvent(new Event("lion-parts-orders-updated"));
-  } catch (error) {
-    console.error("Confirm payment failed", error);
-    setError("გადახდის დადასტურება ვერ მოხერხდა");
-  } finally {
-    setIsConfirmingPayment(false);
-  }
-}
 
 
 
@@ -342,7 +313,7 @@ function isOrderCompleted(order: BackendOrder) {
         : "გადახდა დასადასტურებელია",
       description: isOrderPaymentConfirmed(order)
         ? "გადახდის შემდეგ შეკვეთა გადავიდა დამუშავების ეტაპზე."
-        : "შემდეგ ეტაპზე დაემატება online payment confirmation.",
+        : "თანხის მიღების შემდეგ ოპერატორი დაადასტურებს გადახდას და შეკვეთა გადავა დამუშავების ეტაპზე.",
     },
     {
       key: "processing",
@@ -398,19 +369,17 @@ function isOrderCompleted(order: BackendOrder) {
 
       {order.status === "payment_pending" && (
         <div className="payment-demo-box">
-          <strong>გადახდა მოსალოდნელია</strong>
+          <strong>გადახდა დასადასტურებელია</strong>
           <span>
-            შეკვეთა შექმნილია და გადახდა დასადასტურებელია. გადახდის დადასტურების
-            შემდეგ შეკვეთა გადავა დამუშავების ეტაპზე.
+            შეკვეთა შექმნილია. თანხის მიღების შემდეგ ოპერატორი დაადასტურებს
+            გადახდას და შეკვეთა გადავა დამუშავების ეტაპზე.
           </span>
 
-          <button
-            type="button"
-            onClick={handleConfirmPayment}
-            disabled={isConfirmingPayment}
-          >
-            {isConfirmingPayment ? "მუშავდება..." : "გადახდის დადასტურება"}
-          </button>
+          {order.payment?.payment_reference && (
+            <span className="muted">
+              გადახდის კოდი: {order.payment.payment_reference}
+            </span>
+          )}
         </div>
       )}
 
