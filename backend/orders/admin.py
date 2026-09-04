@@ -1,6 +1,29 @@
-from django.contrib import admin
+from django.contrib import admin, messages
+from django.db import transaction
 
 from .models import Order, OrderItem, OrderItemEvent, Payment
+from .views import confirm_order_payment, get_or_create_order_payment
+
+
+def mark_order_paid_manually(order):
+    with transaction.atomic():
+        locked_order = Order.objects.select_for_update().get(pk=order.pk)
+
+        if locked_order.status != Order.STATUS_PAYMENT_PENDING:
+            return False
+
+        payment = get_or_create_order_payment(locked_order)
+
+        if payment.status == Payment.STATUS_PAID:
+            return False
+
+        confirm_order_payment(
+            order=locked_order,
+            payment=payment,
+            source="manual_admin_confirmation",
+        )
+
+    return True
 
 
 class PaymentInline(admin.StackedInline):
@@ -45,6 +68,7 @@ class OrderAdmin(admin.ModelAdmin):
         "customer_name",
         "customer_phone",
         "status",
+        "payment_status",
         "total_gel",
         "created_at",
     )
@@ -58,6 +82,39 @@ class OrderAdmin(admin.ModelAdmin):
     )
     readonly_fields = ("created_at", "updated_at")
     inlines = [PaymentInline, OrderItemInline]
+    actions = ["mark_selected_orders_paid"]
+
+    @admin.display(description="Payment")
+    def payment_status(self, obj):
+        try:
+            return obj.payment.status
+        except Payment.DoesNotExist:
+            return "missing"
+
+    @admin.action(description="თანხა მიღებულია — შეკვეთის დადასტურება")
+    def mark_selected_orders_paid(self, request, queryset):
+        paid_count = 0
+        skipped_count = 0
+
+        for order in queryset:
+            if mark_order_paid_manually(order):
+                paid_count += 1
+            else:
+                skipped_count += 1
+
+        if paid_count:
+            self.message_user(
+                request,
+                f"{paid_count} შეკვეთაზე გადახდა დადასტურდა.",
+                messages.SUCCESS,
+            )
+
+        if skipped_count:
+            self.message_user(
+                request,
+                f"{skipped_count} შეკვეთა გამოტოვებულია — სავარაუდოდ აღარ იყო Payment pending.",
+                messages.WARNING,
+            )
 
 
 @admin.register(Payment)
@@ -80,6 +137,32 @@ class PaymentAdmin(admin.ModelAdmin):
         "order__order_number",
     )
     readonly_fields = ("created_at", "updated_at")
+    actions = ["mark_selected_payments_paid"]
+
+    @admin.action(description="თანხა მიღებულია — payment-ის დადასტურება")
+    def mark_selected_payments_paid(self, request, queryset):
+        paid_count = 0
+        skipped_count = 0
+
+        for payment in queryset.select_related("order"):
+            if mark_order_paid_manually(payment.order):
+                paid_count += 1
+            else:
+                skipped_count += 1
+
+        if paid_count:
+            self.message_user(
+                request,
+                f"{paid_count} payment დადასტურდა.",
+                messages.SUCCESS,
+            )
+
+        if skipped_count:
+            self.message_user(
+                request,
+                f"{skipped_count} payment გამოტოვებულია.",
+                messages.WARNING,
+            )
 
 
 @admin.register(OrderItem)
