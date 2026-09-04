@@ -26,3 +26,4 @@ build/
 # OS / editor
 .DS_Store
 .vscode/
+backend/e2e.sqlite3

@@ -10,9 +10,14 @@ source venv/bin/activate
 python manage.py test
 
 echo ""
-echo "== Frontend E2E tests =="
+echo "== Frontend mock E2E tests =="
 cd ../frontend
-npm run test:e2e
+npm run test:e2e:mock
+
+echo ""
+echo "== Frontend + real backend E2E tests =="
+cd ..
+./scripts/check-real-e2e.sh
 
 echo ""
 echo "✅ All checks passed"

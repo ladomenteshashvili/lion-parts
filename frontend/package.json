@@ -8,8 +8,10 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test:e2e": "npm run build && playwright test",
-    "test:e2e:headed": "playwright test --headed"
+    "test:e2e": "npm run test:e2e:mock",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:mock": "npm run build && playwright test tests/e2e",
+    "test:e2e:real": "npm run build && playwright test tests/real-e2e"
   },
   "dependencies": {
     "react": "^19.2.8",

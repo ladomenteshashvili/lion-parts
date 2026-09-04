@@ -61,8 +61,8 @@ jobs:
         run: |
           python manage.py test
 
-  frontend-build:
-    name: Frontend build
+  frontend-mock-e2e:
+    name: Frontend mock E2E
     runs-on: ubuntu-latest
 
     steps:
@@ -84,8 +84,72 @@ jobs:
         working-directory: frontend
         run: npx playwright install --with-deps chromium
 
-      - name: Build frontend and run Playwright smoke tests
+      - name: Run Playwright mock smoke tests
         working-directory: frontend
         env:
           VITE_API_BASE_URL: http://127.0.0.1:8000
-        run: npm run test:e2e
+        run: npm run test:e2e:mock
+
+  real-backend-e2e:
+    name: Real backend E2E
+    runs-on: ubuntu-latest
+
+    env:
+      DJANGO_SETTINGS_MODULE: config.e2e_settings
+      SECRET_KEY: e2e-secret-key
+      DEBUG: "True"
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      E2E_BACKEND_PORT: "8010"
+      VITE_API_BASE_URL: http://127.0.0.1:8010
+      PLAYWRIGHT_BASE_URL: http://127.0.0.1:4173
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Prepare e2e database
+        working-directory: backend
+        run: python manage.py migrate --noinput
+
+      - name: Start Django backend
+        working-directory: backend
+        run: |
+          python manage.py runserver 127.0.0.1:8010 > ../backend-e2e.log 2>&1 &
+          for i in {1..40}; do
+            if curl -fsS http://127.0.0.1:8010/api/health/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat ../backend-e2e.log
+          exit 1
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run real backend Playwright flow
+        working-directory: frontend
+        run: npm run test:e2e:real
