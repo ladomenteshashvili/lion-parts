@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import PhoneVerificationForm from "../components/PhoneVerificationForm";
 import { getProfile, type CustomerProfile } from "../api/profile";
+import { resetSessionId } from "../api/cart";
 
 function ProfilePage() {
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
@@ -22,6 +23,15 @@ function ProfilePage() {
       });
   }, []);
 
+  function handleSwitchPhone() {
+    resetSessionId();
+    setProfile(null);
+    setError("");
+
+    window.dispatchEvent(new Event("lion-parts-cart-updated"));
+    window.dispatchEvent(new Event("lion-parts-orders-updated"));
+  }
+
   if (isLoading) {
     return (
       <section className="card">
@@ -37,6 +47,24 @@ function ProfilePage() {
       <h1>ტელეფონით შესვლა</h1>
 
       {error && <p className="form-error">{error}</p>}
+
+      {profile && (
+        <div className="note-box">
+          <strong>სხვა ნომრით შესვლა</strong>
+          <p className="muted">
+            ამ მოქმედებით ამ ბრაუზერში დაიწყება ახალი სესია. ძველი კალათა აღარ
+            გამოჩნდება, ხოლო შეკვეთები ისევ გამოჩნდება იმ ნომრით შესვლის შემდეგ,
+            რომელზეც არის მიბმული.
+          </p>
+          <button
+            type="button"
+            className="button-secondary"
+            onClick={handleSwitchPhone}
+          >
+            სხვა ნომრით შესვლა
+          </button>
+        </div>
+      )}
 
       <PhoneVerificationForm
         initialProfile={profile}

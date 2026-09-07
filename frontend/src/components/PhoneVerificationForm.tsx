@@ -40,7 +40,13 @@ function PhoneVerificationForm({
       setCustomerName(initialProfile.customer_name);
       setCustomerPhone(initialProfile.customer_phone);
       setIsPhoneVerified(initialProfile.is_phone_verified);
+      return;
     }
+
+    setCustomerName("");
+    setCustomerPhone("");
+    resetVerificationState();
+    setMessage("");
   }, [initialProfile]);
 
   function showFeedback(type: FeedbackType, text: string) {

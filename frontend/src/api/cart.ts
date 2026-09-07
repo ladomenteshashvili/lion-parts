@@ -36,6 +36,11 @@ export function getSessionId() {
   return newSessionId;
 }
 
+export function resetSessionId() {
+  localStorage.removeItem(SESSION_STORAGE_KEY);
+  return getSessionId();
+}
+
 export function buildCartItemId(params: {
   quote_id: string;
   part_option_id: string;
