@@ -6,7 +6,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from cart.models import Cart, CartItem
-from orders.models import Order, OrderItem, OrderItemEvent, Payment
+from orders.models import Order, OrderItem, OrderItemEvent, OrderSupportMessage, Payment
 from accounts.models import Customer
 from orders.admin import request_order_item_action_from_admin, set_order_item_status_from_admin
 
@@ -701,6 +701,97 @@ class OrderFlowTests(TestCase):
         item.refresh_from_db()
         self.assertEqual(item.item_status, OrderItem.ITEM_STATUS_PURCHASED)
         self.assertTrue(item.action_required)
+
+
+
+    def test_customer_can_send_order_support_message(self):
+        order, item = self._create_order_from_cart()
+
+        response = self.client.post(
+            f"/api/orders/{order.order_number}/support/messages/",
+            {
+                "session_id": self.session_id,
+                "item_id": item.id,
+                "message": "გთხოვთ დამიკონკრეტოთ ETA.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+
+        message = OrderSupportMessage.objects.get(order=order)
+
+        self.assertEqual(message.item, item)
+        self.assertEqual(message.sender_type, OrderSupportMessage.SENDER_CUSTOMER)
+        self.assertEqual(message.sender_name, "Lado")
+        self.assertEqual(message.message, "გთხოვთ დამიკონკრეტოთ ETA.")
+        self.assertTrue(message.visible_to_customer)
+        self.assertTrue(message.is_read_by_customer)
+        self.assertFalse(message.is_read_by_operator)
+
+        self.assertEqual(len(response.data["support_messages"]), 1)
+        self.assertEqual(response.data["support_messages"][0]["message"], message.message)
+        self.assertEqual(response.data["support_unread_count"], 0)
+
+    def test_support_message_blocks_different_verified_phone(self):
+        order, item = self._create_order_from_cart()
+
+        Customer.objects.create(
+            session_id="support-other-phone",
+            name="Other",
+            phone="599000000",
+            is_phone_verified=True,
+        )
+
+        response = self.client.post(
+            f"/api/orders/{order.order_number}/support/messages/",
+            {
+                "session_id": "support-other-phone",
+                "item_id": item.id,
+                "message": " чужой заказ ",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(OrderSupportMessage.objects.count(), 0)
+
+    def test_customer_can_acknowledge_operator_support_reply(self):
+        order, item = self._create_order_from_cart()
+
+        OrderSupportMessage.objects.create(
+            order=order,
+            item=item,
+            sender_type=OrderSupportMessage.SENDER_OPERATOR,
+            sender_name="Operator",
+            message="ETA დაზუსტებულია.",
+            visible_to_customer=True,
+            is_read_by_customer=False,
+            is_read_by_operator=True,
+        )
+
+        detail_response = self.client.get(
+            f"/api/orders/{order.order_number}/?session_id={self.session_id}",
+        )
+
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertEqual(detail_response.data["support_unread_count"], 1)
+
+        response = self.client.post(
+            f"/api/orders/{order.order_number}/support/acknowledge/",
+            {
+                "session_id": self.session_id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        message = OrderSupportMessage.objects.get(order=order)
+        message.refresh_from_db()
+
+        self.assertTrue(message.is_read_by_customer)
+        self.assertEqual(response.data["support_unread_count"], 0)
 
 
     def _create_order_from_cart(self):

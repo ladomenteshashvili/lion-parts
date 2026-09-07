@@ -3,7 +3,9 @@ from django.urls import path
 from .views import (
     acknowledge_order_item_action,
     cancel_order_item_action,
+    acknowledge_order_support_messages,
     checkout,
+    create_order_support_message,
     demo_confirm_payment,
     demo_request_item_change,
     resolve_item_action,
@@ -25,6 +27,16 @@ urlpatterns = [
         "<str:order_number>/demo-confirm-payment/",
         demo_confirm_payment,
         name="orders-demo-confirm-payment",
+    ),
+    path(
+        "<str:order_number>/support/messages/",
+        create_order_support_message,
+        name="orders-support-message-create",
+    ),
+    path(
+        "<str:order_number>/support/acknowledge/",
+        acknowledge_order_support_messages,
+        name="orders-support-acknowledge",
     ),
     path("<str:order_number>/", get_order_detail, name="orders-detail"),
     path(

@@ -12,7 +12,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from cart.models import Cart
-from .models import Order, OrderItem, OrderItemEvent, Payment
+from .models import Order, OrderItem, OrderItemEvent, OrderSupportMessage, Payment
 from .serializers import OrderSerializer
 from accounts.models import Customer
 
@@ -256,7 +256,7 @@ def list_orders(request):
     orders = (
         Order.objects.filter(build_customer_order_access_filter(session_id))
         .select_related("payment")
-        .prefetch_related("items__events")
+        .prefetch_related("items__events", "support_messages")
     )
     serializer = OrderSerializer(orders, many=True)
     return Response(serializer.data)
@@ -273,7 +273,7 @@ def get_order_detail(request, order_number):
         )
 
     order = get_object_or_404(
-        Order.objects.select_related("payment").prefetch_related("items__events"),
+        Order.objects.select_related("payment").prefetch_related("items__events", "support_messages"),
         build_customer_order_access_filter(session_id),
         order_number=order_number,
     )
@@ -440,7 +440,7 @@ def checkout(request):
 
     updated_order = (
         Order.objects.select_related("payment")
-        .prefetch_related("items__events")
+        .prefetch_related("items__events", "support_messages")
         .get(id=order.id)
     )
 
@@ -556,7 +556,7 @@ def cancel_order_item_action(request, item_id):
 
     updated_order = (
         Order.objects.select_related("payment")
-        .prefetch_related("items__events")
+        .prefetch_related("items__events", "support_messages")
         .get(id=order.id)
     )
 
@@ -626,7 +626,102 @@ def acknowledge_order_item_action(request, item_id):
 
     updated_order = (
         Order.objects.select_related("payment")
-        .prefetch_related("items__events")
+        .prefetch_related("items__events", "support_messages")
+        .get(id=order.id)
+    )
+
+    serializer = OrderSerializer(updated_order)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+def create_order_support_message(request, order_number):
+    session_id = request.data.get("session_id", "").strip()
+    message = request.data.get("message", "").strip()
+    item_id = request.data.get("item_id")
+
+    if not session_id:
+        return Response(
+            {"detail": "session_id is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not message:
+        return Response(
+            {"detail": "message is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    order = get_object_or_404(
+        Order.objects.select_related("payment").prefetch_related(
+            "items__events",
+            "support_messages",
+        ),
+        build_customer_order_access_filter(session_id),
+        order_number=order_number,
+    )
+
+    item = None
+
+    if item_id not in [None, ""]:
+        try:
+            item = order.items.get(id=item_id)
+        except OrderItem.DoesNotExist:
+            return Response(
+                {"detail": "order item not found"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    OrderSupportMessage.objects.create(
+        order=order,
+        item=item,
+        sender_type=OrderSupportMessage.SENDER_CUSTOMER,
+        sender_name=order.customer_name,
+        message=message,
+        visible_to_customer=True,
+        is_read_by_customer=True,
+        is_read_by_operator=False,
+    )
+
+    updated_order = (
+        Order.objects.select_related("payment")
+        .prefetch_related("items__events", "support_messages")
+        .get(id=order.id)
+    )
+
+    serializer = OrderSerializer(updated_order)
+    return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+@api_view(["POST"])
+def acknowledge_order_support_messages(request, order_number):
+    session_id = request.data.get("session_id", "").strip()
+
+    if not session_id:
+        return Response(
+            {"detail": "session_id is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    order = get_object_or_404(
+        Order.objects.select_related("payment").prefetch_related(
+            "items__events",
+            "support_messages",
+        ),
+        build_customer_order_access_filter(session_id),
+        order_number=order_number,
+    )
+
+    order.support_messages.filter(
+        visible_to_customer=True,
+        is_read_by_customer=False,
+    ).exclude(
+        sender_type=OrderSupportMessage.SENDER_CUSTOMER,
+    ).update(is_read_by_customer=True)
+
+    updated_order = (
+        Order.objects.select_related("payment")
+        .prefetch_related("items__events", "support_messages")
         .get(id=order.id)
     )
 
@@ -665,7 +760,7 @@ def verify_payment(request, order_number):
             if payment.status == Payment.STATUS_PAID:
                 updated_order = (
                     Order.objects.select_related("payment")
-                    .prefetch_related("items__events")
+                    .prefetch_related("items__events", "support_messages")
                     .get(id=order.id)
                 )
                 serializer = OrderSerializer(updated_order)
@@ -696,7 +791,7 @@ def verify_payment(request, order_number):
 
     updated_order = (
         Order.objects.select_related("payment")
-        .prefetch_related("items__events")
+        .prefetch_related("items__events", "support_messages")
         .get(
             order_number=order_number,
             session_id=session_id,
@@ -732,7 +827,7 @@ def demo_confirm_payment(request, order_number):
             if payment.status == Payment.STATUS_PAID:
                 updated_order = (
                     Order.objects.select_related("payment")
-                    .prefetch_related("items__events")
+                    .prefetch_related("items__events", "support_messages")
                     .get(id=order.id)
                 )
                 serializer = OrderSerializer(updated_order)
@@ -758,7 +853,7 @@ def demo_confirm_payment(request, order_number):
 
     updated_order = (
         Order.objects.select_related("payment")
-        .prefetch_related("items__events")
+        .prefetch_related("items__events", "support_messages")
         .get(
             order_number=order_number,
             session_id=session_id,

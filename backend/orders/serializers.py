@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Order, OrderItem, OrderItemEvent, Payment
+from .models import Order, OrderItem, OrderItemEvent, OrderSupportMessage, Payment
 
 
 class PaymentSerializer(serializers.ModelSerializer):
@@ -83,10 +83,47 @@ class OrderItemSerializer(serializers.ModelSerializer):
         ]
 
 
+class OrderSupportMessageSerializer(serializers.ModelSerializer):
+    item_id = serializers.IntegerField(source="item.id", read_only=True)
+    item_part_number = serializers.CharField(source="item.part_number", read_only=True)
+
+    class Meta:
+        model = OrderSupportMessage
+        fields = [
+            "id",
+            "item_id",
+            "item_part_number",
+            "sender_type",
+            "sender_name",
+            "message",
+            "visible_to_customer",
+            "is_read_by_customer",
+            "is_read_by_operator",
+            "created_at",
+        ]
+
+
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
     payment = PaymentSerializer(read_only=True)
     status_label = serializers.CharField(source="get_status_display", read_only=True)
+    support_messages = serializers.SerializerMethodField()
+    support_unread_count = serializers.SerializerMethodField()
+
+    def get_support_messages(self, obj):
+        messages = obj.support_messages.filter(visible_to_customer=True).order_by(
+            "created_at",
+            "id",
+        )
+        return OrderSupportMessageSerializer(messages, many=True).data
+
+    def get_support_unread_count(self, obj):
+        return obj.support_messages.filter(
+            visible_to_customer=True,
+            is_read_by_customer=False,
+        ).exclude(
+            sender_type=OrderSupportMessage.SENDER_CUSTOMER,
+        ).count()
 
     class Meta:
         model = Order
@@ -104,6 +141,8 @@ class OrderSerializer(serializers.ModelSerializer):
             "status_label",
             "total_gel",
             "items",
+            "support_messages",
+            "support_unread_count",
             "created_at",
             "updated_at",
         ]

@@ -88,7 +88,7 @@ test("real backend customer flow: verify phone, search, cart, checkout, order de
   expect(searchResponse.status()).toBe(200);
 
   await expect(page.getByText("Quote #Q-DEMO-0001")).toBeVisible();
-  await expect(page.getByText("Demo OEM Part")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Demo OEM Part" })).toBeVisible();
 
   const addCartResponsePromise = page.waitForResponse(
     (response) =>
@@ -105,7 +105,7 @@ test("real backend customer flow: verify phone, search, cart, checkout, order de
 
   await page.goto("/cart");
   await expect(page.getByRole("heading", { name: "შენი კალათა" })).toBeVisible();
-  await expect(page.getByText("Demo OEM Part")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Demo OEM Part" })).toBeVisible();
 
   await page.getByRole("link", { name: "შეკვეთის გაგრძელება" }).click();
 
@@ -135,7 +135,7 @@ test("real backend customer flow: verify phone, search, cart, checkout, order de
 
   await expect(page).toHaveURL(new RegExp(`/orders/${orderData.order_number}$`));
   await expect(page.getByRole("heading", { name: orderData.order_number })).toBeVisible();
-  await expect(page.getByText("Demo OEM Part")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Demo OEM Part" })).toBeVisible();
 
   await page.goto("/orders");
   await expect(page.getByRole("heading", { name: "ჩემი შეკვეთები" })).toBeVisible();

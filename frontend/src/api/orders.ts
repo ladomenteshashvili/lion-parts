@@ -48,6 +48,20 @@ export type OrderItem = {
   updated_at: string;
 };
 
+
+export type OrderSupportMessage = {
+  id: number;
+  item_id: number | null;
+  item_part_number: string | null;
+  sender_type: "customer" | "operator" | "system";
+  sender_name: string;
+  message: string;
+  visible_to_customer: boolean;
+  is_read_by_customer: boolean;
+  is_read_by_operator: boolean;
+  created_at: string;
+};
+
 export type OrderPayment = {
   id: number;
   payment_reference: string;
@@ -75,6 +89,8 @@ export type BackendOrder = {
   status_label: string;
   total_gel: string;
   items: OrderItem[];
+  support_messages: OrderSupportMessage[];
+  support_unread_count: number;
   created_at: string;
   updated_at: string;
 };
@@ -211,6 +227,68 @@ export async function acknowledgeOrderItemAction(
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(errorText || "Acknowledge item action failed");
+  }
+
+  return response.json();
+}
+
+
+export async function sendOrderSupportMessage(
+  orderNumber: string,
+  payload: {
+    message: string;
+    item_id?: number;
+  }
+): Promise<BackendOrder> {
+  const sessionId = getSessionId();
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/orders/${encodeURIComponent(
+      orderNumber
+    )}/support/messages/`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        session_id: sessionId,
+        ...payload,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Send support message failed");
+  }
+
+  return response.json();
+}
+
+export async function acknowledgeOrderSupportMessages(
+  orderNumber: string
+): Promise<BackendOrder> {
+  const sessionId = getSessionId();
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/orders/${encodeURIComponent(
+      orderNumber
+    )}/support/acknowledge/`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        session_id: sessionId,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Acknowledge support messages failed");
   }
 
   return response.json();

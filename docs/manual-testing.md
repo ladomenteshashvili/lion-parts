@@ -185,3 +185,18 @@ Check:
 - After approval, item returns to checking and order returns to processing.
 - After cancelling the only item, item becomes cancelled and order becomes cancelled.
 - Different verified phone cannot approve or cancel another customer’s item.
+
+
+## Support messaging
+
+Check:
+
+- Customer can open order detail and see Support section.
+- Customer can send a support message for the whole order.
+- Customer can send a support message linked to a specific item.
+- Admin can open Order in Django Admin and add an operator reply in Support messages inline.
+- Admin reply appears on customer order detail.
+- Header Orders badge increases when there is unread operator reply.
+- Orders page shows operator reply badge on affected order.
+- Customer clicks “გასაგებია” and unread support badge disappears.
+- Different verified phone cannot read or send support messages for another customer’s order.

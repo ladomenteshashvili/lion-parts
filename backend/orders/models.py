@@ -303,3 +303,51 @@ class OrderItemEvent(models.Model):
 
     def __str__(self):
         return f"{self.item.part_number} · {self.event_type}"
+
+class OrderSupportMessage(models.Model):
+    SENDER_CUSTOMER = "customer"
+    SENDER_OPERATOR = "operator"
+    SENDER_SYSTEM = "system"
+
+    SENDER_CHOICES = [
+        (SENDER_CUSTOMER, "Customer"),
+        (SENDER_OPERATOR, "Operator"),
+        (SENDER_SYSTEM, "System"),
+    ]
+
+    order = models.ForeignKey(
+        Order,
+        on_delete=models.CASCADE,
+        related_name="support_messages",
+    )
+
+    item = models.ForeignKey(
+        OrderItem,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="support_messages",
+    )
+
+    sender_type = models.CharField(
+        max_length=30,
+        choices=SENDER_CHOICES,
+        default=SENDER_OPERATOR,
+        db_index=True,
+    )
+    sender_name = models.CharField(max_length=120, blank=True)
+
+    message = models.TextField()
+
+    visible_to_customer = models.BooleanField(default=True)
+    is_read_by_customer = models.BooleanField(default=False)
+    is_read_by_operator = models.BooleanField(default=False)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.order.order_number} · {self.sender_type} · {self.created_at}"
+
