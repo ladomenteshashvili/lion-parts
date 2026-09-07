@@ -55,6 +55,8 @@ class OrderItemSerializer(serializers.ModelSerializer):
             "quote_id",
             "part_option_id",
             "part_number",
+            "proposed_part_number",
+            "proposed_name",
             "name",
             "condition",
             "brand",

@@ -21,6 +21,8 @@ export type OrderItem = {
   quote_id: string;
   part_option_id: string;
   part_number: string;
+  proposed_part_number: string;
+  proposed_name: string;
   name: string;
   condition: string;
   brand: string;
@@ -182,6 +184,33 @@ export async function cancelOrderItemAction(
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(errorText || "Cancel item action failed");
+  }
+
+  return response.json();
+}
+
+
+export async function acknowledgeOrderItemAction(
+  itemId: number
+): Promise<BackendOrder> {
+  const sessionId = getSessionId();
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/orders/items/${itemId}/acknowledge-action/`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        session_id: sessionId,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Acknowledge item action failed");
   }
 
   return response.json();

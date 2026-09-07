@@ -99,6 +99,51 @@ def sync_order_status_after_customer_item_change(order):
         order.save(update_fields=["status", "updated_at"])
 
 
+def is_notice_only_weight_action(item):
+    return (
+        item.action_required
+        and item.action_type == OrderItem.ACTION_TYPE_WEIGHT_CHANGE
+        and item.item_status != OrderItem.ITEM_STATUS_ACTION_REQUIRED
+        and item.proposed_final_price_gel is None
+        and item.proposed_eta_days is None
+    )
+
+
+def build_item_action_snapshot(item):
+    return {
+        "part_number": item.part_number,
+        "proposed_part_number": item.proposed_part_number,
+        "name": item.name,
+        "proposed_name": item.proposed_name,
+        "part_number": item.part_number,
+        "proposed_part_number": item.proposed_part_number,
+        "name": item.name,
+        "proposed_name": item.proposed_name,
+        "item_status": item.item_status,
+        "action_required": item.action_required,
+        "action_type": item.action_type,
+        "action_message": item.action_message,
+        "final_price_gel": str(item.final_price_gel),
+        "proposed_final_price_gel": (
+            str(item.proposed_final_price_gel)
+            if item.proposed_final_price_gel is not None
+            else None
+        ),
+        "eta_days": item.eta_days,
+        "proposed_eta_days": item.proposed_eta_days,
+        "expected_arrival_date": (
+            item.expected_arrival_date.isoformat()
+            if item.expected_arrival_date
+            else None
+        ),
+        "proposed_expected_arrival_date": (
+            item.proposed_expected_arrival_date.isoformat()
+            if item.proposed_expected_arrival_date
+            else None
+        ),
+    }
+
+
 def create_order_item_event(
     item,
     event_type,
@@ -430,6 +475,12 @@ def cancel_order_item_action(request, item_id):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    if is_notice_only_weight_action(item):
+        return Response(
+            {"detail": "item action is notice only"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     order = item.order
 
     old_value = {
@@ -461,6 +512,10 @@ def cancel_order_item_action(request, item_id):
     item.action_required = False
     item.action_type = OrderItem.ACTION_TYPE_NONE
     item.action_message = ""
+    item.proposed_part_number = ""
+    item.proposed_name = ""
+    item.proposed_part_number = ""
+    item.proposed_name = ""
     item.proposed_final_price_gel = None
     item.proposed_eta_days = None
     item.proposed_expected_arrival_date = None
@@ -494,6 +549,76 @@ def cancel_order_item_action(request, item_id):
             ),
             "proposed_expected_arrival_date": None,
         },
+        actor_type=OrderItemEvent.ACTOR_TYPE_CUSTOMER,
+        actor_name="Customer",
+        visible_to_customer=True,
+    )
+
+    updated_order = (
+        Order.objects.select_related("payment")
+        .prefetch_related("items__events")
+        .get(id=order.id)
+    )
+
+    serializer = OrderSerializer(updated_order)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+def acknowledge_order_item_action(request, item_id):
+    session_id = request.data.get("session_id", "").strip()
+
+    if not session_id:
+        return Response(
+            {"detail": "session_id is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        item = OrderItem.objects.select_related("order").get(
+            build_customer_order_access_filter(session_id, prefix="order__"),
+            id=item_id,
+        )
+    except OrderItem.DoesNotExist:
+        return Response(
+            {"detail": "order item not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if not item.action_required:
+        return Response(
+            {"detail": "item has no pending action"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not is_notice_only_weight_action(item):
+        return Response(
+            {"detail": "item action requires decision"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    order = item.order
+    old_value = build_item_action_snapshot(item)
+
+    item.action_required = False
+    item.action_type = OrderItem.ACTION_TYPE_NONE
+    item.action_message = ""
+    item.save(update_fields=[
+        "action_required",
+        "action_type",
+        "action_message",
+        "updated_at",
+    ])
+
+    sync_order_status_after_customer_item_change(order)
+
+    create_order_item_event(
+        item=item,
+        event_type=OrderItemEvent.EVENT_TYPE_ACTION_RESOLVED,
+        title="შეტყობინება ნანახია",
+        message="მომხმარებელმა წონის/ზომის ცვლილების შეტყობინება ნახა.",
+        old_value=old_value,
+        new_value=build_item_action_snapshot(item),
         actor_type=OrderItemEvent.ACTOR_TYPE_CUSTOMER,
         actor_name="Customer",
         visible_to_customer=True,
@@ -691,6 +816,12 @@ def resolve_item_action(request, item_id):
             else None
         ),
     }
+
+    if item.proposed_part_number:
+        item.part_number = item.proposed_part_number.strip()
+
+    if item.proposed_name:
+        item.name = item.proposed_name.strip()
 
     if item.proposed_final_price_gel is not None:
         item.final_price_gel = item.proposed_final_price_gel

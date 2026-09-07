@@ -180,6 +180,8 @@ class OrderItem(models.Model):
     quote_id = models.CharField(max_length=120)
     part_option_id = models.CharField(max_length=120)
     part_number = models.CharField(max_length=120)
+    proposed_part_number = models.CharField(max_length=120, blank=True)
+    proposed_name = models.CharField(max_length=255, blank=True)
 
     name = models.CharField(max_length=255)
     condition = models.CharField(max_length=80, blank=True)
