@@ -38,7 +38,14 @@ class OrderItemEventSerializer(serializers.ModelSerializer):
 
 
 class OrderItemSerializer(serializers.ModelSerializer):
-    events = OrderItemEventSerializer(many=True, read_only=True)
+    events = serializers.SerializerMethodField()
+
+    def get_events(self, obj):
+        events = obj.events.filter(visible_to_customer=True).order_by(
+            "created_at",
+            "id",
+        )
+        return OrderItemEventSerializer(events, many=True).data
 
     class Meta:
         model = OrderItem

@@ -1,7 +1,7 @@
 from datetime import timedelta
 from decimal import Decimal
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -10,6 +10,7 @@ from orders.models import Order, OrderItem, OrderItemEvent, Payment
 from accounts.models import Customer
 
 
+@override_settings(ENABLE_DEMO_ORDER_ENDPOINTS=True)
 class OrderFlowTests(TestCase):
     def setUp(self):
         self.client = APIClient()
@@ -201,7 +202,7 @@ class OrderFlowTests(TestCase):
         )
 
         response = self.client.post(
-            f"/api/orders/items/{item.id}/demo-resolve-action/",
+            f"/api/orders/items/{item.id}/resolve-action/",
             {
                 "session_id": self.session_id,
             },
@@ -244,7 +245,7 @@ class OrderFlowTests(TestCase):
         )
 
         response = self.client.post(
-            f"/api/orders/items/{item.id}/demo-resolve-action/",
+            f"/api/orders/items/{item.id}/resolve-action/",
             {
                 "session_id": self.session_id,
             },
@@ -331,7 +332,7 @@ class OrderFlowTests(TestCase):
         )
         self.assertEqual(event.new_value["payment_status"], Payment.STATUS_PAID)
         self.assertEqual(event.new_value["payment_reference"], payment.payment_reference)
-        self.assertFalse(event.visible_to_customer)
+        self.assertTrue(event.visible_to_customer)
 
         self.assertEqual(response.data["status"], Order.STATUS_PROCESSING)
         self.assertEqual(response.data["payment"]["status"], Payment.STATUS_PAID)
@@ -428,6 +429,79 @@ class OrderFlowTests(TestCase):
         self.assertEqual(payment.status, Payment.STATUS_PAID)
         self.assertEqual(item.events.count(), 2)
 
+    def test_order_detail_allows_same_verified_phone_from_new_session(self):
+        order, _item = self._create_order_from_cart()
+        other_session_id = "same-phone-new-session"
+
+        Customer.objects.create(
+            session_id=other_session_id,
+            name="Lado",
+            phone="599123456",
+            is_phone_verified=True,
+        )
+
+        response = self.client.get(
+            f"/api/orders/{order.order_number}/?session_id={other_session_id}",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["order_number"], order.order_number)
+
+    def test_order_detail_blocks_different_verified_phone(self):
+        order, _item = self._create_order_from_cart()
+        other_session_id = "different-phone-session"
+
+        Customer.objects.create(
+            session_id=other_session_id,
+            name="Other",
+            phone="599000000",
+            is_phone_verified=True,
+        )
+
+        response = self.client.get(
+            f"/api/orders/{order.order_number}/?session_id={other_session_id}",
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_order_detail_returns_only_customer_visible_events(self):
+        order, item = self._create_order_from_cart()
+
+        OrderItemEvent.objects.create(
+            item=item,
+            event_type=OrderItemEvent.EVENT_TYPE_NOTE_ADDED,
+            title="Internal note",
+            message="This must not be visible to customer.",
+            actor_type=OrderItemEvent.ACTOR_TYPE_SYSTEM,
+            actor_name="System",
+            visible_to_customer=False,
+        )
+
+        OrderItemEvent.objects.create(
+            item=item,
+            event_type=OrderItemEvent.EVENT_TYPE_NOTE_ADDED,
+            title="Customer visible note",
+            message="This can be visible to customer.",
+            actor_type=OrderItemEvent.ACTOR_TYPE_SYSTEM,
+            actor_name="System",
+            visible_to_customer=True,
+        )
+
+        response = self.client.get(
+            f"/api/orders/{order.order_number}/?session_id={self.session_id}",
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        event_titles = [
+            event["title"]
+            for event in response.data["items"][0]["events"]
+        ]
+
+        self.assertIn("Customer visible note", event_titles)
+        self.assertNotIn("Internal note", event_titles)
+
+
     def _create_order_from_cart(self):
         response = self.client.post(
             "/api/orders/checkout/",
@@ -447,3 +521,53 @@ class OrderFlowTests(TestCase):
         item = order.items.first()
 
         return order, item
+
+class DisabledDemoEndpointTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+
+    def test_demo_payment_endpoint_is_disabled_by_default(self):
+        response = self.client.post(
+            "/api/orders/LP-TEST/demo-confirm-payment/",
+            {"session_id": "test-session"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_verify_payment_endpoint_is_disabled_by_default(self):
+        response = self.client.post(
+            "/api/orders/LP-TEST/verify-payment/",
+            {
+                "session_id": "test-session",
+                "payment_reference": "PAY-TEST",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_demo_operator_endpoints_are_disabled_by_default(self):
+        request_change_response = self.client.post(
+            "/api/orders/items/999/demo-request-change/",
+            {
+                "session_id": "test-session",
+                "action_type": OrderItem.ACTION_TYPE_ETA_CHANGE,
+                "action_message": "test",
+                "proposed_eta_days": 21,
+            },
+            format="json",
+        )
+
+        update_status_response = self.client.post(
+            "/api/orders/items/999/demo-update-status/",
+            {
+                "session_id": "test-session",
+                "item_status": OrderItem.ITEM_STATUS_PURCHASED,
+            },
+            format="json",
+        )
+
+        self.assertEqual(request_change_response.status_code, 404)
+        self.assertEqual(update_status_response.status_code, 404)
+

@@ -203,3 +203,11 @@ PHONE_VERIFICATION_MAX_ATTEMPTS = config(
     default=5,
     cast=int,
 )
+
+# Demo/order testing endpoints
+# Keep False in production. Tests can enable it with override_settings.
+ENABLE_DEMO_ORDER_ENDPOINTS = config(
+    "ENABLE_DEMO_ORDER_ENDPOINTS",
+    default=False,
+    cast=bool,
+)
