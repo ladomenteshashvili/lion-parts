@@ -11,6 +11,7 @@ from .providers import (
     calculate_part_price_provider,
     search_parts_provider,
 )
+from .models import PartSearchLog
 from .serializers import PartQuoteRequestSerializer
 
 
@@ -49,6 +50,79 @@ def search_parts(request):
             {"detail": "parts provider request failed"},
             status=status.HTTP_502_BAD_GATEWAY,
         )
+
+
+def _build_feed_item(log: PartSearchLog) -> dict:
+    normalized_response = log.normalized_response or {}
+    response_results = normalized_response.get("results", [])
+
+    first_result = {}
+    if isinstance(response_results, list) and response_results:
+        if isinstance(response_results[0], dict):
+            first_result = response_results[0]
+
+    return {
+        "id": log.id,
+        "part_number": log.part_number,
+        "vin": log.vin,
+        "provider": log.provider,
+        "quote_id": normalized_response.get("quote_id", ""),
+        "found_count": log.found_count,
+        "top_result_name": first_result.get("name", ""),
+        "top_result_price_gel": first_result.get("final_price_gel"),
+        "created_at": log.created_at,
+    }
+
+
+@api_view(["GET"])
+def get_parts_feed(request):
+    session_id = request.query_params.get("session_id", "").strip()
+
+    if not session_id:
+        return Response(
+            {"detail": "session_id is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    customer = Customer.objects.filter(
+        session_id=session_id,
+        is_phone_verified=True,
+    ).first()
+
+    if not customer or not customer.phone:
+        return Response(
+            {
+                "requires_phone_verification": True,
+                "results": [],
+            }
+        )
+
+    logs = PartSearchLog.objects.filter(
+        customer_phone=customer.phone,
+        status=PartSearchLog.STATUS_SUCCESS,
+    ).order_by("-created_at", "-id")[:50]
+
+    seen = set()
+    results = []
+
+    for log in logs:
+        dedupe_key = (log.part_number.upper(), log.vin.upper())
+
+        if dedupe_key in seen:
+            continue
+
+        seen.add(dedupe_key)
+        results.append(_build_feed_item(log))
+
+        if len(results) >= 10:
+            break
+
+    return Response(
+        {
+            "requires_phone_verification": False,
+            "results": results,
+        }
+    )
 
 
 @api_view(["POST"])

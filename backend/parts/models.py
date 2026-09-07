@@ -51,6 +51,8 @@ class PartSearchLog(models.Model):
     ]
 
     session_id = models.CharField(max_length=255, blank=True, db_index=True)
+    customer_phone = models.CharField(max_length=50, blank=True, db_index=True)
+    customer_name = models.CharField(max_length=150, blank=True)
     provider = models.CharField(max_length=30, choices=PROVIDER_CHOICES, db_index=True)
 
     part_number = models.CharField(max_length=120, db_index=True)

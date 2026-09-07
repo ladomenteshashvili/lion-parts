@@ -26,6 +26,7 @@ def _save_part_search_log(
     part_number: str,
     vin: str | None,
     session_id: str | None,
+    customer: Customer | None,
     raw_response: object,
     normalized_response: dict[str, Any],
     status: str = PartSearchLog.STATUS_SUCCESS,
@@ -37,6 +38,8 @@ def _save_part_search_log(
             part_number=part_number,
             vin=vin or "",
             session_id=session_id or "",
+            customer_phone=(customer.phone if customer and customer.is_phone_verified else ""),
+            customer_name=(customer.name if customer and customer.is_phone_verified else ""),
             found_count=len(normalized_response.get("results", [])),
             status=status,
             raw_response={"data": raw_response},
@@ -51,6 +54,7 @@ def _save_part_search_log(
 def search_demo_parts(
     part_number: str,
     vin: str | None = None,
+    customer: Customer | None = None,
     session_id: str | None = None,
 ) -> dict[str, Any]:
     if part_number.upper().startswith("NF"):
@@ -66,6 +70,7 @@ def search_demo_parts(
             part_number=part_number,
             vin=vin,
             session_id=session_id,
+            customer=customer,
             raw_response=response,
             normalized_response=response,
         )
@@ -130,6 +135,7 @@ def search_demo_parts(
         part_number=part_number,
         vin=vin,
         session_id=session_id,
+        customer=customer,
         raw_response=response,
         normalized_response=response,
     )
@@ -300,6 +306,7 @@ def search_amt_parts(
         part_number=part_number,
         vin=vin,
         session_id=session_id or (customer.session_id if customer else ""),
+        customer=customer,
         raw_response=rows,
         normalized_response=response,
     )
@@ -345,7 +352,7 @@ def search_parts_provider(
     if settings.PARTS_PROVIDER == "amt":
         return search_amt_parts(part_number, vin, customer, session_id)
 
-    return search_demo_parts(part_number, vin, session_id)
+    return search_demo_parts(part_number, vin, customer, session_id)
 
 
 def calculate_part_price_provider(

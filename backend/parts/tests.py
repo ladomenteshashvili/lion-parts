@@ -4,7 +4,7 @@ from unittest.mock import patch
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from .models import CarrierService, PartQuoteRequest
+from .models import CarrierService, PartQuoteRequest, PartSearchLog
 from accounts.models import Customer, CustomerTariff
 
 @override_settings(PARTS_PROVIDER="demo")
@@ -123,6 +123,132 @@ class PartsSearchApiTests(TestCase):
             self.assertNotIn("supplier_price", result)
             self.assertNotIn("shipping_price", result)
             self.assertNotIn("internal_cost", result)
+
+    def test_feed_returns_recent_searches_for_verified_phone(self):
+        session_id = "feed-session"
+
+        Customer.objects.create(
+            session_id=session_id,
+            name="Feed Customer",
+            phone="555111222",
+            is_phone_verified=True,
+        )
+
+        self.client.post(
+            "/api/parts/search/",
+            {
+                "session_id": session_id,
+                "part_number": "FEED123",
+                "vin": "TESTVIN123",
+            },
+            format="json",
+        )
+
+        response = self.client.get(
+            f"/api/parts/feed/?session_id={session_id}",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["requires_phone_verification"])
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(response.data["results"][0]["part_number"], "FEED123")
+        self.assertEqual(response.data["results"][0]["vin"], "TESTVIN123")
+        self.assertEqual(response.data["results"][0]["found_count"], 3)
+
+        log = PartSearchLog.objects.get(part_number="FEED123")
+        self.assertEqual(log.customer_phone, "555111222")
+        self.assertEqual(log.customer_name, "Feed Customer")
+
+    def test_feed_allows_same_verified_phone_from_new_session(self):
+        first_session_id = "feed-first-session"
+        second_session_id = "feed-second-session"
+
+        Customer.objects.create(
+            session_id=first_session_id,
+            name="Feed Customer",
+            phone="555111222",
+            is_phone_verified=True,
+        )
+
+        Customer.objects.create(
+            session_id=second_session_id,
+            name="Feed Customer",
+            phone="555111222",
+            is_phone_verified=True,
+        )
+
+        self.client.post(
+            "/api/parts/search/",
+            {
+                "session_id": first_session_id,
+                "part_number": "SAMEPHONE123",
+            },
+            format="json",
+        )
+
+        response = self.client.get(
+            f"/api/parts/feed/?session_id={second_session_id}",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(
+            response.data["results"][0]["part_number"],
+            "SAMEPHONE123",
+        )
+
+    def test_feed_blocks_different_verified_phone(self):
+        first_session_id = "feed-owner-session"
+        second_session_id = "feed-other-session"
+
+        Customer.objects.create(
+            session_id=first_session_id,
+            name="Owner",
+            phone="555111222",
+            is_phone_verified=True,
+        )
+
+        Customer.objects.create(
+            session_id=second_session_id,
+            name="Other",
+            phone="555999888",
+            is_phone_verified=True,
+        )
+
+        self.client.post(
+            "/api/parts/search/",
+            {
+                "session_id": first_session_id,
+                "part_number": "PRIVATE123",
+            },
+            format="json",
+        )
+
+        response = self.client.get(
+            f"/api/parts/feed/?session_id={second_session_id}",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["results"], [])
+
+    def test_feed_requires_verified_phone(self):
+        session_id = "feed-unverified-session"
+
+        Customer.objects.create(
+            session_id=session_id,
+            name="Unverified",
+            phone="555111222",
+            is_phone_verified=False,
+        )
+
+        response = self.client.get(
+            f"/api/parts/feed/?session_id={session_id}",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["requires_phone_verification"])
+        self.assertEqual(response.data["results"], [])
+
 
 
 @override_settings(PARTS_PROVIDER="amt")

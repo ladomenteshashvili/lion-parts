@@ -5,9 +5,10 @@ import {
   calculatePartPrice,
   createPartQuoteRequest,
   getHealthStatus,
+  getPartsFeed,
   searchParts,
 } from "../api/client";
-import type { PartSearchResponse } from "../api/client";
+import type { PartsFeedItem, PartSearchResponse } from "../api/client";
 import { addCartItem, buildCartItemId, getSessionId } from "../api/cart";
 import { getProfile } from "../api/profile";
 type HealthStatus = {
@@ -25,6 +26,9 @@ function SearchPage() {
   const [searchError, setSearchError] = useState("");
   const [cartMessage, setCartMessage] = useState("");
   const [quote, setQuote] = useState<PartSearchResponse | null>(null);
+  const [feedItems, setFeedItems] = useState<PartsFeedItem[]>([]);
+  const [isFeedLoading, setIsFeedLoading] = useState(false);
+  const [feedRequiresVerification, setFeedRequiresVerification] = useState(false);
   const [addedCartItemIds, setAddedCartItemIds] = useState<string[]>([]);
   const [quantitiesByCartItemId, setQuantitiesByCartItemId] = useState<
     Record<string, number>
@@ -80,6 +84,62 @@ function SearchPage() {
         setCanRequestQuote(false);
       });
   }, []);
+
+
+  async function loadFeed() {
+    setIsFeedLoading(true);
+
+    try {
+      const data = await getPartsFeed(getSessionId());
+
+      setFeedItems(data.results);
+      setFeedRequiresVerification(data.requires_phone_verification);
+    } catch (error) {
+      console.error("Parts feed load failed", error);
+      setFeedItems([]);
+      setFeedRequiresVerification(false);
+    } finally {
+      setIsFeedLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadFeed();
+  }, []);
+
+  async function handleFeedSearch(item: PartsFeedItem) {
+    const cleanPartNumber = item.part_number.trim();
+    const cleanVin = item.vin.trim();
+
+    setPartNumber(cleanPartNumber);
+    setVin(cleanVin);
+    setIsSearching(true);
+    setSearchError("");
+    setCartMessage("");
+    setQuoteRequestMessage("");
+    setQuoteRequestError("");
+    setAddedCartItemIds([]);
+    setQuantitiesByCartItemId({});
+
+    try {
+      const data = await searchParts({
+        part_number: cleanPartNumber,
+        vin: cleanVin || undefined,
+        session_id: getSessionId(),
+      });
+
+      setQuote(data);
+      await loadFeed();
+      await loadFeed();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (error) {
+      console.error("Feed search failed", error);
+      setQuote(null);
+      setSearchError("ძიება ვერ შესრულდა. სცადე თავიდან.");
+    } finally {
+      setIsSearching(false);
+    }
+  }
 
 
   async function handleSearch(event: FormEvent<HTMLFormElement>) {
@@ -326,6 +386,58 @@ function SearchPage() {
 
       {searchError && <p className="form-error">{searchError}</p>}
       {cartMessage && <p className="form-success">{cartMessage}</p>}
+
+
+      {(isFeedLoading || feedRequiresVerification || feedItems.length > 0) && (
+        <div className="quote">
+          <div className="quote__header">
+            <div>
+              <p className="eyebrow">ჩემი ნაწილები</p>
+              <h2>ბოლო ძიებები</h2>
+              <p className="muted">
+                აქ გამოჩნდება დადასტურებულ ტელეფონის ნომერზე მოძებნილი ნაწილები.
+              </p>
+            </div>
+          </div>
+
+          {isFeedLoading ? (
+            <p className="muted">იტვირთება...</p>
+          ) : feedRequiresVerification ? (
+            <p className="muted">
+              ბოლო ძიებების სანახავად დაადასტურე ტელეფონის ნომერი პროფილში.
+            </p>
+          ) : (
+            feedItems.map((item) => (
+              <article className="part-option" key={item.id}>
+                <div>
+                  <h3>{item.part_number}</h3>
+                  <p className="muted">
+                    {item.top_result_name || "ძიების შედეგი"}
+                    {item.vin ? ` · VIN: ${item.vin}` : ""}
+                  </p>
+                  <p className="muted">
+                    {new Date(item.created_at).toLocaleString("ka-GE")} ·{" "}
+                    {item.found_count} შეთავაზება
+                    {item.quote_id ? ` · Quote: ${item.quote_id}` : ""}
+                  </p>
+                </div>
+
+                <div className="part-option__side">
+                  {item.top_result_price_gel !== null && (
+                    <strong>
+                      {Number(item.top_result_price_gel).toLocaleString("ka-GE")} ₾
+                    </strong>
+                  )}
+
+                  <button type="button" onClick={() => handleFeedSearch(item)}>
+                    თავიდან ძებნა
+                  </button>
+                </div>
+              </article>
+            ))
+          )}
+        </div>
+      )}
 
       {quote && (
         <div className="quote">
