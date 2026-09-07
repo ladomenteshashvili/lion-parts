@@ -172,6 +172,36 @@ test("verified customer can open orders list and order detail", async ({ page })
   expect(pageErrors).toEqual([]);
 });
 
+
+test("customer can switch phone by clearing local session", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+
+  await page.addInitScript(() => {
+    localStorage.setItem("lion_parts_session_id", "old-session");
+  });
+
+  await mockApi(page, { verified: true });
+
+  await page.goto("/profile");
+
+  await expect(page.getByText("ტელეფონი დადასტურებულია")).toBeVisible();
+  await expect(page.getByLabel("ტელეფონის ნომერი")).toHaveValue("555123456");
+
+  await page.getByRole("button", { name: "სხვა ნომრით შესვლა" }).click();
+
+  await expect(page.getByLabel("ტელეფონის ნომერი")).toHaveValue("");
+
+  const sessionId = await page.evaluate(() =>
+    localStorage.getItem("lion_parts_session_id")
+  );
+
+  expect(sessionId || "").toContain("guest-");
+  expect(sessionId).not.toBe("old-session");
+  expect(pageErrors).toEqual([]);
+});
+
+
 test("customer can verify phone, search part, add to cart, checkout, and open order detail", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
