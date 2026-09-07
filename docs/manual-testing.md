@@ -348,3 +348,50 @@ Check:
 - Public notification link does not allow approve/cancel/support send actions.
 - Normal order detail page also pops unread operator support message on entry.
 
+
+## Notification deep links UX
+
+Check four notification link states:
+
+### 1. Order update link
+
+- Admin changes an order/item status that creates customer-visible order update.
+- Order customer notification is created automatically.
+- Open `/n/<token>`.
+- Phone verification is not required.
+- Page explains why the link was sent.
+- Order summary is visible.
+- Forced message modal appears if unread.
+- Modal has no X/close.
+- Only “გასაგებია” closes it.
+
+### 2. Item update link
+
+- Admin changes a specific item status or creates item-related update.
+- Open `/n/<token>`.
+- Page explains this is a part update.
+- Affected item is highlighted.
+- Affected item modal opens automatically.
+- Customer can reopen item details from the page.
+
+### 3. Support reply link
+
+- Admin creates operator support reply.
+- Notification is created automatically.
+- Open `/n/<token>`.
+- Page explains this is an operator reply.
+- Support history is visible.
+- The exact operator reply is highlighted.
+- Forced unread modal shows the operator message.
+- “გასაგებია” marks it read.
+
+### 4. Action required link
+
+- Admin requests price / ETA / fitment / alternative confirmation.
+- Open `/n/<token>`.
+- Page explains customer action is required.
+- Affected item modal opens automatically.
+- Changed price / ETA / alternative number is visible when provided.
+- Public link does not allow approve/cancel.
+- Page links customer to full order page for phone verification and decision.
+
