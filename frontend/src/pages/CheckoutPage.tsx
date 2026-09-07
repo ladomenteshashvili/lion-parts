@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { getCart, type CartItem } from "../api/cart";
 import { checkoutOrder } from "../api/orders";
 import { getProfile, type CustomerProfile } from "../api/profile";
+import PhoneVerificationForm from "../components/PhoneVerificationForm";
 
 function CheckoutPage() {
   const navigate = useNavigate();
@@ -139,12 +140,19 @@ function CheckoutPage() {
         <div className="action-required-card">
           <strong>ტელეფონის დადასტურება საჭიროა</strong>
           <span>
-            შეკვეთის გასაფორმებლად ჯერ პროფილში უნდა დაადასტუროთ ქართული
-            მობილური ნომერი SMS კოდით.
+            შეკვეთის გასაფორმებლად დაადასტურეთ ქართული მობილური ნომერი SMS
+            კოდით. ამ გვერდიდან გასვლა საჭირო არ არის.
           </span>
-          <button type="button" onClick={() => navigate("/profile")}>
-            პროფილზე გადასვლა
-          </button>
+
+          <PhoneVerificationForm
+            initialProfile={profile}
+            onVerified={(verifiedProfile) => {
+              setProfile(verifiedProfile);
+              setCustomerName(verifiedProfile.customer_name);
+              setCustomerPhone(verifiedProfile.customer_phone);
+              setError("");
+            }}
+          />
         </div>
       )}
 
@@ -227,7 +235,8 @@ function CheckoutPage() {
         ))}
       </div>
 
-      <form className="checkout-form" onSubmit={handleSubmit}>
+      {isVerifiedProfile && (
+        <form className="checkout-form" onSubmit={handleSubmit}>
         <label>
           სახელი
           <input
@@ -276,10 +285,11 @@ function CheckoutPage() {
 
         {error && <p className="form-error">{error}</p>}
 
-        <button type="submit" disabled={isSubmitting || !isVerifiedProfile}>
+        <button type="submit" disabled={isSubmitting}>
           {isSubmitting ? "იქმნება..." : "შეკვეთის შექმნა"}
         </button>
-      </form>
+        </form>
+      )}
     </section>
   );
 }
