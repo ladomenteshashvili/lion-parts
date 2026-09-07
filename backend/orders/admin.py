@@ -1,5 +1,8 @@
+from datetime import timedelta
+
 from django.contrib import admin, messages
 from django.db import transaction
+from django.utils import timezone
 
 from .models import Order, OrderItem, OrderItemEvent, Payment
 from .views import confirm_order_payment, get_or_create_order_payment
@@ -159,6 +162,163 @@ def set_order_item_status_from_admin(item, new_status, actor_name="Admin"):
 
 
 
+ACTION_REQUIRED_CUSTOMER_MESSAGES = {
+    OrderItem.ACTION_TYPE_PRICE_CHANGE: (
+        "ფასის ცვლილების დადასტურება საჭიროა",
+        "ნაწილის საბოლოო ფასი შეიცვალა. გასაგრძელებლად დაადასტურეთ ცვლილება.",
+    ),
+    OrderItem.ACTION_TYPE_ETA_CHANGE: (
+        "მიწოდების ვადის დადასტურება საჭიროა",
+        "ნაწილის მიწოდების ვადა შეიცვალა. გასაგრძელებლად დაადასტურეთ ცვლილება.",
+    ),
+    OrderItem.ACTION_TYPE_WEIGHT_CHANGE: (
+        "წონის/ზომის ცვლილების დადასტურება საჭიროა",
+        "ნაწილის რეალური წონა ან ზომა განსხვავებულია. საბოლოო თანხა შეიძლება შეიცვალოს.",
+    ),
+    OrderItem.ACTION_TYPE_FITMENT_ISSUE: (
+        "თავსებადობის შემოწმება საჭიროა",
+        "VIN-თან თავსებადობაზე საჭიროა დამატებითი დადასტურება.",
+    ),
+    OrderItem.ACTION_TYPE_ALTERNATIVE_REQUIRED: (
+        "ალტერნატიული ნაწილი საჭიროა",
+        "შეკვეთილი ნაწილის ნაცვლად საჭიროა ალტერნატიული ვარიანტის დადასტურება.",
+    ),
+    OrderItem.ACTION_TYPE_OTHER: (
+        "დადასტურება საჭიროა",
+        "შეკვეთის გასაგრძელებლად საჭიროა მომხმარებლის დადასტურება.",
+    ),
+}
+
+
+def request_order_item_action_from_admin(item, action_type, actor_name="Admin"):
+    valid_action_types = {
+        OrderItem.ACTION_TYPE_PRICE_CHANGE,
+        OrderItem.ACTION_TYPE_ETA_CHANGE,
+        OrderItem.ACTION_TYPE_WEIGHT_CHANGE,
+        OrderItem.ACTION_TYPE_FITMENT_ISSUE,
+        OrderItem.ACTION_TYPE_ALTERNATIVE_REQUIRED,
+        OrderItem.ACTION_TYPE_OTHER,
+    }
+
+    if action_type not in valid_action_types:
+        return "invalid_action_type"
+
+    with transaction.atomic():
+        locked_item = (
+            OrderItem.objects.select_for_update()
+            .select_related("order")
+            .get(pk=item.pk)
+        )
+        order = Order.objects.select_for_update().get(pk=locked_item.order_id)
+
+        if order.status == Order.STATUS_PAYMENT_PENDING:
+            return "skipped_payment_pending"
+
+        old_value = {
+            "item_status": locked_item.item_status,
+            "action_required": locked_item.action_required,
+            "action_type": locked_item.action_type,
+            "action_message": locked_item.action_message,
+            "final_price_gel": str(locked_item.final_price_gel),
+            "proposed_final_price_gel": (
+                str(locked_item.proposed_final_price_gel)
+                if locked_item.proposed_final_price_gel is not None
+                else None
+            ),
+            "eta_days": locked_item.eta_days,
+            "proposed_eta_days": locked_item.proposed_eta_days,
+            "expected_arrival_date": (
+                locked_item.expected_arrival_date.isoformat()
+                if locked_item.expected_arrival_date
+                else None
+            ),
+            "proposed_expected_arrival_date": (
+                locked_item.proposed_expected_arrival_date.isoformat()
+                if locked_item.proposed_expected_arrival_date
+                else None
+            ),
+        }
+
+        if action_type in [
+            OrderItem.ACTION_TYPE_PRICE_CHANGE,
+            OrderItem.ACTION_TYPE_WEIGHT_CHANGE,
+        ]:
+            if locked_item.proposed_final_price_gel is None:
+                return "missing_proposed_price"
+
+            if locked_item.proposed_final_price_gel == locked_item.final_price_gel:
+                return "no_actual_change"
+
+        if action_type == OrderItem.ACTION_TYPE_ETA_CHANGE:
+            if locked_item.proposed_eta_days is None:
+                return "missing_proposed_eta"
+
+            if locked_item.proposed_eta_days == locked_item.eta_days:
+                return "no_actual_change"
+
+            locked_item.proposed_expected_arrival_date = (
+                timezone.localdate() + timedelta(days=locked_item.proposed_eta_days)
+            )
+
+        title, default_message = ACTION_REQUIRED_CUSTOMER_MESSAGES[action_type]
+        message = locked_item.action_message.strip() or default_message
+
+        event_type = OrderItemEvent.EVENT_TYPE_CHANGE_REQUESTED
+
+        if action_type == OrderItem.ACTION_TYPE_PRICE_CHANGE:
+            event_type = OrderItemEvent.EVENT_TYPE_PRICE_CHANGE_REQUESTED
+
+        if action_type == OrderItem.ACTION_TYPE_ETA_CHANGE:
+            event_type = OrderItemEvent.EVENT_TYPE_ETA_CHANGE_REQUESTED
+
+        locked_item.action_required = True
+        locked_item.action_type = action_type
+        locked_item.action_message = message
+        locked_item.item_status = OrderItem.ITEM_STATUS_ACTION_REQUIRED
+        locked_item.save()
+
+        order.status = Order.STATUS_ACTION_REQUIRED
+        order.save(update_fields=["status", "updated_at"])
+
+        OrderItemEvent.objects.create(
+            item=locked_item,
+            event_type=event_type,
+            title=title,
+            message=message,
+            old_value=old_value,
+            new_value={
+                "item_status": locked_item.item_status,
+                "action_required": locked_item.action_required,
+                "action_type": locked_item.action_type,
+                "action_message": locked_item.action_message,
+                "final_price_gel": str(locked_item.final_price_gel),
+                "proposed_final_price_gel": (
+                    str(locked_item.proposed_final_price_gel)
+                    if locked_item.proposed_final_price_gel is not None
+                    else None
+                ),
+                "eta_days": locked_item.eta_days,
+                "proposed_eta_days": locked_item.proposed_eta_days,
+                "expected_arrival_date": (
+                    locked_item.expected_arrival_date.isoformat()
+                    if locked_item.expected_arrival_date
+                    else None
+                ),
+                "proposed_expected_arrival_date": (
+                    locked_item.proposed_expected_arrival_date.isoformat()
+                    if locked_item.proposed_expected_arrival_date
+                    else None
+                ),
+            },
+            actor_type=OrderItemEvent.ACTOR_TYPE_ADMIN,
+            actor_name=actor_name,
+            visible_to_customer=True,
+        )
+
+    return "updated"
+
+
+
 class PaymentInline(admin.StackedInline):
     model = Payment
     extra = 0
@@ -308,11 +468,20 @@ class OrderItemAdmin(admin.ModelAdmin):
         "name",
         "item_status",
         "action_required",
+        "action_type",
+        "proposed_final_price_gel",
+        "proposed_eta_days",
         "final_price_gel",
         "quantity",
         "created_at",
     )
-    list_filter = ("item_status", "action_required", "order__status", "created_at")
+    list_filter = (
+        "item_status",
+        "action_required",
+        "action_type",
+        "order__status",
+        "created_at",
+    )
     search_fields = (
         "order__order_number",
         "order__customer_name",
@@ -330,11 +499,103 @@ class OrderItemAdmin(admin.ModelAdmin):
         "mark_items_ready_for_pickup",
         "mark_items_completed",
         "mark_items_cancelled",
+        "request_price_change_confirmation",
+        "request_eta_change_confirmation",
+        "request_weight_change_confirmation",
+        "request_fitment_confirmation",
+        "request_alternative_confirmation",
+        "request_other_confirmation",
     ]
 
     @admin.display(description="Order status")
     def order_status(self, obj):
         return obj.order.status
+
+    def apply_action_required_action(self, request, queryset, action_type):
+        result_counts = {
+            "updated": 0,
+            "skipped_payment_pending": 0,
+            "missing_proposed_price": 0,
+            "missing_proposed_eta": 0,
+            "no_actual_change": 0,
+            "invalid_action_type": 0,
+        }
+
+        for item in queryset.select_related("order"):
+            result = request_order_item_action_from_admin(
+                item=item,
+                action_type=action_type,
+                actor_name=request.user.get_username() or "Admin",
+            )
+            result_counts[result] = result_counts.get(result, 0) + 1
+
+        if result_counts["updated"]:
+            self.message_user(
+                request,
+                f"{result_counts['updated']} ნაწილზე მომხმარებლის დადასტურება მოითხოვა.",
+                messages.SUCCESS,
+            )
+
+        skipped = sum(count for key, count in result_counts.items() if key != "updated")
+
+        if skipped:
+            self.message_user(
+                request,
+                (
+                    f"{skipped} ნაწილი გამოტოვებულია. "
+                    "ფასის/წონის ცვლილებაზე შეავსეთ proposed_final_price_gel, "
+                    "ETA ცვლილებაზე proposed_eta_days, და Payment pending შეკვეთაზე ჯერ გადახდა დაადასტურეთ."
+                ),
+                messages.WARNING,
+            )
+
+    @admin.action(description="მომხმარებელს: ფასის ცვლილების დადასტურება")
+    def request_price_change_confirmation(self, request, queryset):
+        self.apply_action_required_action(
+            request,
+            queryset,
+            OrderItem.ACTION_TYPE_PRICE_CHANGE,
+        )
+
+    @admin.action(description="მომხმარებელს: ETA ცვლილების დადასტურება")
+    def request_eta_change_confirmation(self, request, queryset):
+        self.apply_action_required_action(
+            request,
+            queryset,
+            OrderItem.ACTION_TYPE_ETA_CHANGE,
+        )
+
+    @admin.action(description="მომხმარებელს: წონის/ზომის ცვლილების დადასტურება")
+    def request_weight_change_confirmation(self, request, queryset):
+        self.apply_action_required_action(
+            request,
+            queryset,
+            OrderItem.ACTION_TYPE_WEIGHT_CHANGE,
+        )
+
+    @admin.action(description="მომხმარებელს: VIN fitment დადასტურება")
+    def request_fitment_confirmation(self, request, queryset):
+        self.apply_action_required_action(
+            request,
+            queryset,
+            OrderItem.ACTION_TYPE_FITMENT_ISSUE,
+        )
+
+    @admin.action(description="მომხმარებელს: ალტერნატიული ნაწილის დადასტურება")
+    def request_alternative_confirmation(self, request, queryset):
+        self.apply_action_required_action(
+            request,
+            queryset,
+            OrderItem.ACTION_TYPE_ALTERNATIVE_REQUIRED,
+        )
+
+    @admin.action(description="მომხმარებელს: სხვა საკითხის დადასტურება")
+    def request_other_confirmation(self, request, queryset):
+        self.apply_action_required_action(
+            request,
+            queryset,
+            OrderItem.ACTION_TYPE_OTHER,
+        )
 
     def apply_status_action(self, request, queryset, new_status):
         result_counts = {

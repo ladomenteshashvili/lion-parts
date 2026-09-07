@@ -8,7 +8,7 @@ from rest_framework.test import APIClient
 from cart.models import Cart, CartItem
 from orders.models import Order, OrderItem, OrderItemEvent, Payment
 from accounts.models import Customer
-from orders.admin import set_order_item_status_from_admin
+from orders.admin import request_order_item_action_from_admin, set_order_item_status_from_admin
 
 
 @override_settings(ENABLE_DEMO_ORDER_ENDPOINTS=True)
@@ -641,6 +641,153 @@ class AdminOrderItemStatusTests(TestCase):
 
         self.item.refresh_from_db()
         self.assertEqual(self.item.item_status, OrderItem.ITEM_STATUS_CREATED)
+        self.assertEqual(self.item.events.count(), 0)
+
+
+
+    def test_admin_price_change_request_creates_customer_action(self):
+        self.item.proposed_final_price_gel = Decimal("800.00")
+        self.item.action_message = "მომწოდებელთან ფასი გაიზარდა."
+        self.item.save(
+            update_fields=[
+                "proposed_final_price_gel",
+                "action_message",
+                "updated_at",
+            ]
+        )
+
+        result = request_order_item_action_from_admin(
+            self.item,
+            OrderItem.ACTION_TYPE_PRICE_CHANGE,
+            actor_name="operator@example.com",
+        )
+
+        self.assertEqual(result, "updated")
+
+        self.item.refresh_from_db()
+        self.order.refresh_from_db()
+
+        self.assertEqual(self.order.status, Order.STATUS_ACTION_REQUIRED)
+        self.assertEqual(self.item.item_status, OrderItem.ITEM_STATUS_ACTION_REQUIRED)
+        self.assertTrue(self.item.action_required)
+        self.assertEqual(self.item.action_type, OrderItem.ACTION_TYPE_PRICE_CHANGE)
+        self.assertEqual(self.item.proposed_final_price_gel, Decimal("800.00"))
+
+        event = self.item.events.last()
+
+        self.assertEqual(
+            event.event_type,
+            OrderItemEvent.EVENT_TYPE_PRICE_CHANGE_REQUESTED,
+        )
+        self.assertEqual(event.title, "ფასის ცვლილების დადასტურება საჭიროა")
+        self.assertTrue(event.visible_to_customer)
+        self.assertEqual(event.actor_type, OrderItemEvent.ACTOR_TYPE_ADMIN)
+        self.assertEqual(event.actor_name, "operator@example.com")
+        self.assertEqual(
+            event.new_value["proposed_final_price_gel"],
+            "800.00",
+        )
+
+    def test_admin_eta_change_request_creates_expected_arrival_date(self):
+        self.item.proposed_eta_days = 21
+        self.item.action_message = "მომწოდებელმა მიწოდების ვადა შეცვალა."
+        self.item.save(
+            update_fields=[
+                "proposed_eta_days",
+                "action_message",
+                "updated_at",
+            ]
+        )
+
+        result = request_order_item_action_from_admin(
+            self.item,
+            OrderItem.ACTION_TYPE_ETA_CHANGE,
+            actor_name="Admin",
+        )
+
+        self.assertEqual(result, "updated")
+
+        self.item.refresh_from_db()
+        self.order.refresh_from_db()
+
+        self.assertEqual(self.order.status, Order.STATUS_ACTION_REQUIRED)
+        self.assertEqual(self.item.item_status, OrderItem.ITEM_STATUS_ACTION_REQUIRED)
+        self.assertTrue(self.item.action_required)
+        self.assertEqual(self.item.action_type, OrderItem.ACTION_TYPE_ETA_CHANGE)
+        self.assertEqual(self.item.proposed_eta_days, 21)
+        self.assertEqual(
+            self.item.proposed_expected_arrival_date,
+            timezone.localdate() + timedelta(days=21),
+        )
+
+        event = self.item.events.last()
+
+        self.assertEqual(
+            event.event_type,
+            OrderItemEvent.EVENT_TYPE_ETA_CHANGE_REQUESTED,
+        )
+        self.assertEqual(event.title, "მიწოდების ვადის დადასტურება საჭიროა")
+        self.assertTrue(event.visible_to_customer)
+
+    def test_admin_fitment_issue_request_can_use_message_only(self):
+        self.item.action_message = "VIN-ით თავსებადობა დასაზუსტებელია."
+        self.item.save(update_fields=["action_message", "updated_at"])
+
+        result = request_order_item_action_from_admin(
+            self.item,
+            OrderItem.ACTION_TYPE_FITMENT_ISSUE,
+            actor_name="Admin",
+        )
+
+        self.assertEqual(result, "updated")
+
+        self.item.refresh_from_db()
+        self.order.refresh_from_db()
+
+        self.assertEqual(self.order.status, Order.STATUS_ACTION_REQUIRED)
+        self.assertTrue(self.item.action_required)
+        self.assertEqual(self.item.action_type, OrderItem.ACTION_TYPE_FITMENT_ISSUE)
+        self.assertEqual(self.item.action_message, "VIN-ით თავსებადობა დასაზუსტებელია.")
+
+        event = self.item.events.last()
+
+        self.assertEqual(event.event_type, OrderItemEvent.EVENT_TYPE_CHANGE_REQUESTED)
+        self.assertEqual(event.title, "თავსებადობის შემოწმება საჭიროა")
+        self.assertTrue(event.visible_to_customer)
+
+    def test_admin_price_change_request_requires_proposed_price(self):
+        result = request_order_item_action_from_admin(
+            self.item,
+            OrderItem.ACTION_TYPE_PRICE_CHANGE,
+            actor_name="Admin",
+        )
+
+        self.assertEqual(result, "missing_proposed_price")
+
+        self.item.refresh_from_db()
+        self.order.refresh_from_db()
+
+        self.assertFalse(self.item.action_required)
+        self.assertEqual(self.order.status, Order.STATUS_PROCESSING)
+        self.assertEqual(self.item.events.count(), 0)
+
+    def test_admin_eta_change_request_requires_actual_change(self):
+        self.item.proposed_eta_days = 14
+        self.item.save(update_fields=["proposed_eta_days", "updated_at"])
+
+        result = request_order_item_action_from_admin(
+            self.item,
+            OrderItem.ACTION_TYPE_ETA_CHANGE,
+            actor_name="Admin",
+        )
+
+        self.assertEqual(result, "no_actual_change")
+
+        self.item.refresh_from_db()
+        self.order.refresh_from_db()
+
+        self.assertFalse(self.item.action_required)
+        self.assertEqual(self.order.status, Order.STATUS_PROCESSING)
         self.assertEqual(self.item.events.count(), 0)
 
 
