@@ -19,7 +19,7 @@ import {
   getOrderItemStatusLabel,
 } from "../utils/orderItemStatus";
 import { getProfile } from "../api/profile";
-import VerifiedPhoneRequiredCard from "../components/VerifiedPhoneRequiredCard";
+import PhoneVerificationForm from "../components/PhoneVerificationForm";
 
 const itemStatusOrder = [
   "created",
@@ -467,10 +467,23 @@ function isOrderCompleted(order: BackendOrder) {
     
   if (needsVerification) {
     return (
-      <VerifiedPhoneRequiredCard
-        eyebrow="Tracking"
-        description="ამ შეკვეთის სანახავად ჯერ უნდა დაადასტუროთ ტელეფონის ნომერი SMS კოდით. დადასტურების შემდეგ გამოჩნდება მხოლოდ ამ ნომერზე მიბმული შეკვეთა."
-      />
+      <section className="card">
+        <p className="eyebrow">Tracking</p>
+        <h1>ტელეფონის დადასტურება საჭიროა</h1>
+        <p className="muted">
+          ამ შეკვეთის სანახავად ჯერ დაადასტურეთ ტელეფონის ნომერი SMS კოდით.
+          დადასტურების შემდეგ ისევ ამავე შეკვეთის გვერდზე დარჩებით.
+        </p>
+
+        <PhoneVerificationForm
+          initialProfile={null}
+          onVerified={() => {
+            setNeedsVerification(false);
+            setIsLoading(true);
+            window.location.reload();
+          }}
+        />
+      </section>
     );
   }
 
