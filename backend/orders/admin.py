@@ -25,6 +25,139 @@ def mark_order_paid_manually(order):
 
     return True
 
+ITEM_STATUS_CUSTOMER_MESSAGES = {
+    OrderItem.ITEM_STATUS_CHECKING: (
+        "შემოწმება დაიწყო",
+        "ოპერატორი ამოწმებს ნაწილის ხელმისაწვდომობას, ფასს, ვადას და თავსებადობას.",
+    ),
+    OrderItem.ITEM_STATUS_PURCHASED: (
+        "ნაწილი შეძენილია",
+        "ნაწილი შეძენილია და ველოდებით აშშ-ის საწყობში მიღებას.",
+    ),
+    OrderItem.ITEM_STATUS_RECEIVED_USA: (
+        "ნაწილი მიღებულია აშშ-ში",
+        "ნაწილი მიღებულია აშშ-ის საწყობში.",
+    ),
+    OrderItem.ITEM_STATUS_SHIPPED_TO_GEORGIA: (
+        "ნაწილი გამოიგზავნა საქართველოში",
+        "ნაწილი გზაშია საქართველოსკენ.",
+    ),
+    OrderItem.ITEM_STATUS_RECEIVED_GEORGIA: (
+        "ნაწილი მიღებულია საქართველოში",
+        "ნაწილი მიღებულია საქართველოში და მზადდება გაცემისთვის.",
+    ),
+    OrderItem.ITEM_STATUS_READY_FOR_PICKUP: (
+        "ნაწილი მზად არის გასაცემად",
+        "ნაწილი მზად არის მისაღებად.",
+    ),
+    OrderItem.ITEM_STATUS_COMPLETED: (
+        "შეკვეთა დასრულებულია",
+        "ნაწილის პროცესი დასრულებულია.",
+    ),
+    OrderItem.ITEM_STATUS_CANCELLED: (
+        "ნაწილი გაუქმებულია",
+        "ამ ნაწილის პროცესი გაუქმდა.",
+    ),
+}
+
+
+def sync_order_status_after_item_change(order):
+    if order.items.filter(action_required=True).exists():
+        new_order_status = Order.STATUS_ACTION_REQUIRED
+    elif order.items.exists() and not order.items.exclude(
+        item_status=OrderItem.ITEM_STATUS_COMPLETED
+    ).exists():
+        new_order_status = Order.STATUS_COMPLETED
+    elif order.items.exists() and not order.items.exclude(
+        item_status=OrderItem.ITEM_STATUS_CANCELLED
+    ).exists():
+        new_order_status = Order.STATUS_CANCELLED
+    elif order.status not in [
+        Order.STATUS_PAYMENT_PENDING,
+        Order.STATUS_CANCELLED,
+    ]:
+        new_order_status = Order.STATUS_PROCESSING
+    else:
+        return
+
+    if order.status != new_order_status:
+        order.status = new_order_status
+        order.save(update_fields=["status", "updated_at"])
+
+
+def set_order_item_status_from_admin(item, new_status, actor_name="Admin"):
+    valid_statuses = dict(OrderItem.ITEM_STATUS_CHOICES)
+
+    if new_status not in valid_statuses:
+        return "invalid_status"
+
+    with transaction.atomic():
+        locked_item = (
+            OrderItem.objects.select_for_update()
+            .select_related("order")
+            .get(pk=item.pk)
+        )
+        order = Order.objects.select_for_update().get(pk=locked_item.order_id)
+
+        if locked_item.item_status == new_status:
+            return "skipped_same_status"
+
+        if (
+            order.status == Order.STATUS_PAYMENT_PENDING
+            and new_status != OrderItem.ITEM_STATUS_CANCELLED
+        ):
+            return "skipped_payment_pending"
+
+        old_status = locked_item.item_status
+        old_value = {
+            "item_status": old_status,
+            "action_required": locked_item.action_required,
+            "action_type": locked_item.action_type,
+            "action_message": locked_item.action_message,
+        }
+
+        locked_item.item_status = new_status
+
+        if new_status != OrderItem.ITEM_STATUS_ACTION_REQUIRED:
+            locked_item.action_required = False
+            locked_item.action_type = OrderItem.ACTION_TYPE_NONE
+            locked_item.action_message = ""
+            locked_item.proposed_final_price_gel = None
+            locked_item.proposed_eta_days = None
+            locked_item.proposed_expected_arrival_date = None
+
+        locked_item.save()
+
+        title, message = ITEM_STATUS_CUSTOMER_MESSAGES.get(
+            new_status,
+            (
+                "ნაწილის სტატუსი შეიცვალა",
+                f"სტატუსი შეიცვალა: {old_status} → {new_status}",
+            ),
+        )
+
+        OrderItemEvent.objects.create(
+            item=locked_item,
+            event_type=OrderItemEvent.EVENT_TYPE_STATUS_CHANGED,
+            title=title,
+            message=message,
+            old_value=old_value,
+            new_value={
+                "item_status": locked_item.item_status,
+                "action_required": locked_item.action_required,
+                "action_type": locked_item.action_type,
+                "action_message": locked_item.action_message,
+            },
+            actor_type=OrderItemEvent.ACTOR_TYPE_ADMIN,
+            actor_name=actor_name,
+            visible_to_customer=True,
+        )
+
+        sync_order_status_after_item_change(order)
+
+    return "updated"
+
+
 
 class PaymentInline(admin.StackedInline):
     model = Payment
@@ -170,15 +303,141 @@ class OrderItemAdmin(admin.ModelAdmin):
     list_display = (
         "id",
         "order",
+        "order_status",
         "part_number",
         "name",
         "item_status",
+        "action_required",
         "final_price_gel",
         "quantity",
         "created_at",
     )
-    list_filter = ("item_status", "action_required", "created_at")
-    search_fields = ("order__order_number", "part_number", "name")
+    list_filter = ("item_status", "action_required", "order__status", "created_at")
+    search_fields = (
+        "order__order_number",
+        "order__customer_name",
+        "order__customer_phone",
+        "part_number",
+        "name",
+    )
+    list_select_related = ("order",)
+    actions = [
+        "mark_items_checking",
+        "mark_items_purchased",
+        "mark_items_received_usa",
+        "mark_items_shipped_to_georgia",
+        "mark_items_received_georgia",
+        "mark_items_ready_for_pickup",
+        "mark_items_completed",
+        "mark_items_cancelled",
+    ]
+
+    @admin.display(description="Order status")
+    def order_status(self, obj):
+        return obj.order.status
+
+    def apply_status_action(self, request, queryset, new_status):
+        result_counts = {
+            "updated": 0,
+            "skipped_same_status": 0,
+            "skipped_payment_pending": 0,
+            "invalid_status": 0,
+        }
+
+        for item in queryset.select_related("order"):
+            result = set_order_item_status_from_admin(
+                item=item,
+                new_status=new_status,
+                actor_name=request.user.get_username() or "Admin",
+            )
+            result_counts[result] = result_counts.get(result, 0) + 1
+
+        if result_counts["updated"]:
+            self.message_user(
+                request,
+                f"{result_counts['updated']} ნაწილი განახლდა.",
+                messages.SUCCESS,
+            )
+
+        skipped = (
+            result_counts["skipped_same_status"]
+            + result_counts["skipped_payment_pending"]
+            + result_counts["invalid_status"]
+        )
+
+        if skipped:
+            self.message_user(
+                request,
+                (
+                    f"{skipped} ნაწილი გამოტოვებულია. "
+                    "შესაძლოა სტატუსი უკვე იგივე იყო ან შეკვეთა ჯერ Payment pending არის."
+                ),
+                messages.WARNING,
+            )
+
+    @admin.action(description="ოპერატორი: შემოწმება დაიწყო")
+    def mark_items_checking(self, request, queryset):
+        self.apply_status_action(
+            request,
+            queryset,
+            OrderItem.ITEM_STATUS_CHECKING,
+        )
+
+    @admin.action(description="ოპერატორი: ნაწილი შეძენილია")
+    def mark_items_purchased(self, request, queryset):
+        self.apply_status_action(
+            request,
+            queryset,
+            OrderItem.ITEM_STATUS_PURCHASED,
+        )
+
+    @admin.action(description="ოპერატორი: მიღებულია აშშ-ში")
+    def mark_items_received_usa(self, request, queryset):
+        self.apply_status_action(
+            request,
+            queryset,
+            OrderItem.ITEM_STATUS_RECEIVED_USA,
+        )
+
+    @admin.action(description="ოპერატორი: გამოიგზავნა საქართველოში")
+    def mark_items_shipped_to_georgia(self, request, queryset):
+        self.apply_status_action(
+            request,
+            queryset,
+            OrderItem.ITEM_STATUS_SHIPPED_TO_GEORGIA,
+        )
+
+    @admin.action(description="ოპერატორი: მიღებულია საქართველოში")
+    def mark_items_received_georgia(self, request, queryset):
+        self.apply_status_action(
+            request,
+            queryset,
+            OrderItem.ITEM_STATUS_RECEIVED_GEORGIA,
+        )
+
+    @admin.action(description="ოპერატორი: მზად არის გასაცემად")
+    def mark_items_ready_for_pickup(self, request, queryset):
+        self.apply_status_action(
+            request,
+            queryset,
+            OrderItem.ITEM_STATUS_READY_FOR_PICKUP,
+        )
+
+    @admin.action(description="ოპერატორი: დასრულებულია")
+    def mark_items_completed(self, request, queryset):
+        self.apply_status_action(
+            request,
+            queryset,
+            OrderItem.ITEM_STATUS_COMPLETED,
+        )
+
+    @admin.action(description="ოპერატორი: გაუქმებულია")
+    def mark_items_cancelled(self, request, queryset):
+        self.apply_status_action(
+            request,
+            queryset,
+            OrderItem.ITEM_STATUS_CANCELLED,
+        )
 
 
 @admin.register(OrderItemEvent)
