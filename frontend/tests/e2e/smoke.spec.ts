@@ -173,7 +173,7 @@ test("verified customer can open orders list and order detail", async ({ page })
 });
 
 
-test("customer can switch phone by clearing local session", async ({ page }) => {
+test("customer can logout by clearing local session", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
 
@@ -186,9 +186,9 @@ test("customer can switch phone by clearing local session", async ({ page }) => 
   await page.goto("/profile");
 
   await expect(page.getByText("ტელეფონი დადასტურებულია")).toBeVisible();
-  await expect(page.getByLabel("ტელეფონის ნომერი")).toHaveValue("555123456");
+  await expect(page.getByText("Test Customer · 555123456")).toBeVisible();
 
-  await page.getByRole("button", { name: "სხვა ნომრით შესვლა" }).click();
+  await page.getByRole("button", { name: "გასვლა" }).click();
 
   await expect(page.getByLabel("ტელეფონის ნომერი")).toHaveValue("");
 
@@ -653,7 +653,7 @@ test("customer can verify phone, search part, add to cart, checkout, and open or
   await expect(page.getByLabel("SMS კოდი")).toBeVisible();
   await page.getByLabel("SMS კოდი").fill("123456");
   await page.getByRole("button", { name: "კოდის დადასტურება" }).click();
-  await expect(page.getByText("ტელეფონის ნომერი დადასტურებულია")).toBeVisible();
+  await expect(page.getByText("ტელეფონი დადასტურებულია")).toBeVisible();
 
   await page.goto("/");
   await page.getByPlaceholder("მაგ: 51118070648").fill("FLOW123");

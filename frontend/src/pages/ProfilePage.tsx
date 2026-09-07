@@ -23,7 +23,7 @@ function ProfilePage() {
       });
   }, []);
 
-  function handleSwitchPhone() {
+  function handleLogout() {
     resetSessionId();
     setProfile(null);
     setError("");
@@ -50,18 +50,18 @@ function ProfilePage() {
 
       {profile && (
         <div className="note-box">
-          <strong>სხვა ნომრით შესვლა</strong>
+          <strong>გასვლა</strong>
           <p className="muted">
-            ამ მოქმედებით ამ ბრაუზერში დაიწყება ახალი სესია. ძველი კალათა აღარ
-            გამოჩნდება, ხოლო შეკვეთები ისევ გამოჩნდება იმ ნომრით შესვლის შემდეგ,
-            რომელზეც არის მიბმული.
+            ამ მოქმედებით ამ ბრაუზერში მიმდინარე სესია დაიხურება. ძველი კალათა
+            აღარ გამოჩნდება, ხოლო შეკვეთები ისევ გამოჩნდება იმ ნომრით ხელახლა
+            შესვლის შემდეგ, რომელზეც არის მიბმული.
           </p>
           <button
             type="button"
             className="button-secondary"
-            onClick={handleSwitchPhone}
+            onClick={handleLogout}
           >
-            სხვა ნომრით შესვლა
+            გასვლა
           </button>
         </div>
       )}
