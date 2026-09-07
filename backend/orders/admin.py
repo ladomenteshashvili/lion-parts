@@ -8,6 +8,137 @@ from .models import Order, OrderItem, OrderItemEvent, OrderSupportMessage, Payme
 from .views import confirm_order_payment, get_or_create_order_payment, recalculate_order_total
 
 
+class OperatorOrderTaskFilter(admin.SimpleListFilter):
+    title = "ოპერატორის საქმე"
+    parameter_name = "operator_task"
+
+    def lookups(self, request, model_admin):
+        return [
+            ("new_paid", "ახალი გადახდილი — შესამოწმებელი"),
+            ("action_required", "Customer პასუხს ელოდება"),
+            ("customer_message", "Customer-ის ახალი შეტყობინება"),
+            ("in_transit", "გზაში / ლოგისტიკა"),
+            ("ready_pickup", "მზადაა გასაცემად"),
+        ]
+
+    def queryset(self, request, queryset):
+        value = self.value()
+
+        if value == "new_paid":
+            return queryset.filter(
+                status=Order.STATUS_PROCESSING,
+                items__item_status=OrderItem.ITEM_STATUS_PAYMENT_CONFIRMED,
+            ).distinct()
+
+        if value == "action_required":
+            return queryset.filter(
+                status=Order.STATUS_ACTION_REQUIRED,
+                items__action_required=True,
+            ).distinct()
+
+        if value == "customer_message":
+            return queryset.filter(
+                support_messages__sender_type=OrderSupportMessage.SENDER_CUSTOMER,
+                support_messages__is_read_by_operator=False,
+            ).distinct()
+
+        if value == "in_transit":
+            return queryset.filter(
+                items__item_status__in=[
+                    OrderItem.ITEM_STATUS_PURCHASED,
+                    OrderItem.ITEM_STATUS_RECEIVED_USA,
+                    OrderItem.ITEM_STATUS_SHIPPED_TO_GEORGIA,
+                    OrderItem.ITEM_STATUS_RECEIVED_GEORGIA,
+                ],
+            ).distinct()
+
+        if value == "ready_pickup":
+            return queryset.filter(
+                items__item_status=OrderItem.ITEM_STATUS_READY_FOR_PICKUP,
+            ).distinct()
+
+        return queryset
+
+
+class OperatorItemTaskFilter(admin.SimpleListFilter):
+    title = "ოპერატორის საქმე"
+    parameter_name = "operator_item_task"
+
+    def lookups(self, request, model_admin):
+        return [
+            ("needs_checking", "გადახდილია — შესამოწმებელი"),
+            ("action_required", "Customer პასუხს ელოდება"),
+            ("purchased", "შეძენილია"),
+            ("received_usa", "მიღებულია აშშ-ში"),
+            ("shipped", "გამოგზავნილია საქართველოში"),
+            ("received_georgia", "მიღებულია საქართველოში"),
+            ("ready_pickup", "მზადაა გასაცემად"),
+        ]
+
+    def queryset(self, request, queryset):
+        value = self.value()
+
+        if value == "needs_checking":
+            return queryset.filter(
+                order__status=Order.STATUS_PROCESSING,
+                item_status=OrderItem.ITEM_STATUS_PAYMENT_CONFIRMED,
+            )
+
+        if value == "action_required":
+            return queryset.filter(action_required=True)
+
+        if value == "purchased":
+            return queryset.filter(item_status=OrderItem.ITEM_STATUS_PURCHASED)
+
+        if value == "received_usa":
+            return queryset.filter(item_status=OrderItem.ITEM_STATUS_RECEIVED_USA)
+
+        if value == "shipped":
+            return queryset.filter(item_status=OrderItem.ITEM_STATUS_SHIPPED_TO_GEORGIA)
+
+        if value == "received_georgia":
+            return queryset.filter(item_status=OrderItem.ITEM_STATUS_RECEIVED_GEORGIA)
+
+        if value == "ready_pickup":
+            return queryset.filter(item_status=OrderItem.ITEM_STATUS_READY_FOR_PICKUP)
+
+        return queryset
+
+
+class SupportMessageTaskFilter(admin.SimpleListFilter):
+    title = "Support საქმე"
+    parameter_name = "support_task"
+
+    def lookups(self, request, model_admin):
+        return [
+            ("customer_unread", "Customer-ის ახალი შეტყობინება"),
+            ("operator_unread_customer", "Customer-ს ჯერ არ უნახავს operator პასუხი"),
+            ("visible_customer", "Customer-visible"),
+        ]
+
+    def queryset(self, request, queryset):
+        value = self.value()
+
+        if value == "customer_unread":
+            return queryset.filter(
+                sender_type=OrderSupportMessage.SENDER_CUSTOMER,
+                is_read_by_operator=False,
+            )
+
+        if value == "operator_unread_customer":
+            return queryset.filter(
+                sender_type=OrderSupportMessage.SENDER_OPERATOR,
+                visible_to_customer=True,
+                is_read_by_customer=False,
+            )
+
+        if value == "visible_customer":
+            return queryset.filter(visible_to_customer=True)
+
+        return queryset
+
+
+
 def mark_order_paid_manually(order):
     with transaction.atomic():
         locked_order = Order.objects.select_for_update().get(pk=order.pk)
@@ -411,6 +542,17 @@ class OrderSupportMessageInline(admin.TabularInline):
     model = OrderSupportMessage
     extra = 1
     readonly_fields = ("created_at",)
+    actions = ["mark_selected_messages_read_by_operator"]
+
+    @admin.action(description="მონიშნე operator-ის მიერ წაკითხულად")
+    def mark_selected_messages_read_by_operator(self, request, queryset):
+        updated_count = queryset.update(is_read_by_operator=True)
+
+        self.message_user(
+            request,
+            f"{updated_count} support შეტყობინება მონიშნულია წაკითხულად.",
+            messages.SUCCESS,
+        )
     fields = (
         "item",
         "sender_type",
@@ -432,10 +574,12 @@ class OrderAdmin(admin.ModelAdmin):
         "customer_phone",
         "status",
         "payment_status",
+        "action_required_items",
+        "unread_customer_messages",
         "total_gel",
         "created_at",
     )
-    list_filter = ("status", "created_at")
+    list_filter = (OperatorOrderTaskFilter, "status", "created_at")
     search_fields = (
         "order_number",
         "session_id",
@@ -447,12 +591,45 @@ class OrderAdmin(admin.ModelAdmin):
     inlines = [PaymentInline, OrderItemInline, OrderSupportMessageInline]
     actions = ["mark_selected_orders_paid"]
 
+
+    @admin.display(description="Action items")
+    def action_required_items(self, obj):
+        return obj.items.filter(action_required=True).count()
+
+    @admin.display(description="Unread customer messages")
+    def unread_customer_messages(self, obj):
+        return obj.support_messages.filter(
+            sender_type=OrderSupportMessage.SENDER_CUSTOMER,
+            is_read_by_operator=False,
+        ).count()
+
     @admin.display(description="Payment")
     def payment_status(self, obj):
         try:
             return obj.payment.status
         except Payment.DoesNotExist:
             return "missing"
+
+
+    def save_formset(self, request, form, formset, change):
+        instances = formset.save(commit=False)
+
+        for obj in formset.deleted_objects:
+            obj.delete()
+
+        for instance in instances:
+            if isinstance(instance, OrderSupportMessage):
+                if not instance.sender_name:
+                    instance.sender_name = request.user.get_username() or "Operator"
+
+                if instance.sender_type == OrderSupportMessage.SENDER_OPERATOR:
+                    instance.visible_to_customer = True
+                    instance.is_read_by_operator = True
+                    instance.is_read_by_customer = False
+
+            instance.save()
+
+        formset.save_m2m()
 
     @admin.action(description="თანხა მიღებულია — შეკვეთის დადასტურება")
     def mark_selected_orders_paid(self, request, queryset):
@@ -547,6 +724,7 @@ class OrderItemAdmin(admin.ModelAdmin):
         "created_at",
     )
     list_filter = (
+        OperatorItemTaskFilter,
         "item_status",
         "action_required",
         "action_type",
@@ -812,6 +990,7 @@ class OrderSupportMessageAdmin(admin.ModelAdmin):
         "created_at",
     )
     list_filter = (
+        SupportMessageTaskFilter,
         "sender_type",
         "visible_to_customer",
         "is_read_by_customer",
