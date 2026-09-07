@@ -73,6 +73,8 @@ const fakeOrder = {
       updated_at: now,
     },
   ],
+  support_messages: [],
+  support_unread_count: 0,
   created_at: now,
   updated_at: now,
 };
@@ -167,7 +169,7 @@ test("verified customer can open orders list and order detail", async ({ page })
 
   await page.goto("/orders/LP-TEST-0001");
   await expect(page.getByRole("heading", { name: "LP-TEST-0001" })).toBeVisible();
-  await expect(page.getByText("Test Part")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Test Part" })).toBeVisible();
 
   expect(pageErrors).toEqual([]);
 });
@@ -406,7 +408,7 @@ test("checkout verifies phone inline without leaving checkout", async ({ page })
 
   await expect(page).toHaveURL(/\/orders\/LP-INLINE-0001$/);
   await expect(page.getByRole("heading", { name: "LP-INLINE-0001" })).toBeVisible();
-  await expect(page.getByText("Inline Checkout Part")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Inline Checkout Part" })).toBeVisible();
 
   expect(pageErrors).toEqual([]);
 });
@@ -659,13 +661,13 @@ test("customer can verify phone, search part, add to cart, checkout, and open or
   await page.getByPlaceholder("მაგ: 51118070648").fill("FLOW123");
   await page.getByRole("button", { name: "ძებნა" }).click();
   await expect(page.getByText("Quote #FLOW-QUOTE-1")).toBeVisible();
-  await expect(page.getByText("Flow Test Part")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Flow Test Part" })).toBeVisible();
   await page.getByRole("button", { name: "კალათაში დამატება" }).click();
   await expect(page.getByText("ნაწილი დაემატა კალათაში")).toBeVisible();
 
   await page.goto("/cart");
   await expect(page.getByRole("heading", { name: "შენი კალათა" })).toBeVisible();
-  await expect(page.getByText("Flow Test Part")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Flow Test Part" })).toBeVisible();
   await page.getByRole("link", { name: "შეკვეთის გაგრძელება" }).click();
 
   await expect(page.getByRole("heading", { name: "შეკვეთის გაფორმება" })).toBeVisible();
@@ -678,7 +680,7 @@ test("customer can verify phone, search part, add to cart, checkout, and open or
 
   await expect(page).toHaveURL(/\/orders\/LP-FLOW-0001$/);
   await expect(page.getByRole("heading", { name: "LP-FLOW-0001" })).toBeVisible();
-  await expect(page.getByText("Flow Test Part")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Flow Test Part" })).toBeVisible();
 
   await page.goto("/orders");
   await expect(page.getByRole("heading", { name: "ჩემი შეკვეთები" })).toBeVisible();

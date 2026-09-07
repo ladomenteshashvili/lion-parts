@@ -4,7 +4,7 @@ from django.contrib import admin, messages
 from django.db import transaction
 from django.utils import timezone
 
-from .models import Order, OrderItem, OrderItemEvent, Payment
+from .models import Order, OrderItem, OrderItemEvent, OrderSupportMessage, Payment
 from .views import confirm_order_payment, get_or_create_order_payment, recalculate_order_total
 
 
@@ -407,6 +407,22 @@ class OrderItemInline(admin.TabularInline):
     )
 
 
+class OrderSupportMessageInline(admin.TabularInline):
+    model = OrderSupportMessage
+    extra = 1
+    readonly_fields = ("created_at",)
+    fields = (
+        "item",
+        "sender_type",
+        "sender_name",
+        "message",
+        "visible_to_customer",
+        "is_read_by_customer",
+        "is_read_by_operator",
+        "created_at",
+    )
+
+
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
     list_display = (
@@ -428,7 +444,7 @@ class OrderAdmin(admin.ModelAdmin):
         "vin",
     )
     readonly_fields = ("created_at", "updated_at")
-    inlines = [PaymentInline, OrderItemInline]
+    inlines = [PaymentInline, OrderItemInline, OrderSupportMessageInline]
     actions = ["mark_selected_orders_paid"]
 
     @admin.display(description="Payment")
@@ -781,3 +797,34 @@ class OrderItemEventAdmin(admin.ModelAdmin):
         "title",
         "message",
     )
+
+@admin.register(OrderSupportMessage)
+class OrderSupportMessageAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "order",
+        "item",
+        "sender_type",
+        "sender_name",
+        "visible_to_customer",
+        "is_read_by_customer",
+        "is_read_by_operator",
+        "created_at",
+    )
+    list_filter = (
+        "sender_type",
+        "visible_to_customer",
+        "is_read_by_customer",
+        "is_read_by_operator",
+        "created_at",
+    )
+    search_fields = (
+        "order__order_number",
+        "order__customer_name",
+        "order__customer_phone",
+        "item__part_number",
+        "sender_name",
+        "message",
+    )
+    readonly_fields = ("created_at",)
+

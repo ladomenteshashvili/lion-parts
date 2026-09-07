@@ -11,10 +11,18 @@ function countActionRequiredItems(orders: BackendOrder[]) {
   );
 }
 
+function countUnreadSupportMessages(orders: BackendOrder[]) {
+  return orders.reduce(
+    (sum, order) => sum + (order.support_unread_count || 0),
+    0
+  );
+}
+
 function Header() {
   const [cartCount, setCartCount] = useState(0);
   const [ordersCount, setOrdersCount] = useState(0);
   const [actionRequiredCount, setActionRequiredCount] = useState(0);
+  const [supportUnreadCount, setSupportUnreadCount] = useState(0);
 
   async function loadCounts() {
     try {
@@ -29,9 +37,11 @@ function Header() {
       const orders = await getOrders();
       setOrdersCount(orders.length);
       setActionRequiredCount(countActionRequiredItems(orders));
+      setSupportUnreadCount(countUnreadSupportMessages(orders));
     } catch {
       setOrdersCount(0);
       setActionRequiredCount(0);
+      setSupportUnreadCount(0);
     }
   }
 
@@ -68,12 +78,14 @@ function Header() {
 
         <NavLink to="/orders">
           <span>შეკვეთები {ordersCount > 0 ? `(${ordersCount})` : ""}</span>
-          {actionRequiredCount > 0 && (
+          {actionRequiredCount + supportUnreadCount > 0 && (
             <span
               className="nav-alert-badge"
-              aria-label={`${actionRequiredCount} საჭირო მოქმედება`}
+              aria-label={`${
+                actionRequiredCount + supportUnreadCount
+              } შეტყობინება ან საჭირო მოქმედება`}
             >
-              {actionRequiredCount}
+              {actionRequiredCount + supportUnreadCount}
             </span>
           )}
         </NavLink>

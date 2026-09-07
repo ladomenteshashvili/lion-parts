@@ -1,11 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import {
   acknowledgeOrderItemAction,
+  acknowledgeOrderSupportMessages,
   cancelOrderItemAction,
   getOrderDetail,
   resolveOrderItemAction,
+  sendOrderSupportMessage,
   type BackendOrder,
   type OrderItem,
   type OrderItemEvent,
@@ -89,6 +91,10 @@ function OrderDetailPage() {
   const [isResolvingAction, setIsResolvingAction] = useState(false);
   const [isCancellingAction, setIsCancellingAction] = useState(false);
   const [isAcknowledgingAction, setIsAcknowledgingAction] = useState(false);
+  const [supportMessage, setSupportMessage] = useState("");
+  const [supportItemId, setSupportItemId] = useState("");
+  const [isSendingSupport, setIsSendingSupport] = useState(false);
+  const [isAcknowledgingSupport, setIsAcknowledgingSupport] = useState(false);
   const [needsVerification, setNeedsVerification] = useState(false);
 
   const [error, setError] = useState("");
@@ -385,6 +391,70 @@ function isOrderCompleted(order: BackendOrder) {
   }
 
 
+  async function handleSendSupportMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!order) {
+      return;
+    }
+
+    const cleanMessage = supportMessage.trim();
+
+    if (!cleanMessage) {
+      setError("შეტყობინების ტექსტი აუცილებელია");
+      return;
+    }
+
+    const parsedItemId = supportItemId ? Number(supportItemId) : undefined;
+
+    setIsSendingSupport(true);
+    setError("");
+
+    try {
+      const updatedOrder = await sendOrderSupportMessage(order.order_number, {
+        message: cleanMessage,
+        item_id:
+          parsedItemId && Number.isFinite(parsedItemId)
+            ? parsedItemId
+            : undefined,
+      });
+
+      setOrder(updatedOrder);
+      setSupportMessage("");
+      setSupportItemId("");
+      window.dispatchEvent(new Event("lion-parts-orders-updated"));
+    } catch (error) {
+      console.error("Send support message failed", error);
+      setError("შეტყობინების გაგზავნა ვერ მოხერხდა");
+    } finally {
+      setIsSendingSupport(false);
+    }
+  }
+
+  async function handleAcknowledgeSupportMessages() {
+    if (!order) {
+      return;
+    }
+
+    setIsAcknowledgingSupport(true);
+    setError("");
+
+    try {
+      const updatedOrder = await acknowledgeOrderSupportMessages(
+        order.order_number
+      );
+
+      setOrder(updatedOrder);
+      window.dispatchEvent(new Event("lion-parts-orders-updated"));
+    } catch (error) {
+      console.error("Acknowledge support messages failed", error);
+      setError("შეტყობინების მონიშვნა ვერ მოხერხდა");
+    } finally {
+      setIsAcknowledgingSupport(false);
+    }
+  }
+
+
   if (isLoading) {
     return (
       <section className="card">
@@ -624,6 +694,95 @@ function isOrderCompleted(order: BackendOrder) {
             </div>
           </article>
         ))}
+      </div>
+
+      <div className="support-box">
+        <div>
+          <p className="eyebrow">Support</p>
+          <h2>ოპერატორთან მიმოწერა</h2>
+          <p className="muted">
+            ამ შეკვეთაზე კითხვა ან დამატებითი ინფორმაცია აქ დატოვეთ.
+          </p>
+        </div>
+
+        {order.support_unread_count > 0 && (
+          <div className="action-required-card">
+            <strong>ოპერატორის ახალი პასუხი</strong>
+            <span>
+              ამ შეკვეთაზე არის {order.support_unread_count} ახალი პასუხი.
+            </span>
+            <button
+              type="button"
+              onClick={handleAcknowledgeSupportMessages}
+              disabled={isAcknowledgingSupport}
+            >
+              {isAcknowledgingSupport ? "მუშავდება..." : "გასაგებია"}
+            </button>
+          </div>
+        )}
+
+        <div className="support-messages">
+          {order.support_messages.length === 0 ? (
+            <p className="muted">მიმოწერა ჯერ არ არის.</p>
+          ) : (
+            order.support_messages.map((message) => (
+              <article
+                className={
+                  message.sender_type === "customer"
+                    ? "support-message support-message--customer"
+                    : "support-message support-message--operator"
+                }
+                key={message.id}
+              >
+                <div>
+                  <strong>
+                    {message.sender_type === "customer"
+                      ? "თქვენ"
+                      : message.sender_name || "ოპერატორი"}
+                  </strong>
+                  <span className="muted">
+                    {new Date(message.created_at).toLocaleString("ka-GE")}
+                    {message.item_part_number
+                      ? ` · Part: ${message.item_part_number}`
+                      : ""}
+                  </span>
+                </div>
+                <p>{message.message}</p>
+              </article>
+            ))
+          )}
+        </div>
+
+        <form className="support-form" onSubmit={handleSendSupportMessage}>
+          <label>
+            <span>ნაწილი — არასავალდებულო</span>
+            <select
+              value={supportItemId}
+              onChange={(event) => setSupportItemId(event.target.value)}
+            >
+              <option value="">მთლიან შეკვეთაზე</option>
+              {order.items.map((item) => (
+                <option value={item.id} key={item.id}>
+                  {item.part_number} · {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            <span>შეტყობინება</span>
+            <textarea
+              value={supportMessage}
+              onChange={(event) => setSupportMessage(event.target.value)}
+              placeholder="მაგ: გთხოვთ დამიზუსტოთ მიწოდების ვადა"
+              rows={4}
+            />
+          </label>
+
+          <button type="submit" disabled={isSendingSupport}>
+            {isSendingSupport ? "იგზავნება..." : "შეტყობინების გაგზავნა"}
+          </button>
+        </form>
       </div>
 
       {order.note && (

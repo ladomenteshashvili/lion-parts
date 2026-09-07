@@ -10,6 +10,10 @@ function countActionRequiredItems(order: BackendOrder) {
   return order.items.filter((item) => item.action_required).length;
 }
 
+function countUnreadSupportMessages(order: BackendOrder) {
+  return order.support_unread_count || 0;
+}
+
 function OrdersPage() {
   const [orders, setOrders] = useState<BackendOrder[]>([]);
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
@@ -92,6 +96,15 @@ function OrdersPage() {
     (order) => countActionRequiredItems(order) > 0
   ).length;
 
+  const supportUnreadCount = orders.reduce(
+    (sum, order) => sum + countUnreadSupportMessages(order),
+    0
+  );
+
+  const supportUnreadOrderCount = orders.filter(
+    (order) => countUnreadSupportMessages(order) > 0
+  ).length;
+
   return (
     <section className="card">
       <p className="eyebrow">შეკვეთები</p>
@@ -104,16 +117,25 @@ function OrdersPage() {
         </span>
       </div>
 
-      {actionRequiredItemCount > 0 && (
+      {(actionRequiredItemCount > 0 || supportUnreadCount > 0) && (
         <div className="action-required-card orders-alert-summary">
-          <strong>საჭიროა თქვენი პასუხი</strong>
-          <span>
-            {actionRequiredOrderCount} შეკვეთაში {actionRequiredItemCount} ნაწილზე
-            საჭიროა მოქმედება.
-          </span>
+          <strong>საჭიროა ყურადღება</strong>
+
+          {actionRequiredItemCount > 0 && (
+            <span>
+              {actionRequiredOrderCount} შეკვეთაში {actionRequiredItemCount} ნაწილზე
+              საჭიროა მოქმედება.
+            </span>
+          )}
+
+          {supportUnreadCount > 0 && (
+            <span>
+              {supportUnreadOrderCount} შეკვეთაში არის ოპერატორის ახალი პასუხი.
+            </span>
+          )}
+
           <span className="muted">
-            გახსენით შესაბამისი შეკვეთა და აირჩიეთ დადასტურება ან ნაწილის
-            გაუქმება.
+            გახსენით შესაბამისი შეკვეთა და ნახეთ დეტალები.
           </span>
         </div>
       )}
@@ -127,6 +149,12 @@ function OrdersPage() {
               {countActionRequiredItems(order) > 0 && (
                 <span className="order-alert-badge">
                   საჭიროა პასუხი ({countActionRequiredItems(order)})
+                </span>
+              )}
+
+              {countUnreadSupportMessages(order) > 0 && (
+                <span className="order-alert-badge">
+                  ოპერატორის პასუხი ({countUnreadSupportMessages(order)})
                 </span>
               )}
 
