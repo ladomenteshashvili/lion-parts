@@ -202,6 +202,216 @@ test("customer can switch phone by clearing local session", async ({ page }) => 
 });
 
 
+
+test("checkout verifies phone inline without leaving checkout", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+
+  let profile: typeof fakeProfile | null = null;
+  let createdOrder: typeof fakeOrder | null = null;
+
+  const checkoutCartItem = {
+    ...fakeOrder.items[0],
+    cart_item_id: "inline-quote:inline-item:INLINE123",
+    quote_id: "INLINE-QUOTE-1",
+    part_option_id: "inline-item",
+    part_number: "INLINE123",
+    name: "Inline Checkout Part",
+    final_price_gel: "250.00",
+    weight_kg: "2.50",
+    quantity: 1,
+  };
+
+  await page.route("**/api/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const pathname = url.pathname;
+
+    if (pathname === "/api/cart/" && request.method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 1,
+          session_id: "playwright-session",
+          items: [checkoutCartItem],
+          total_gel: 250,
+          created_at: now,
+          updated_at: now,
+        }),
+      });
+      return;
+    }
+
+    if (pathname === "/api/accounts/profile/") {
+      if (!profile) {
+        await route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "profile not found" }),
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(profile),
+      });
+      return;
+    }
+
+    if (pathname === "/api/accounts/send-code/") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          detail: "verification code sent",
+          phone: "555123456",
+          expires_in_seconds: 300,
+          demo_code: "123456",
+        }),
+      });
+      return;
+    }
+
+    if (pathname === "/api/accounts/verify-code/") {
+      const body = JSON.parse(request.postData() || "{}");
+
+      if (body.code !== "123456") {
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "invalid verification code" }),
+        });
+        return;
+      }
+
+      if (!body.customer_name) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            detail: "customer name is required",
+            phone: "555123456",
+            requires_customer_name: true,
+          }),
+        });
+        return;
+      }
+
+      profile = {
+        ...fakeProfile,
+        customer_name: body.customer_name,
+        customer_phone: "555123456",
+        is_phone_verified: true,
+      };
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(profile),
+      });
+      return;
+    }
+
+    if (pathname === "/api/orders/checkout/" && request.method() === "POST") {
+      const body = JSON.parse(request.postData() || "{}");
+
+      createdOrder = {
+        ...fakeOrder,
+        order_number: "LP-INLINE-0001",
+        customer_name: body.customer_name,
+        customer_phone: body.customer_phone,
+        vin: body.vin || "",
+        note: body.note || "",
+        total_gel: "250.00",
+        items: [
+          {
+            ...fakeOrder.items[0],
+            name: "Inline Checkout Part",
+            part_number: "INLINE123",
+            quote_id: "INLINE-QUOTE-1",
+            final_price_gel: "250.00",
+            weight_kg: "2.50",
+          },
+        ],
+      };
+
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify(createdOrder),
+      });
+      return;
+    }
+
+    if (pathname === "/api/orders/" && request.method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(createdOrder ? [createdOrder] : []),
+      });
+      return;
+    }
+
+    if (pathname === "/api/orders/LP-INLINE-0001/" && request.method() === "GET") {
+      await route.fulfill({
+        status: createdOrder ? 200 : 404,
+        contentType: "application/json",
+        body: JSON.stringify(createdOrder || { detail: "not found" }),
+      });
+      return;
+    }
+
+    await route.fulfill({
+      status: 404,
+      contentType: "application/json",
+      body: JSON.stringify({ detail: "not found" }),
+    });
+  });
+
+  await page.goto("/checkout");
+
+  await expect(page).toHaveURL(/\/checkout$/);
+  await expect(page.getByRole("heading", { name: "შეკვეთის გაფორმება" })).toBeVisible();
+  await expect(page.getByText("ტელეფონის დადასტურება საჭიროა")).toBeVisible();
+
+  const verificationCard = page.locator(".action-required-card");
+
+  await verificationCard.getByLabel("ტელეფონის ნომერი").fill("555123456");
+  await verificationCard.getByRole("button", { name: "SMS კოდის გაგზავნა" }).click();
+
+  await expect(verificationCard.getByLabel("SMS კოდი")).toBeVisible();
+  await verificationCard.getByLabel("SMS კოდი").fill("123456");
+  await verificationCard.getByRole("button", { name: "კოდის დადასტურება" }).click();
+
+  await expect(
+    verificationCard.getByText("პროფილის შესაქმნელად შეიყვანეთ სახელი")
+  ).toBeVisible();
+
+  await verificationCard.getByLabel("სახელი").fill("Inline Customer");
+  await verificationCard.getByRole("button", { name: "პროფილის დასრულება" }).click();
+
+  await expect(page).toHaveURL(/\/checkout$/);
+  await expect(page.getByText("ტელეფონი დადასტურებულია")).toBeVisible();
+  await expect(page.getByRole("button", { name: "შეკვეთის შექმნა" })).toBeEnabled();
+
+  await page.getByPlaceholder("VIN").fill("INLINEVIN12345678");
+  await page
+    .getByPlaceholder("მაგ: გთხოვთ გადაამოწმოთ თავსებადობა")
+    .fill("Inline checkout verification test");
+
+  await page.getByRole("button", { name: "შეკვეთის შექმნა" }).click();
+
+  await expect(page).toHaveURL(/\/orders\/LP-INLINE-0001$/);
+  await expect(page.getByRole("heading", { name: "LP-INLINE-0001" })).toBeVisible();
+  await expect(page.getByText("Inline Checkout Part")).toBeVisible();
+
+  expect(pageErrors).toEqual([]);
+});
+
+
 test("customer can verify phone, search part, add to cart, checkout, and open order detail", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
