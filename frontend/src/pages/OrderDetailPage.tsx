@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import {
+  acknowledgeOrderItemAction,
   cancelOrderItemAction,
   getOrderDetail,
   resolveOrderItemAction,
@@ -87,6 +88,7 @@ function OrderDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isResolvingAction, setIsResolvingAction] = useState(false);
   const [isCancellingAction, setIsCancellingAction] = useState(false);
+  const [isAcknowledgingAction, setIsAcknowledgingAction] = useState(false);
   const [needsVerification, setNeedsVerification] = useState(false);
 
   const [error, setError] = useState("");
@@ -175,8 +177,15 @@ function isOrderCompleted(order: BackendOrder) {
   }
 
   function renderEventChanges(event: OrderItemEvent) {
+    const oldPartNumber = getEventValue(event.old_value, "part_number");
+    const newPartNumber =
+      getEventValue(event.new_value, "proposed_part_number") ||
+      getEventValue(event.new_value, "part_number");
+
     const oldPrice = getEventValue(event.old_value, "final_price_gel");
-    const newPrice = getEventValue(event.new_value, "proposed_final_price_gel");
+    const newPrice =
+      getEventValue(event.new_value, "proposed_final_price_gel") ||
+      getEventValue(event.new_value, "final_price_gel");
 
     const oldEta = getEventValue(event.old_value, "eta_days");
     const newEta = getEventValue(event.new_value, "proposed_eta_days");
@@ -190,13 +199,20 @@ function isOrderCompleted(order: BackendOrder) {
     const oldStatus = getEventValue(event.old_value, "item_status");
     const newStatus = getEventValue(event.new_value, "item_status");
 
-    const hasPriceChange = newPrice !== null;
+    const hasPartNumberChange =
+      oldPartNumber !== null &&
+      newPartNumber !== null &&
+      oldPartNumber !== newPartNumber;
+
+    const hasPriceChange =
+      newPrice !== null && oldPrice !== null && newPrice !== oldPrice;
     const hasEtaChange = newEta !== null;
     const hasDateChange = newDate !== null;
     const hasStatusChange =
       oldStatus !== null && newStatus !== null && oldStatus !== newStatus;
 
     if (
+      !hasPartNumberChange &&
       !hasPriceChange &&
       !hasEtaChange &&
       !hasDateChange &&
@@ -207,6 +223,15 @@ function isOrderCompleted(order: BackendOrder) {
 
     return (
       <div className="event-change-list">
+        {hasPartNumberChange && (
+          <div className="event-change-row">
+            <span>ნაწილის ნომერი</span>
+            <strong>
+              {oldPartNumber || "—"} → {newPartNumber || "—"}
+            </strong>
+          </div>
+        )}
+
         {hasPriceChange && (
           <div className="event-change-row">
             <span>ფასი</span>
@@ -252,6 +277,16 @@ function isOrderCompleted(order: BackendOrder) {
           </div>
         )}
       </div>
+    );
+  }
+
+  function isNoticeOnlyWeightAction(item: OrderItem) {
+    return (
+      item.action_required &&
+      item.action_type === "weight_change" &&
+      item.item_status !== "action_required" &&
+      !item.proposed_final_price_gel &&
+      !item.proposed_eta_days
     );
   }
 
@@ -317,6 +352,35 @@ function isOrderCompleted(order: BackendOrder) {
       setError("ნაწილის გაუქმება ვერ მოხერხდა");
     } finally {
       setIsCancellingAction(false);
+    }
+  }
+
+
+  async function handleAcknowledgeItemAction() {
+    if (!selectedItem) {
+      return;
+    }
+
+    setIsAcknowledgingAction(true);
+    setError("");
+
+    try {
+      const updatedOrder = await acknowledgeOrderItemAction(selectedItem.id);
+
+      setOrder(updatedOrder);
+
+      const updatedSelectedItem = updatedOrder.items.find(
+        (item) => item.id === selectedItem.id
+      );
+
+      setSelectedItem(updatedSelectedItem || null);
+
+      window.dispatchEvent(new Event("lion-parts-orders-updated"));
+    } catch (error) {
+      console.error("Acknowledge item action failed", error);
+      setError("შეტყობინების მონიშვნა ვერ მოხერხდა");
+    } finally {
+      setIsAcknowledgingAction(false);
     }
   }
 
@@ -509,6 +573,20 @@ function isOrderCompleted(order: BackendOrder) {
                     {item.action_message ? ` — ${item.action_message}` : ""}
                   </p>
 
+                  {item.proposed_part_number && (
+                    <p className="muted">
+                      ალტერნატიული ნომერი:{" "}
+                      <strong>{item.proposed_part_number}</strong>
+                    </p>
+                  )}
+
+                  {item.proposed_name && (
+                    <p className="muted">
+                      ალტერნატიული ნაწილი:{" "}
+                      <strong>{item.proposed_name}</strong>
+                    </p>
+                  )}
+
                   {item.proposed_final_price_gel && (
                     <p className="muted">
                       ახალი ფასი:{" "}
@@ -617,9 +695,27 @@ function isOrderCompleted(order: BackendOrder) {
                   <span className="muted">{selectedItem.action_message}</span>
                 )}
 
-                {(selectedItem.proposed_final_price_gel ||
+                {(selectedItem.proposed_part_number ||
+                  selectedItem.proposed_final_price_gel ||
                   selectedItem.proposed_eta_days) && (
                   <div className="proposed-changes">
+                    {selectedItem.proposed_part_number && (
+                      <div className="proposed-change-row">
+                        <span>არსებული ნომერი</span>
+                        <strong>{selectedItem.part_number}</strong>
+
+                        <span>ალტერნატიული ნომერი</span>
+                        <strong>{selectedItem.proposed_part_number}</strong>
+
+                        {selectedItem.proposed_name && (
+                          <>
+                            <span>ალტერნატიული ნაწილი</span>
+                            <strong>{selectedItem.proposed_name}</strong>
+                          </>
+                        )}
+                      </div>
+                    )}
+
                     {selectedItem.proposed_final_price_gel && (
                       <div className="proposed-change-row">
                         <span>არსებული ფასი</span>
@@ -732,24 +828,44 @@ function isOrderCompleted(order: BackendOrder) {
             <div className="modal-actions">
               {selectedItem.action_required && (
                 <>
-                  <button
-                    type="button"
-                    onClick={handleResolveItemAction}
-                    disabled={isResolvingAction || isCancellingAction}
-                  >
-                    {isResolvingAction ? "მუშავდება..." : "დადასტურება"}
-                  </button>
+                  {isNoticeOnlyWeightAction(selectedItem) ? (
+                    <button
+                      type="button"
+                      onClick={handleAcknowledgeItemAction}
+                      disabled={isAcknowledgingAction}
+                    >
+                      {isAcknowledgingAction ? "მუშავდება..." : "გასაგებია"}
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleResolveItemAction}
+                        disabled={
+                          isResolvingAction ||
+                          isCancellingAction ||
+                          isAcknowledgingAction
+                        }
+                      >
+                        {isResolvingAction ? "მუშავდება..." : "დადასტურება"}
+                      </button>
 
-                  <button
-                    type="button"
-                    className="button-secondary"
-                    onClick={handleCancelItemAction}
-                    disabled={isResolvingAction || isCancellingAction}
-                  >
-                    {isCancellingAction
-                      ? "უქმდება..."
-                      : "არ მაწყობს — ნაწილის გაუქმება"}
-                  </button>
+                      <button
+                        type="button"
+                        className="button-secondary"
+                        onClick={handleCancelItemAction}
+                        disabled={
+                          isResolvingAction ||
+                          isCancellingAction ||
+                          isAcknowledgingAction
+                        }
+                      >
+                        {isCancellingAction
+                          ? "უქმდება..."
+                          : "არ მაწყობს — ნაწილის გაუქმება"}
+                      </button>
+                    </>
+                  )}
                 </>
               )}
 

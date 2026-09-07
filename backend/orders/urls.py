@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    acknowledge_order_item_action,
     cancel_order_item_action,
     checkout,
     demo_confirm_payment,
@@ -35,6 +36,11 @@ urlpatterns = [
         "items/<int:item_id>/cancel-action/",
         cancel_order_item_action,
         name="orders-item-cancel-action",
+    ),
+    path(
+        "items/<int:item_id>/acknowledge-action/",
+        acknowledge_order_item_action,
+        name="orders-item-acknowledge-action",
     ),
     path(
         "items/<int:item_id>/demo-request-change/",

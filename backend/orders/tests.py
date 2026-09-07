@@ -621,6 +621,88 @@ class OrderFlowTests(TestCase):
         self.assertEqual(item.item_status, OrderItem.ITEM_STATUS_ACTION_REQUIRED)
 
 
+    def test_customer_can_acknowledge_weight_change_notice(self):
+        order, item = self._create_order_from_cart()
+
+        payment = order.payment
+        payment.status = Payment.STATUS_PAID
+        payment.paid_at = timezone.now()
+        payment.save(update_fields=["status", "paid_at", "updated_at"])
+
+        order.status = Order.STATUS_ACTION_REQUIRED
+        order.total_gel = Decimal("800.00")
+        order.save(update_fields=["status", "total_gel", "updated_at"])
+
+        item.item_status = OrderItem.ITEM_STATUS_PURCHASED
+        item.action_required = True
+        item.action_type = OrderItem.ACTION_TYPE_WEIGHT_CHANGE
+        item.action_message = "წონის გამო ფასი დაკორექტირდა."
+        item.final_price_gel = Decimal("800.00")
+        item.weight_source = "manual"
+        item.proposed_final_price_gel = None
+        item.save()
+
+        response = self.client.post(
+            f"/api/orders/items/{item.id}/acknowledge-action/",
+            {
+                "session_id": self.session_id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        item.refresh_from_db()
+        order.refresh_from_db()
+
+        self.assertEqual(item.item_status, OrderItem.ITEM_STATUS_PURCHASED)
+        self.assertFalse(item.action_required)
+        self.assertEqual(item.action_type, OrderItem.ACTION_TYPE_NONE)
+        self.assertEqual(item.final_price_gel, Decimal("800.00"))
+        self.assertEqual(order.status, Order.STATUS_PROCESSING)
+        self.assertEqual(order.total_gel, Decimal("800.00"))
+
+        event = item.events.last()
+
+        self.assertEqual(event.title, "შეტყობინება ნანახია")
+        self.assertEqual(event.actor_type, OrderItemEvent.ACTOR_TYPE_CUSTOMER)
+        self.assertTrue(event.visible_to_customer)
+
+    def test_notice_only_weight_action_cannot_be_cancelled_by_customer(self):
+        order, item = self._create_order_from_cart()
+
+        payment = order.payment
+        payment.status = Payment.STATUS_PAID
+        payment.paid_at = timezone.now()
+        payment.save(update_fields=["status", "paid_at", "updated_at"])
+
+        order.status = Order.STATUS_ACTION_REQUIRED
+        order.save(update_fields=["status", "updated_at"])
+
+        item.item_status = OrderItem.ITEM_STATUS_PURCHASED
+        item.action_required = True
+        item.action_type = OrderItem.ACTION_TYPE_WEIGHT_CHANGE
+        item.action_message = "წონის გამო ფასი დაკორექტირდა."
+        item.weight_source = "manual"
+        item.proposed_final_price_gel = None
+        item.save()
+
+        response = self.client.post(
+            f"/api/orders/items/{item.id}/cancel-action/",
+            {
+                "session_id": self.session_id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["detail"], "item action is notice only")
+
+        item.refresh_from_db()
+        self.assertEqual(item.item_status, OrderItem.ITEM_STATUS_PURCHASED)
+        self.assertTrue(item.action_required)
+
+
     def _create_order_from_cart(self):
         response = self.client.post(
             "/api/orders/checkout/",
@@ -907,6 +989,93 @@ class AdminOrderItemStatusTests(TestCase):
         self.assertFalse(self.item.action_required)
         self.assertEqual(self.order.status, Order.STATUS_PROCESSING)
         self.assertEqual(self.item.events.count(), 0)
+
+
+    def test_admin_alternative_part_request_can_include_price_and_eta(self):
+        self.item.proposed_part_number = "ALT123"
+        self.item.proposed_name = "Alternative Test Part"
+        self.item.proposed_final_price_gel = Decimal("800.00")
+        self.item.proposed_eta_days = 21
+        self.item.action_message = "ძველი ნაწილი აღარ არის ხელმისაწვდომი."
+        self.item.save()
+
+        result = request_order_item_action_from_admin(
+            self.item,
+            OrderItem.ACTION_TYPE_ALTERNATIVE_REQUIRED,
+            actor_name="operator@example.com",
+        )
+
+        self.assertEqual(result, "updated")
+
+        self.item.refresh_from_db()
+        self.order.refresh_from_db()
+
+        self.assertEqual(self.order.status, Order.STATUS_ACTION_REQUIRED)
+        self.assertEqual(self.item.item_status, OrderItem.ITEM_STATUS_ACTION_REQUIRED)
+        self.assertTrue(self.item.action_required)
+        self.assertEqual(
+            self.item.action_type,
+            OrderItem.ACTION_TYPE_ALTERNATIVE_REQUIRED,
+        )
+        self.assertEqual(self.item.proposed_part_number, "ALT123")
+        self.assertEqual(self.item.proposed_name, "Alternative Test Part")
+        self.assertEqual(self.item.proposed_final_price_gel, Decimal("800.00"))
+        self.assertEqual(self.item.proposed_eta_days, 21)
+        self.assertEqual(
+            self.item.proposed_expected_arrival_date,
+            timezone.localdate() + timedelta(days=21),
+        )
+
+        event = self.item.events.last()
+
+        self.assertEqual(event.title, "ალტერნატიული ნაწილი შემოთავაზებულია")
+        self.assertEqual(event.new_value["proposed_part_number"], "ALT123")
+        self.assertTrue(event.visible_to_customer)
+
+    def test_admin_alternative_part_request_requires_part_number(self):
+        result = request_order_item_action_from_admin(
+            self.item,
+            OrderItem.ACTION_TYPE_ALTERNATIVE_REQUIRED,
+            actor_name="Admin",
+        )
+
+        self.assertEqual(result, "missing_proposed_part_number")
+
+        self.item.refresh_from_db()
+        self.assertFalse(self.item.action_required)
+        self.assertEqual(self.item.events.count(), 0)
+
+    def test_admin_weight_change_after_purchase_is_notice_only(self):
+        self.item.item_status = OrderItem.ITEM_STATUS_PURCHASED
+        self.item.weight_source = "manual"
+        self.item.proposed_final_price_gel = Decimal("800.00")
+        self.item.action_message = "რეალური წონა მეტი აღმოჩნდა."
+        self.item.save()
+
+        result = request_order_item_action_from_admin(
+            self.item,
+            OrderItem.ACTION_TYPE_WEIGHT_CHANGE,
+            actor_name="operator@example.com",
+        )
+
+        self.assertEqual(result, "updated")
+
+        self.item.refresh_from_db()
+        self.order.refresh_from_db()
+
+        self.assertEqual(self.item.item_status, OrderItem.ITEM_STATUS_PURCHASED)
+        self.assertTrue(self.item.action_required)
+        self.assertEqual(self.item.action_type, OrderItem.ACTION_TYPE_WEIGHT_CHANGE)
+        self.assertEqual(self.item.final_price_gel, Decimal("800.00"))
+        self.assertIsNone(self.item.proposed_final_price_gel)
+        self.assertEqual(self.order.total_gel, Decimal("800.00"))
+        self.assertEqual(self.order.status, Order.STATUS_ACTION_REQUIRED)
+
+        event = self.item.events.last()
+
+        self.assertEqual(event.title, "წონის/ზომის გამო ფასი შეიცვალა")
+        self.assertTrue(event.visible_to_customer)
+        self.assertEqual(event.new_value["final_price_gel"], "800.00")
 
 
 class DisabledDemoEndpointTests(TestCase):
