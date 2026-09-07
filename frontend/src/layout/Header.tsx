@@ -1,11 +1,20 @@
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { getCart } from "../api/cart";
-import { getOrders } from "../api/orders";
+import { getOrders, type BackendOrder } from "../api/orders";
+
+function countActionRequiredItems(orders: BackendOrder[]) {
+  return orders.reduce(
+    (sum, order) =>
+      sum + order.items.filter((item) => item.action_required).length,
+    0
+  );
+}
 
 function Header() {
   const [cartCount, setCartCount] = useState(0);
   const [ordersCount, setOrdersCount] = useState(0);
+  const [actionRequiredCount, setActionRequiredCount] = useState(0);
 
   async function loadCounts() {
     try {
@@ -19,8 +28,10 @@ function Header() {
     try {
       const orders = await getOrders();
       setOrdersCount(orders.length);
+      setActionRequiredCount(countActionRequiredItems(orders));
     } catch {
       setOrdersCount(0);
+      setActionRequiredCount(0);
     }
   }
 
@@ -56,7 +67,15 @@ function Header() {
         </NavLink>
 
         <NavLink to="/orders">
-          შეკვეთები {ordersCount > 0 ? `(${ordersCount})` : ""}
+          <span>შეკვეთები {ordersCount > 0 ? `(${ordersCount})` : ""}</span>
+          {actionRequiredCount > 0 && (
+            <span
+              className="nav-alert-badge"
+              aria-label={`${actionRequiredCount} საჭირო მოქმედება`}
+            >
+              {actionRequiredCount}
+            </span>
+          )}
         </NavLink>
 
         <NavLink to="/profile">

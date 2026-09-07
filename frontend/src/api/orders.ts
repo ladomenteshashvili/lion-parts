@@ -160,6 +160,33 @@ export async function resolveOrderItemAction(
   return response.json();
 }
 
+
+export async function cancelOrderItemAction(
+  itemId: number
+): Promise<BackendOrder> {
+  const sessionId = getSessionId();
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/orders/items/${itemId}/cancel-action/`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        session_id: sessionId,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Cancel item action failed");
+  }
+
+  return response.json();
+}
+
 export async function confirmOrderPayment(
   orderNumber: string,
   paymentReference = ""

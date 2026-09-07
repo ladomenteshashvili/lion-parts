@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import {
+  cancelOrderItemAction,
   getOrderDetail,
   resolveOrderItemAction,
   type BackendOrder,
@@ -85,6 +86,7 @@ function OrderDetailPage() {
   const [selectedItem, setSelectedItem] = useState<OrderItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isResolvingAction, setIsResolvingAction] = useState(false);
+  const [isCancellingAction, setIsCancellingAction] = useState(false);
   const [needsVerification, setNeedsVerification] = useState(false);
 
   const [error, setError] = useState("");
@@ -278,6 +280,43 @@ function isOrderCompleted(order: BackendOrder) {
       setError("მოქმედების დადასტურება ვერ მოხერხდა");
     } finally {
       setIsResolvingAction(false);
+    }
+  }
+
+
+  async function handleCancelItemAction() {
+    if (!selectedItem) {
+      return;
+    }
+
+    const shouldCancel = window.confirm(
+      "ამ ნაწილის გაუქმება გინდათ? ოპერატორი თანხის დაბრუნების ან გადათვლის საკითხს ცალკე დაამუშავებს."
+    );
+
+    if (!shouldCancel) {
+      return;
+    }
+
+    setIsCancellingAction(true);
+    setError("");
+
+    try {
+      const updatedOrder = await cancelOrderItemAction(selectedItem.id);
+
+      setOrder(updatedOrder);
+
+      const updatedSelectedItem = updatedOrder.items.find(
+        (item) => item.id === selectedItem.id
+      );
+
+      setSelectedItem(updatedSelectedItem || null);
+
+      window.dispatchEvent(new Event("lion-parts-orders-updated"));
+    } catch (error) {
+      console.error("Cancel item action failed", error);
+      setError("ნაწილის გაუქმება ვერ მოხერხდა");
+    } finally {
+      setIsCancellingAction(false);
     }
   }
 
@@ -692,13 +731,26 @@ function isOrderCompleted(order: BackendOrder) {
 
             <div className="modal-actions">
               {selectedItem.action_required && (
-                <button
-                  type="button"
-                  onClick={handleResolveItemAction}
-                  disabled={isResolvingAction}
-                >
-                  {isResolvingAction ? "მუშავდება..." : "დადასტურება"}
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={handleResolveItemAction}
+                    disabled={isResolvingAction || isCancellingAction}
+                  >
+                    {isResolvingAction ? "მუშავდება..." : "დადასტურება"}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="button-secondary"
+                    onClick={handleCancelItemAction}
+                    disabled={isResolvingAction || isCancellingAction}
+                  >
+                    {isCancellingAction
+                      ? "უქმდება..."
+                      : "არ მაწყობს — ნაწილის გაუქმება"}
+                  </button>
+                </>
               )}
 
               <button

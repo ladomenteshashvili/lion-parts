@@ -6,6 +6,10 @@ import { getProfile, type CustomerProfile } from "../api/profile";
 import { getOrderStatusLabel } from "../utils/orderStatus";
 import VerifiedPhoneRequiredCard from "../components/VerifiedPhoneRequiredCard";
 
+function countActionRequiredItems(order: BackendOrder) {
+  return order.items.filter((item) => item.action_required).length;
+}
+
 function OrdersPage() {
   const [orders, setOrders] = useState<BackendOrder[]>([]);
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
@@ -79,6 +83,15 @@ function OrdersPage() {
     );
   }
 
+  const actionRequiredItemCount = orders.reduce(
+    (sum, order) => sum + countActionRequiredItems(order),
+    0
+  );
+
+  const actionRequiredOrderCount = orders.filter(
+    (order) => countActionRequiredItems(order) > 0
+  ).length;
+
   return (
     <section className="card">
       <p className="eyebrow">შეკვეთები</p>
@@ -91,11 +104,32 @@ function OrdersPage() {
         </span>
       </div>
 
+      {actionRequiredItemCount > 0 && (
+        <div className="action-required-card orders-alert-summary">
+          <strong>საჭიროა თქვენი პასუხი</strong>
+          <span>
+            {actionRequiredOrderCount} შეკვეთაში {actionRequiredItemCount} ნაწილზე
+            საჭიროა მოქმედება.
+          </span>
+          <span className="muted">
+            გახსენით შესაბამისი შეკვეთა და აირჩიეთ დადასტურება ან ნაწილის
+            გაუქმება.
+          </span>
+        </div>
+      )}
+
       <div className="orders-list">
         {orders.map((order) => (
           <article className="order-card" key={order.order_number}>
             <div>
               <h3>{order.order_number}</h3>
+
+              {countActionRequiredItems(order) > 0 && (
+                <span className="order-alert-badge">
+                  საჭიროა პასუხი ({countActionRequiredItems(order)})
+                </span>
+              )}
+
               <p className="muted">
                 {order.customer_name} · {order.customer_phone}
                 {order.vin ? ` · VIN: ${order.vin}` : ""}
