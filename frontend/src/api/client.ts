@@ -61,6 +61,40 @@ export type PartQuoteRequestResponse = {
   updated_at: string;
 };
 
+
+export type PartsFeedItem = {
+  id: number;
+  part_number: string;
+  vin: string;
+  provider: string;
+  quote_id: string;
+  found_count: number;
+  top_result_name: string;
+  top_result_price_gel: number | null;
+  created_at: string;
+};
+
+export type PartsFeedResponse = {
+  requires_phone_verification: boolean;
+  results: PartsFeedItem[];
+};
+
+export async function getPartsFeed(
+  sessionId: string
+): Promise<PartsFeedResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/parts/feed/?session_id=${encodeURIComponent(
+      sessionId
+    )}`
+  );
+
+  if (!response.ok) {
+    throw new Error("Parts feed load failed");
+  }
+
+  return response.json();
+}
+
 export async function searchParts(
   payload: PartSearchPayload
 ): Promise<PartSearchResponse> {
