@@ -2,6 +2,7 @@ from datetime import timedelta
 from decimal import Decimal
 import uuid
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
@@ -14,6 +15,13 @@ from cart.models import Cart
 from .models import Order, OrderItem, OrderItemEvent, Payment
 from .serializers import OrderSerializer
 from accounts.models import Customer
+
+
+def _demo_order_endpoint_disabled_response():
+    return Response(
+        {"detail": "not found"},
+        status=status.HTTP_404_NOT_FOUND,
+    )
 
 
 
@@ -72,6 +80,7 @@ def create_order_item_event(
     new_value=None,
     actor_type=OrderItemEvent.ACTOR_TYPE_SYSTEM,
     actor_name="",
+    visible_to_customer=False,
 ):
     return OrderItemEvent.objects.create(
         item=item,
@@ -82,7 +91,7 @@ def create_order_item_event(
         new_value=new_value,
         actor_type=actor_type,
         actor_name=actor_name,
-        visible_to_customer=False,
+        visible_to_customer=visible_to_customer,
     )
 
 
@@ -157,6 +166,7 @@ def confirm_order_payment(order, payment, source="demo_verification"):
             },
             actor_type=OrderItemEvent.ACTOR_TYPE_SYSTEM,
             actor_name="System",
+            visible_to_customer=True,
         )
 
 
@@ -350,6 +360,7 @@ def checkout(request):
                     "weight_source": order_item.weight_source,
                     "customer_notice": order_item.customer_notice,
                 },
+                visible_to_customer=True,
             )
 
         cart.items.all().delete()
@@ -366,6 +377,9 @@ def checkout(request):
 
 @api_view(["POST"])
 def verify_payment(request, order_number):
+    if not getattr(settings, "ENABLE_DEMO_ORDER_ENDPOINTS", False):
+        return _demo_order_endpoint_disabled_response()
+
     session_id = request.data.get("session_id", "").strip()
     payment_reference = request.data.get("payment_reference", "").strip()
 
@@ -436,6 +450,9 @@ def verify_payment(request, order_number):
 
 @api_view(["POST"])
 def demo_confirm_payment(request, order_number):
+    if not getattr(settings, "ENABLE_DEMO_ORDER_ENDPOINTS", False):
+        return _demo_order_endpoint_disabled_response()
+
     session_id = request.data.get("session_id", "").strip()
 
     if not session_id:
@@ -494,7 +511,7 @@ def demo_confirm_payment(request, order_number):
 
 
 @api_view(["POST"])
-def demo_resolve_item_action(request, item_id):
+def resolve_item_action(request, item_id):
     session_id = request.data.get("session_id", "").strip()
 
     if not session_id:
@@ -583,6 +600,7 @@ def demo_resolve_item_action(request, item_id):
         },
         actor_type=OrderItemEvent.ACTOR_TYPE_CUSTOMER,
         actor_name="Customer",
+        visible_to_customer=True,
     )
 
     has_other_action_items = order.items.filter(action_required=True).exists()
@@ -597,6 +615,9 @@ def demo_resolve_item_action(request, item_id):
 
 @api_view(["POST"])
 def demo_request_item_change(request, item_id):
+    if not getattr(settings, "ENABLE_DEMO_ORDER_ENDPOINTS", False):
+        return _demo_order_endpoint_disabled_response()
+
     session_id = request.data.get("session_id", "").strip()
     action_type = request.data.get("action_type", "").strip()
     action_message = request.data.get("action_message", "").strip()
@@ -753,6 +774,9 @@ def demo_request_item_change(request, item_id):
 
 @api_view(["POST"])
 def demo_update_item_status(request, item_id):
+    if not getattr(settings, "ENABLE_DEMO_ORDER_ENDPOINTS", False):
+        return _demo_order_endpoint_disabled_response()
+
     session_id = request.data.get("session_id", "").strip()
     new_status = request.data.get("item_status", "").strip()
     message = request.data.get("message", "").strip()

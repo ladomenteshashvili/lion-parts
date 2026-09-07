@@ -140,7 +140,7 @@ export async function resolveOrderItemAction(
   const sessionId = getSessionId();
 
   const response = await fetch(
-    `${API_BASE_URL}/api/orders/items/${itemId}/demo-resolve-action/`,
+    `${API_BASE_URL}/api/orders/items/${itemId}/resolve-action/`,
     {
       method: "POST",
       headers: {

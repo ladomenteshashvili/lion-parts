@@ -4,7 +4,7 @@ from .views import (
     checkout,
     demo_confirm_payment,
     demo_request_item_change,
-    demo_resolve_item_action,
+    resolve_item_action,
     demo_update_item_status,
     get_order_detail,
     list_orders,
@@ -26,9 +26,9 @@ urlpatterns = [
     ),
     path("<str:order_number>/", get_order_detail, name="orders-detail"),
     path(
-        "items/<int:item_id>/demo-resolve-action/",
-        demo_resolve_item_action,
-        name="orders-item-demo-resolve-action",
+        "items/<int:item_id>/resolve-action/",
+        resolve_item_action,
+        name="orders-item-resolve-action",
     ),
     path(
         "items/<int:item_id>/demo-request-change/",
