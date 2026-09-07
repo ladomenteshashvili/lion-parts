@@ -8,9 +8,9 @@ import {
   type OrderItem,
   type OrderSupportMessage,
 } from "../api/orders";
-import { getOrderStatusLabel } from "../utils/orderStatus";
-import { getOrderItemStatusLabel } from "../utils/orderItemStatus";
 import { formatDateKa } from "../utils/dateFormat";
+import { getOrderItemStatusLabel } from "../utils/orderItemStatus";
+import { getOrderStatusLabel } from "../utils/orderStatus";
 
 type NotificationViewState =
   | "order_update"
@@ -41,34 +41,34 @@ function getStateCopy(state: NotificationViewState) {
     return {
       eyebrow: "ოპერატორის პასუხი",
       title: "თქვენ გაქვთ ახალი პასუხი",
-      description:
-        "ლინკი გაიგზავნა იმიტომ, რომ ოპერატორმა ამ შეკვეთაზე შეტყობინება დატოვა.",
+      reason:
+        "ეს ლინკი გამოგიგზავნეთ, რადგან ოპერატორმა თქვენს შეკვეთაზე ახალი პასუხი დატოვა.",
     };
   }
 
   if (state === "action_required") {
     return {
       eyebrow: "საჭიროა მოქმედება",
-      title: "ამ ნაწილზე საჭიროა თქვენი პასუხი",
-      description:
-        "ლინკი გაიგზავნა იმიტომ, რომ შეკვეთის გაგრძელებამდე ამ ნაწილზე ცვლილებაა დასადასტურებელი.",
+      title: "შეკვეთაზე საჭიროა თქვენი პასუხი",
+      reason:
+        "ეს ლინკი გამოგიგზავნეთ, რადგან ერთ ნაწილზე ცვლილებაა დასადასტურებელი.",
     };
   }
 
   if (state === "item_update") {
     return {
       eyebrow: "ნაწილის განახლება",
-      title: "შეკვეთაში ერთ ნაწილზე განახლებაა",
-      description:
-        "ლინკი გაიგზავნა იმიტომ, რომ კონკრეტული ნაწილის სტატუსი ან ინფორმაცია შეიცვალა.",
+      title: "ერთ ნაწილზე განახლებაა",
+      reason:
+        "ეს ლინკი გამოგიგზავნეთ, რადგან თქვენს შეკვეთაში კონკრეტული ნაწილის სტატუსი ან ინფორმაცია შეიცვალა.",
     };
   }
 
   return {
     eyebrow: "შეკვეთის განახლება",
     title: "თქვენი შეკვეთა განახლდა",
-    description:
-      "ლინკი გაიგზავნა იმიტომ, რომ შეკვეთის სტატუსი ან ინფორმაცია შეიცვალა.",
+    reason:
+      "ეს ლინკი გამოგიგზავნეთ, რადგან თქვენი შეკვეთის სტატუსი ან ინფორმაცია შეიცვალა.",
   };
 }
 
@@ -88,12 +88,36 @@ function formatEta(value: number | null | undefined) {
   return `${value} დღე`;
 }
 
+function findTargetItem(notification: CustomerNotification): OrderItem | null {
+  if (!notification.item_id) {
+    return null;
+  }
+
+  return (
+    notification.order.items.find((item) => item.id === notification.item_id) ||
+    null
+  );
+}
+
+function findTargetSupportMessage(
+  notification: CustomerNotification
+): OrderSupportMessage | null {
+  if (!notification.support_message_id) {
+    return null;
+  }
+
+  return (
+    notification.order.support_messages.find((message) => {
+      return message.id === notification.support_message_id;
+    }) || null
+  );
+}
+
 function NotificationLinkPage() {
   const { token } = useParams<{ token: string }>();
 
   const [notification, setNotification] =
     useState<CustomerNotification | null>(null);
-  const [selectedItem, setSelectedItem] = useState<OrderItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAcknowledging, setIsAcknowledging] = useState(false);
   const [error, setError] = useState("");
@@ -110,21 +134,8 @@ function NotificationLinkPage() {
 
       try {
         const data = await getCustomerNotification(token);
-        const state = getNotificationViewState(data);
-
         setNotification(data);
         setError("");
-
-        if (
-          (state === "item_update" || state === "action_required") &&
-          data.item_id
-        ) {
-          const item = data.order.items.find((orderItem) => {
-            return orderItem.id === data.item_id;
-          });
-
-          setSelectedItem(item || null);
-        }
       } catch (error) {
         console.error("Notification load failed", error);
         setError("შეტყობინება ვერ მოიძებნა ან ლინკი არასწორია.");
@@ -137,7 +148,7 @@ function NotificationLinkPage() {
   }, [token]);
 
   useEffect(() => {
-    if (!notification) {
+    if (!notification || !notification.is_read_by_customer) {
       return;
     }
 
@@ -149,7 +160,7 @@ function NotificationLinkPage() {
           behavior: "smooth",
           block: "start",
         });
-      }, 200);
+      }, 150);
     }
   }, [notification]);
 
@@ -173,42 +184,37 @@ function NotificationLinkPage() {
     }
   }
 
-  function getHighlightedSupportMessage(): OrderSupportMessage | null {
-    if (!notification?.support_message_id) {
-      return null;
-    }
-
-    return (
-      notification.order.support_messages.find((message) => {
-        return message.id === notification.support_message_id;
-      }) || null
-    );
-  }
-
-  function renderForcedMessage(notificationData: CustomerNotification) {
+  function renderBlockingMessage(notificationData: CustomerNotification) {
     const state = getNotificationViewState(notificationData);
     const copy = getStateCopy(state);
-    const supportMessage = getHighlightedSupportMessage();
+    const targetSupportMessage = findTargetSupportMessage(notificationData);
+    const message =
+      notificationData.message || targetSupportMessage?.message || copy.reason;
 
     return (
-      <div className="forced-message-backdrop" role="dialog" aria-modal="true">
-        <div className="forced-message-modal">
+      <div className="notification-blocking-screen" role="dialog" aria-modal="true">
+        <div className="notification-blocking-card">
           <p className="eyebrow">{copy.eyebrow}</p>
           <h1>{notificationData.title || copy.title}</h1>
 
-          <p>
-            {notificationData.message ||
-              supportMessage?.message ||
-              copy.description}
-          </p>
+          <p className="notification-reason">{copy.reason}</p>
 
-          {notificationData.item_part_number && (
-            <p className="muted">Part: {notificationData.item_part_number}</p>
-          )}
+          <div className="notification-message-box">
+            <strong>შეტყობინება</strong>
+            <p>{message}</p>
+          </div>
 
-          <p className="muted">
-            ამ შეტყობინების დახურვა მხოლოდ “გასაგებია” ღილაკით შეიძლება.
-          </p>
+          <div className="notification-mini-summary">
+            <span>შეკვეთა</span>
+            <strong>{notificationData.order.order_number}</strong>
+
+            {notificationData.item_part_number && (
+              <>
+                <span>ნაწილი</span>
+                <strong>{notificationData.item_part_number}</strong>
+              </>
+            )}
+          </div>
 
           <button
             type="button"
@@ -217,109 +223,99 @@ function NotificationLinkPage() {
           >
             {isAcknowledging ? "მუშავდება..." : "გასაგებია"}
           </button>
+
+          <p className="muted">
+            ამ შეტყობინების დახურვა მხოლოდ “გასაგებია” ღილაკით შეიძლება.
+          </p>
         </div>
       </div>
     );
   }
 
-  function renderItemModal(item: OrderItem) {
-    const isActionRequired = item.action_required;
+  function renderTargetItemPanel(item: OrderItem, state: NotificationViewState) {
     const hasAlternative = Boolean(item.proposed_part_number);
     const hasPriceChange = Boolean(item.proposed_final_price_gel);
     const hasEtaChange = Boolean(item.proposed_eta_days);
 
     return (
-      <div className="notification-item-modal-backdrop">
-        <div className="notification-item-modal">
-          <div className="notification-item-modal__header">
-            <div>
-              <p className="eyebrow">
-                {isActionRequired ? "საჭიროა მოქმედება" : "ნაწილის განახლება"}
-              </p>
-              <h2>{item.name}</h2>
-              <p className="muted">Part: {item.part_number}</p>
-            </div>
+      <div className="notification-focus-card">
+        <div>
+          <p className="eyebrow">
+            {state === "action_required"
+              ? "საჭიროა თქვენი პასუხი"
+              : "განახლებული ნაწილი"}
+          </p>
+          <h2>{item.name}</h2>
+          <p className="muted">Part: {item.part_number}</p>
+        </div>
 
-            <button
-              type="button"
-              className="button-secondary"
-              onClick={() => setSelectedItem(null)}
-            >
-              დახურვა
-            </button>
-          </div>
+        <div className="notification-change-grid">
+          <span>სტატუსი</span>
+          <strong>{getOrderItemStatusLabel(item.item_status)}</strong>
 
-          <div className="notification-change-grid">
-            <span>სტატუსი</span>
-            <strong>{getOrderItemStatusLabel(item.item_status)}</strong>
+          <span>ფასი</span>
+          <strong>{formatGel(item.final_price_gel)}</strong>
 
-            <span>მიმდინარე ფასი</span>
-            <strong>{formatGel(item.final_price_gel)}</strong>
+          <span>ETA</span>
+          <strong>{formatEta(item.eta_days)}</strong>
 
-            <span>მიმდინარე ETA</span>
-            <strong>{formatEta(item.eta_days)}</strong>
-
-            {item.expected_arrival_date && (
-              <>
-                <span>მოსალოდნელი თარიღი</span>
-                <strong>{formatDateKa(item.expected_arrival_date)}</strong>
-              </>
-            )}
-          </div>
-
-          {(hasAlternative || hasPriceChange || hasEtaChange) && (
-            <div className="notification-proposed-box">
-              <strong>შემოთავაზებული ცვლილება</strong>
-
-              {hasAlternative && (
-                <p>
-                  ალტერნატიული ნომერი:{" "}
-                  <strong>{item.proposed_part_number}</strong>
-                  {item.proposed_name ? ` · ${item.proposed_name}` : ""}
-                </p>
-              )}
-
-              {hasPriceChange && (
-                <p>
-                  ახალი ფასი:{" "}
-                  <strong>{formatGel(item.proposed_final_price_gel)}</strong>
-                </p>
-              )}
-
-              {hasEtaChange && (
-                <p>
-                  ახალი ETA: <strong>{formatEta(item.proposed_eta_days)}</strong>
-                  {item.proposed_expected_arrival_date
-                    ? ` · ${formatDateKa(item.proposed_expected_arrival_date)}`
-                    : ""}
-                </p>
-              )}
-            </div>
-          )}
-
-          {item.action_message && (
-            <div className="customer-notice">
-              <strong>ოპერატორის შეტყობინება</strong>
-              <p>{item.action_message}</p>
-            </div>
-          )}
-
-          {isActionRequired && (
-            <div className="action-required-card">
-              <strong>ამ ლინკით შეგიძლიათ ცვლილების ნახვა.</strong>
-              <span>
-                დადასტურება ან გაუქმება ფინანსურად მნიშვნელოვანია, ამიტომ ეს
-                მოქმედება მხოლოდ ტელეფონის დადასტურების შემდეგ იქნება შესაძლებელი.
-              </span>
-              <Link
-                className="button-link"
-                to={`/orders/${notification?.order.order_number}`}
-              >
-                ტელეფონით შესვლა და მოქმედების შესრულება
-              </Link>
-            </div>
+          {item.expected_arrival_date && (
+            <>
+              <span>მოსალოდნელი თარიღი</span>
+              <strong>{formatDateKa(item.expected_arrival_date)}</strong>
+            </>
           )}
         </div>
+
+        {(hasAlternative || hasPriceChange || hasEtaChange) && (
+          <div className="notification-proposed-box">
+            <strong>შემოთავაზებული ცვლილება</strong>
+
+            {hasAlternative && (
+              <p>
+                ალტერნატიული ნომერი:{" "}
+                <strong>{item.proposed_part_number}</strong>
+                {item.proposed_name ? ` · ${item.proposed_name}` : ""}
+              </p>
+            )}
+
+            {hasPriceChange && (
+              <p>
+                ახალი ფასი:{" "}
+                <strong>{formatGel(item.proposed_final_price_gel)}</strong>
+              </p>
+            )}
+
+            {hasEtaChange && (
+              <p>
+                ახალი ETA: <strong>{formatEta(item.proposed_eta_days)}</strong>
+                {item.proposed_expected_arrival_date
+                  ? ` · ${formatDateKa(item.proposed_expected_arrival_date)}`
+                  : ""}
+              </p>
+            )}
+          </div>
+        )}
+
+        {item.action_message && (
+          <div className="notification-message-box">
+            <strong>ოპერატორის შეტყობინება</strong>
+            <p>{item.action_message}</p>
+          </div>
+        )}
+
+        {state === "action_required" && (
+          <div className="action-required-card">
+            <strong>ამ ნაწილზე საჭიროა გადაწყვეტილება</strong>
+            <span>
+              დადასტურება ან გაუქმება მხოლოდ ტელეფონის დადასტურების შემდეგ არის
+              შესაძლებელი.
+            </span>
+            <Link className="button-link" to={`/orders/${notification?.order.order_number}`}>
+              ტელეფონით შესვლა და პასუხის გაცემა
+            </Link>
+          </div>
+        )}
       </div>
     );
   }
@@ -346,19 +342,18 @@ function NotificationLinkPage() {
   const state = getNotificationViewState(notification);
   const copy = getStateCopy(state);
   const order = notification.order;
-  const highlightedSupportMessage = getHighlightedSupportMessage();
+  const targetItem = findTargetItem(notification);
+  const targetSupportMessage = findTargetSupportMessage(notification);
 
   return (
-    <section className="card notification-deeplink-page">
-      {!notification.is_read_by_customer && renderForcedMessage(notification)}
+    <section className="card notification-clean-page">
+      {!notification.is_read_by_customer && renderBlockingMessage(notification)}
 
-      {selectedItem && renderItemModal(selectedItem)}
-
-      <div className="notification-hero">
+      <div className="notification-clean-hero">
         <div>
           <p className="eyebrow">{copy.eyebrow}</p>
           <h1>{copy.title}</h1>
-          <p>{copy.description}</p>
+          <p>{copy.reason}</p>
         </div>
 
         <span className="notification-state-pill">
@@ -382,38 +377,18 @@ function NotificationLinkPage() {
         </div>
       </div>
 
-      {state === "support_reply" && highlightedSupportMessage && (
-        <div className="action-required-card">
-          <strong>ოპერატორის პასუხი</strong>
-          <span>{highlightedSupportMessage.message}</span>
+      {state === "support_reply" && targetSupportMessage && (
+        <div className="notification-focus-card">
+          <p className="eyebrow">ოპერატორის პასუხი</p>
+          <h2>ახალი შეტყობინება</h2>
+          <div className="notification-message-box">
+            <strong>{targetSupportMessage.sender_name || "ოპერატორი"}</strong>
+            <p>{targetSupportMessage.message}</p>
+          </div>
         </div>
       )}
 
-      {(state === "item_update" || state === "action_required") &&
-        notification.item_id && (
-          <div className="action-required-card">
-            <strong>
-              {state === "action_required"
-                ? "ამ ნაწილზე საჭიროა თქვენი მოქმედება"
-                : "ამ ნაწილზე განახლებაა"}
-            </strong>
-            <span>
-              Part: {notification.item_part_number || "—"}
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                const item = order.items.find((orderItem) => {
-                  return orderItem.id === notification.item_id;
-                });
-
-                setSelectedItem(item || null);
-              }}
-            >
-              ნაწილის დეტალების გახსნა
-            </button>
-          </div>
-        )}
+      {targetItem && renderTargetItemPanel(targetItem, state)}
 
       <div className="order-items-list">
         {order.items.map((item) => (
@@ -431,26 +406,14 @@ function NotificationLinkPage() {
                 Part: {item.part_number} · Status:{" "}
                 {getOrderItemStatusLabel(item.item_status)}
               </p>
-
-              {item.action_required && (
-                <p className="customer-notice">
-                  ამ ნაწილზე საჭიროა მომხმარებლის მოქმედება.
-                </p>
-              )}
             </div>
 
-            <div className="part-option__side">
-              <strong>
-                {(Number(item.final_price_gel) * item.quantity).toLocaleString(
-                  "ka-GE"
-                )}{" "}
-                ₾
-              </strong>
-
-              <button type="button" onClick={() => setSelectedItem(item)}>
-                დეტალები
-              </button>
-            </div>
+            <strong>
+              {(Number(item.final_price_gel) * item.quantity).toLocaleString(
+                "ka-GE"
+              )}{" "}
+              ₾
+            </strong>
           </article>
         ))}
       </div>
@@ -503,8 +466,8 @@ function NotificationLinkPage() {
         <strong>უსაფრთხოების შენიშვნა</strong>
         <p>
           ეს ლინკი მხოლოდ შეკვეთის და შეტყობინების სანახავად არის. დადასტურება,
-          გაუქმება ან ახალი support შეტყობინება მხოლოდ ტელეფონის დადასტურების
-          შემდეგ შესრულდება.
+          გაუქმება ან ახალი support შეტყობინება სრულ შეკვეთის გვერდზე, ტელეფონის
+          დადასტურების შემდეგ შესრულდება.
         </p>
 
         <Link className="button-link" to={`/orders/${order.order_number}`}>
