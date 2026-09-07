@@ -69,7 +69,7 @@ test("real backend customer flow: verify phone, search, cart, checkout, order de
     expect(firstVerifyData.is_phone_verified).toBe(true);
   }
 
-  await expect(page.getByText("ტელეფონის ნომერი დადასტურებულია")).toBeVisible();
+  await expect(page.getByText("ტელეფონი დადასტურებულია")).toBeVisible();
 
   await page.goto("/");
   await expect(page.getByText("Backend status: ok")).toBeVisible();

@@ -174,6 +174,18 @@ function PhoneVerificationForm({
   const hasProfile = Boolean(customerName && customerPhone);
   const canEditPhone = !isSendingCode && !isVerifyingCode;
 
+  if (isPhoneVerified && hasProfile) {
+    return (
+      <div className="profile-status">
+        <strong>ტელეფონი დადასტურებულია</strong>
+        <span>
+          {customerName} · {customerPhone}
+        </span>
+        <span>სტატუსი: Verified</span>
+      </div>
+    );
+  }
+
   return (
     <>
       <p className="muted">
