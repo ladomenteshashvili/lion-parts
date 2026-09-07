@@ -196,3 +196,57 @@ code {
   box-sizing: border-box;
 }
 
+
+.notification-page {
+  position: relative;
+}
+
+.notification-order-box {
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin: 20px 0;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  text-align: left;
+}
+
+.forced-message-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.forced-message-modal {
+  width: min(560px, 100%);
+  display: grid;
+  gap: 14px;
+  padding: 24px;
+  border: 1px solid var(--accent-border);
+  border-radius: 22px;
+  background: var(--bg);
+  box-shadow: var(--shadow);
+  text-align: left;
+}
+
+.forced-message-modal h1 {
+  margin: 0;
+  font-size: 32px;
+}
+
+@media (max-width: 720px) {
+  .notification-order-box {
+    display: grid;
+  }
+
+  .forced-message-modal h1 {
+    font-size: 26px;
+  }
+}
+

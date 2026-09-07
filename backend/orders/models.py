@@ -1,3 +1,5 @@
+import uuid
+
 from django.db import models
 
 
@@ -350,4 +352,71 @@ class OrderSupportMessage(models.Model):
 
     def __str__(self):
         return f"{self.order.order_number} · {self.sender_type} · {self.created_at}"
+
+class OrderCustomerNotification(models.Model):
+    TYPE_SUPPORT_REPLY = "support_reply"
+    TYPE_ORDER_UPDATE = "order_update"
+    TYPE_ACTION_REQUIRED = "action_required"
+    TYPE_NOTICE = "notice"
+
+    TYPE_CHOICES = [
+        (TYPE_SUPPORT_REPLY, "Support reply"),
+        (TYPE_ORDER_UPDATE, "Order update"),
+        (TYPE_ACTION_REQUIRED, "Action required"),
+        (TYPE_NOTICE, "Notice"),
+    ]
+
+    token = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True)
+
+    order = models.ForeignKey(
+        Order,
+        on_delete=models.CASCADE,
+        related_name="customer_notifications",
+    )
+
+    item = models.ForeignKey(
+        OrderItem,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="customer_notifications",
+    )
+
+    event = models.ForeignKey(
+        OrderItemEvent,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="customer_notifications",
+    )
+
+    support_message = models.ForeignKey(
+        OrderSupportMessage,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="customer_notifications",
+    )
+
+    notification_type = models.CharField(
+        max_length=40,
+        choices=TYPE_CHOICES,
+        default=TYPE_NOTICE,
+        db_index=True,
+    )
+
+    title = models.CharField(max_length=255)
+    message = models.TextField(blank=True)
+
+    visible_to_customer = models.BooleanField(default=True)
+    is_read_by_customer = models.BooleanField(default=False)
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.order.order_number} · {self.notification_type} · {self.title}"
 

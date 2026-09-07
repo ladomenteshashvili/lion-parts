@@ -329,3 +329,22 @@ Support messages admin:
 - Different verified phone cannot open another customer’s order detail.
 - Different verified phone cannot send support message on another customer’s order.
 
+
+## Notification magic links
+
+Check:
+
+- Admin creates operator support reply.
+- Order customer notification is created automatically.
+- Admin can copy Customer link from Order customer notifications.
+- Opening `/n/<token>` works without phone verification.
+- The notification message opens as a forced modal.
+- Modal cannot be closed by background click or X button.
+- Only “გასაგებია” closes the message.
+- After “გასაგებია”, the notification becomes read.
+- Support reply message also becomes read by customer.
+- Order details are visible on the notification link page.
+- Public notification link does not expose session_id.
+- Public notification link does not allow approve/cancel/support send actions.
+- Normal order detail page also pops unread operator support message on entry.
+

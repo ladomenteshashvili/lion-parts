@@ -5,6 +5,7 @@ import CartPage from "./pages/CartPage";
 import CheckoutPage from "./pages/CheckoutPage";
 import OrdersPage from "./pages/OrdersPage";
 import OrderDetailPage from "./pages/OrderDetailPage";
+import NotificationLinkPage from "./pages/NotificationLinkPage";
 import ProfilePage from "./pages/ProfilePage";
 
 function App() {
@@ -19,6 +20,7 @@ function App() {
           <Route path="/checkout" element={<CheckoutPage />} />
           <Route path="/orders" element={<OrdersPage />} />
           <Route path="/orders/:orderNumber" element={<OrderDetailPage />} />
+          <Route path="/n/:token" element={<NotificationLinkPage />} />
           <Route path="/profile" element={<ProfilePage />} />
 
           <Route path="*" element={<Navigate to="/" replace />} />

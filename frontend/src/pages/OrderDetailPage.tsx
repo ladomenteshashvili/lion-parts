@@ -491,6 +491,11 @@ function isOrderCompleted(order: BackendOrder) {
     (item) => item.action_required
   );
 
+  const firstUnreadSupportMessage = order.support_messages.find(
+    (message) =>
+      message.sender_type !== "customer" && !message.is_read_by_customer
+  );
+
     const orderTimelineSteps = [
     {
       key: "created",
@@ -526,6 +531,28 @@ function isOrderCompleted(order: BackendOrder) {
 
   return (
     <section className="card">
+      {firstUnreadSupportMessage && (
+        <div className="forced-message-backdrop" role="dialog" aria-modal="true">
+          <div className="forced-message-modal">
+            <p className="eyebrow">ოპერატორის ახალი პასუხი</p>
+            <h1>შეტყობინება</h1>
+            <p>{firstUnreadSupportMessage.message}</p>
+            {firstUnreadSupportMessage.item_part_number && (
+              <p className="muted">
+                Part: {firstUnreadSupportMessage.item_part_number}
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={handleAcknowledgeSupportMessages}
+              disabled={isAcknowledgingSupport}
+            >
+              {isAcknowledgingSupport ? "მუშავდება..." : "გასაგებია"}
+            </button>
+          </div>
+        </div>
+      )}
+
       <Link className="back-link" to="/orders">
         ← შეკვეთებზე დაბრუნება
       </Link>

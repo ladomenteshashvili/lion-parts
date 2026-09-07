@@ -1,10 +1,11 @@
 from datetime import timedelta
 
+from django.conf import settings
 from django.contrib import admin, messages
 from django.db import transaction
 from django.utils import timezone
 
-from .models import Order, OrderItem, OrderItemEvent, OrderSupportMessage, Payment
+from .models import Order, OrderCustomerNotification, OrderItem, OrderItemEvent, OrderSupportMessage, Payment
 from .views import confirm_order_payment, get_or_create_order_payment, recalculate_order_total
 
 
@@ -1006,4 +1007,46 @@ class OrderSupportMessageAdmin(admin.ModelAdmin):
         "message",
     )
     readonly_fields = ("created_at",)
+
+@admin.register(OrderCustomerNotification)
+class OrderCustomerNotificationAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "order",
+        "item",
+        "notification_type",
+        "title",
+        "is_read_by_customer",
+        "acknowledged_at",
+        "created_at",
+        "customer_link",
+    )
+    list_filter = (
+        "notification_type",
+        "visible_to_customer",
+        "is_read_by_customer",
+        "created_at",
+    )
+    search_fields = (
+        "order__order_number",
+        "order__customer_name",
+        "order__customer_phone",
+        "item__part_number",
+        "title",
+        "message",
+        "token",
+    )
+    readonly_fields = (
+        "token",
+        "customer_link",
+        "created_at",
+        "acknowledged_at",
+    )
+
+    @admin.display(description="Customer link")
+    def customer_link(self, obj):
+        base_url = getattr(settings, "FRONTEND_BASE_URL", "").rstrip("/")
+        if not base_url:
+            return f"/n/{obj.token}"
+        return f"{base_url}/n/{obj.token}"
 

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Order, OrderItem, OrderItemEvent, OrderSupportMessage, Payment
+from .models import Order, OrderCustomerNotification, OrderItem, OrderItemEvent, OrderSupportMessage, Payment
 
 
 class PaymentSerializer(serializers.ModelSerializer):
@@ -146,3 +146,73 @@ class OrderSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+class PublicOrderSerializer(serializers.ModelSerializer):
+    items = OrderItemSerializer(many=True, read_only=True)
+    payment = PaymentSerializer(read_only=True)
+    status_label = serializers.CharField(source="get_status_display", read_only=True)
+    support_messages = serializers.SerializerMethodField()
+    support_unread_count = serializers.SerializerMethodField()
+
+    def get_support_messages(self, obj):
+        messages = obj.support_messages.filter(visible_to_customer=True).order_by(
+            "created_at",
+            "id",
+        )
+        return OrderSupportMessageSerializer(messages, many=True).data
+
+    def get_support_unread_count(self, obj):
+        return obj.support_messages.filter(
+            visible_to_customer=True,
+            is_read_by_customer=False,
+        ).exclude(
+            sender_type=OrderSupportMessage.SENDER_CUSTOMER,
+        ).count()
+
+    class Meta:
+        model = Order
+        fields = [
+            "id",
+            "order_number",
+            "customer_name",
+            "customer_phone",
+            "vin",
+            "note",
+            "payment_type",
+            "payment",
+            "status",
+            "status_label",
+            "total_gel",
+            "items",
+            "support_messages",
+            "support_unread_count",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class OrderCustomerNotificationPublicSerializer(serializers.ModelSerializer):
+    order = PublicOrderSerializer(read_only=True)
+    item_id = serializers.IntegerField(source="item.id", read_only=True)
+    item_part_number = serializers.CharField(source="item.part_number", read_only=True)
+    support_message_id = serializers.IntegerField(source="support_message.id", read_only=True)
+    event_id = serializers.IntegerField(source="event.id", read_only=True)
+
+    class Meta:
+        model = OrderCustomerNotification
+        fields = [
+            "id",
+            "token",
+            "notification_type",
+            "title",
+            "message",
+            "item_id",
+            "item_part_number",
+            "support_message_id",
+            "event_id",
+            "is_read_by_customer",
+            "acknowledged_at",
+            "created_at",
+            "order",
+        ]
+
