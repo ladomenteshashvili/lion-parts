@@ -33,18 +33,22 @@ class PartSearchLogAdmin(admin.ModelAdmin):
         "provider",
         "part_number",
         "vin",
+        "customer_phone",
+        "customer_name",
         "session_id",
         "found_count",
         "status",
         "created_at",
     )
     list_filter = ("provider", "status", "created_at")
-    search_fields = ("part_number", "vin", "session_id")
+    search_fields = ("part_number", "vin", "session_id", "customer_phone", "customer_name")
     readonly_fields = (
         "session_id",
         "provider",
         "part_number",
         "vin",
+        "customer_phone",
+        "customer_name",
         "found_count",
         "status",
         "raw_response",
