@@ -61,14 +61,42 @@ def generate_payment_reference():
 
 
 def recalculate_order_total(order):
+    active_items = order.items.exclude(
+        item_status=OrderItem.ITEM_STATUS_CANCELLED
+    )
+
     total_gel = sum(
         item.final_price_gel * Decimal(item.quantity)
-        for item in order.items.all()
+        for item in active_items
     )
 
     order.total_gel = total_gel
     order.save(update_fields=["total_gel", "updated_at"])
     return order
+
+
+def sync_order_status_after_customer_item_change(order):
+    if order.items.filter(action_required=True).exists():
+        new_order_status = Order.STATUS_ACTION_REQUIRED
+    elif order.items.exists() and not order.items.exclude(
+        item_status=OrderItem.ITEM_STATUS_COMPLETED
+    ).exists():
+        new_order_status = Order.STATUS_COMPLETED
+    elif order.items.exists() and not order.items.exclude(
+        item_status=OrderItem.ITEM_STATUS_CANCELLED
+    ).exists():
+        new_order_status = Order.STATUS_CANCELLED
+    elif order.status not in [
+        Order.STATUS_PAYMENT_PENDING,
+        Order.STATUS_CANCELLED,
+    ]:
+        new_order_status = Order.STATUS_PROCESSING
+    else:
+        return
+
+    if order.status != new_order_status:
+        order.status = new_order_status
+        order.save(update_fields=["status", "updated_at"])
 
 
 def create_order_item_event(
@@ -373,6 +401,112 @@ def checkout(request):
 
     serializer = OrderSerializer(updated_order)
     return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+@api_view(["POST"])
+def cancel_order_item_action(request, item_id):
+    session_id = request.data.get("session_id", "").strip()
+
+    if not session_id:
+        return Response(
+            {"detail": "session_id is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        item = OrderItem.objects.select_related("order").get(
+            build_customer_order_access_filter(session_id, prefix="order__"),
+            id=item_id,
+        )
+    except OrderItem.DoesNotExist:
+        return Response(
+            {"detail": "order item not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if not item.action_required:
+        return Response(
+            {"detail": "item has no pending action"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    order = item.order
+
+    old_value = {
+        "item_status": item.item_status,
+        "action_required": item.action_required,
+        "action_type": item.action_type,
+        "action_message": item.action_message,
+        "final_price_gel": str(item.final_price_gel),
+        "proposed_final_price_gel": (
+            str(item.proposed_final_price_gel)
+            if item.proposed_final_price_gel is not None
+            else None
+        ),
+        "eta_days": item.eta_days,
+        "proposed_eta_days": item.proposed_eta_days,
+        "expected_arrival_date": (
+            item.expected_arrival_date.isoformat()
+            if item.expected_arrival_date
+            else None
+        ),
+        "proposed_expected_arrival_date": (
+            item.proposed_expected_arrival_date.isoformat()
+            if item.proposed_expected_arrival_date
+            else None
+        ),
+    }
+
+    item.item_status = OrderItem.ITEM_STATUS_CANCELLED
+    item.action_required = False
+    item.action_type = OrderItem.ACTION_TYPE_NONE
+    item.action_message = ""
+    item.proposed_final_price_gel = None
+    item.proposed_eta_days = None
+    item.proposed_expected_arrival_date = None
+    item.save()
+
+    recalculate_order_total(order)
+    sync_order_status_after_customer_item_change(order)
+
+    create_order_item_event(
+        item=item,
+        event_type=OrderItemEvent.EVENT_TYPE_ACTION_RESOLVED,
+        title="ნაწილი გაუქმებულია",
+        message=(
+            "მომხმარებელმა ცვლილება არ დაადასტურა და ამ ნაწილის გაუქმება მოითხოვა. "
+            "თანხის დაბრუნების ან გადათვლის საკითხს ოპერატორი დაამუშავებს."
+        ),
+        old_value=old_value,
+        new_value={
+            "item_status": item.item_status,
+            "action_required": item.action_required,
+            "action_type": item.action_type,
+            "action_message": item.action_message,
+            "final_price_gel": str(item.final_price_gel),
+            "proposed_final_price_gel": None,
+            "eta_days": item.eta_days,
+            "proposed_eta_days": None,
+            "expected_arrival_date": (
+                item.expected_arrival_date.isoformat()
+                if item.expected_arrival_date
+                else None
+            ),
+            "proposed_expected_arrival_date": None,
+        },
+        actor_type=OrderItemEvent.ACTOR_TYPE_CUSTOMER,
+        actor_name="Customer",
+        visible_to_customer=True,
+    )
+
+    updated_order = (
+        Order.objects.select_related("payment")
+        .prefetch_related("items__events")
+        .get(id=order.id)
+    )
+
+    serializer = OrderSerializer(updated_order)
+    return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 @api_view(["POST"])

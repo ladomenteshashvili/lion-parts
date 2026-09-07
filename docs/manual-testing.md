@@ -169,3 +169,19 @@ Expected:
 - Backend tests pass.
 - Frontend mock E2E passes.
 - Real backend E2E passes.
+
+
+## Customer action required
+
+Check:
+
+- Admin can request price change confirmation from Order items.
+- Admin can request ETA change confirmation from Order items.
+- Customer sees action-required badge in the Orders navigation.
+- Customer sees action-required summary at the top of Orders page.
+- Customer sees action-required badge on the affected order card.
+- Customer can open item details and approve the change.
+- Customer can open item details and cancel the item if the change is not acceptable.
+- After approval, item returns to checking and order returns to processing.
+- After cancelling the only item, item becomes cancelled and order becomes cancelled.
+- Different verified phone cannot approve or cancel another customer’s item.

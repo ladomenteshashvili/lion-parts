@@ -503,6 +503,124 @@ class OrderFlowTests(TestCase):
         self.assertNotIn("Internal note", event_titles)
 
 
+
+    def test_customer_can_cancel_action_required_item(self):
+        order, item = self._create_order_from_cart()
+
+        payment = order.payment
+        payment.status = Payment.STATUS_PAID
+        payment.paid_at = timezone.now()
+        payment.save(update_fields=["status", "paid_at", "updated_at"])
+
+        order.status = Order.STATUS_ACTION_REQUIRED
+        order.save(update_fields=["status", "updated_at"])
+
+        item.item_status = OrderItem.ITEM_STATUS_ACTION_REQUIRED
+        item.action_required = True
+        item.action_type = OrderItem.ACTION_TYPE_PRICE_CHANGE
+        item.action_message = "ფასი შეიცვალა."
+        item.proposed_final_price_gel = Decimal("800.00")
+        item.save()
+
+        response = self.client.post(
+            f"/api/orders/items/{item.id}/cancel-action/",
+            {
+                "session_id": self.session_id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        item.refresh_from_db()
+        order.refresh_from_db()
+
+        self.assertEqual(item.item_status, OrderItem.ITEM_STATUS_CANCELLED)
+        self.assertFalse(item.action_required)
+        self.assertEqual(item.action_type, OrderItem.ACTION_TYPE_NONE)
+        self.assertEqual(item.action_message, "")
+        self.assertIsNone(item.proposed_final_price_gel)
+        self.assertEqual(order.status, Order.STATUS_CANCELLED)
+        self.assertEqual(order.total_gel, Decimal("0.00"))
+
+        event = item.events.last()
+
+        self.assertEqual(event.event_type, OrderItemEvent.EVENT_TYPE_ACTION_RESOLVED)
+        self.assertEqual(event.title, "ნაწილი გაუქმებულია")
+        self.assertEqual(event.actor_type, OrderItemEvent.ACTOR_TYPE_CUSTOMER)
+        self.assertTrue(event.visible_to_customer)
+
+        self.assertEqual(response.data["status"], Order.STATUS_CANCELLED)
+        self.assertEqual(response.data["total_gel"], "0.00")
+        self.assertEqual(
+            response.data["items"][0]["item_status"],
+            OrderItem.ITEM_STATUS_CANCELLED,
+        )
+
+    def test_cancel_action_requires_pending_action(self):
+        order, item = self._create_order_from_cart()
+
+        payment = order.payment
+        payment.status = Payment.STATUS_PAID
+        payment.paid_at = timezone.now()
+        payment.save(update_fields=["status", "paid_at", "updated_at"])
+
+        order.status = Order.STATUS_PROCESSING
+        order.save(update_fields=["status", "updated_at"])
+
+        item.item_status = OrderItem.ITEM_STATUS_PAYMENT_CONFIRMED
+        item.action_required = False
+        item.save(update_fields=["item_status", "action_required", "updated_at"])
+
+        response = self.client.post(
+            f"/api/orders/items/{item.id}/cancel-action/",
+            {
+                "session_id": self.session_id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["detail"], "item has no pending action")
+
+        item.refresh_from_db()
+        self.assertEqual(item.item_status, OrderItem.ITEM_STATUS_PAYMENT_CONFIRMED)
+
+    def test_cancel_action_blocks_different_verified_phone(self):
+        order, item = self._create_order_from_cart()
+
+        Customer.objects.create(
+            session_id="different-phone-cancel-session",
+            name="Other",
+            phone="599000000",
+            is_phone_verified=True,
+        )
+
+        order.status = Order.STATUS_ACTION_REQUIRED
+        order.save(update_fields=["status", "updated_at"])
+
+        item.item_status = OrderItem.ITEM_STATUS_ACTION_REQUIRED
+        item.action_required = True
+        item.action_type = OrderItem.ACTION_TYPE_PRICE_CHANGE
+        item.action_message = "ფასი შეიცვალა."
+        item.proposed_final_price_gel = Decimal("800.00")
+        item.save()
+
+        response = self.client.post(
+            f"/api/orders/items/{item.id}/cancel-action/",
+            {
+                "session_id": "different-phone-cancel-session",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+        item.refresh_from_db()
+        self.assertTrue(item.action_required)
+        self.assertEqual(item.item_status, OrderItem.ITEM_STATUS_ACTION_REQUIRED)
+
+
     def _create_order_from_cart(self):
         response = self.client.post(
             "/api/orders/checkout/",
