@@ -6,7 +6,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from cart.models import Cart, CartItem
-from orders.models import Order, OrderItem, OrderItemEvent, OrderSupportMessage, Payment
+from orders.models import Order, OrderCustomerNotification, OrderItem, OrderItemEvent, OrderSupportMessage, Payment
 from accounts.models import Customer
 from orders.admin import request_order_item_action_from_admin, set_order_item_status_from_admin
 
@@ -792,6 +792,78 @@ class OrderFlowTests(TestCase):
 
         self.assertTrue(message.is_read_by_customer)
         self.assertEqual(response.data["support_unread_count"], 0)
+
+
+
+    def test_operator_support_reply_creates_public_notification_link(self):
+        order, item = self._create_order_from_cart()
+
+        support_message = OrderSupportMessage.objects.create(
+            order=order,
+            item=item,
+            sender_type=OrderSupportMessage.SENDER_OPERATOR,
+            sender_name="Operator",
+            message="ETA დაზუსტებულია.",
+            visible_to_customer=True,
+            is_read_by_customer=False,
+            is_read_by_operator=True,
+        )
+
+        notification = OrderCustomerNotification.objects.get(
+            support_message=support_message,
+        )
+
+        self.assertEqual(
+            notification.notification_type,
+            OrderCustomerNotification.TYPE_SUPPORT_REPLY,
+        )
+        self.assertFalse(notification.is_read_by_customer)
+
+        response = self.client.get(
+            f"/api/orders/public/notifications/{notification.token}/",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["message"], "ETA დაზუსტებულია.")
+        self.assertEqual(response.data["order"]["order_number"], order.order_number)
+        self.assertNotIn("session_id", response.data["order"])
+
+        ack_response = self.client.post(
+            f"/api/orders/public/notifications/{notification.token}/acknowledge/",
+            {},
+            format="json",
+        )
+
+        self.assertEqual(ack_response.status_code, 200)
+
+        notification.refresh_from_db()
+        support_message.refresh_from_db()
+
+        self.assertTrue(notification.is_read_by_customer)
+        self.assertIsNotNone(notification.acknowledged_at)
+        self.assertTrue(support_message.is_read_by_customer)
+
+    def test_order_item_status_event_creates_order_update_notification(self):
+        order, item = self._create_order_from_cart()
+
+        event = OrderItemEvent.objects.create(
+            item=item,
+            event_type=OrderItemEvent.EVENT_TYPE_STATUS_CHANGED,
+            title="ნაწილი შეძენილია",
+            message="ნაწილი შეძენილია მომწოდებელთან.",
+            actor_type=OrderItemEvent.ACTOR_TYPE_ADMIN,
+            actor_name="Admin",
+            visible_to_customer=True,
+        )
+
+        notification = OrderCustomerNotification.objects.get(event=event)
+
+        self.assertEqual(
+            notification.notification_type,
+            OrderCustomerNotification.TYPE_ORDER_UPDATE,
+        )
+        self.assertEqual(notification.order, order)
+        self.assertEqual(notification.item, item)
 
 
     def _create_order_from_cart(self):

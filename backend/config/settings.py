@@ -41,7 +41,7 @@ INSTALLED_APPS = [
     "api",   
     "parts", 
     "cart",
-    "orders",
+    "orders.apps.OrdersConfig",
     "accounts",
 ]
 
@@ -211,3 +211,5 @@ ENABLE_DEMO_ORDER_ENDPOINTS = config(
     default=False,
     cast=bool,
 )
+
+FRONTEND_BASE_URL = config("FRONTEND_BASE_URL", default="http://2.28.40.250:5173")

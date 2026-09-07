@@ -95,6 +95,25 @@ export type BackendOrder = {
   updated_at: string;
 };
 
+
+export type PublicOrder = Omit<BackendOrder, "session_id">;
+
+export type CustomerNotification = {
+  id: number;
+  token: string;
+  notification_type: "support_reply" | "order_update" | "action_required" | "notice";
+  title: string;
+  message: string;
+  item_id: number | null;
+  item_part_number: string | null;
+  support_message_id: number | null;
+  event_id: number | null;
+  is_read_by_customer: boolean;
+  acknowledged_at: string | null;
+  created_at: string;
+  order: PublicOrder;
+};
+
 export async function getOrders(): Promise<BackendOrder[]> {
   const sessionId = getSessionId();
 
@@ -289,6 +308,44 @@ export async function acknowledgeOrderSupportMessages(
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(errorText || "Acknowledge support messages failed");
+  }
+
+  return response.json();
+}
+
+
+export async function getCustomerNotification(
+  token: string
+): Promise<CustomerNotification> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/orders/public/notifications/${encodeURIComponent(token)}/`
+  );
+
+  if (!response.ok) {
+    throw new Error("Notification load failed");
+  }
+
+  return response.json();
+}
+
+export async function acknowledgeCustomerNotification(
+  token: string
+): Promise<CustomerNotification> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/orders/public/notifications/${encodeURIComponent(
+      token
+    )}/acknowledge/`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Notification acknowledge failed");
   }
 
   return response.json();

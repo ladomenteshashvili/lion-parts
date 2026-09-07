@@ -12,8 +12,8 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from cart.models import Cart
-from .models import Order, OrderItem, OrderItemEvent, OrderSupportMessage, Payment
-from .serializers import OrderSerializer
+from .models import Order, OrderCustomerNotification, OrderItem, OrderItemEvent, OrderSupportMessage, Payment
+from .serializers import OrderCustomerNotificationPublicSerializer, OrderSerializer
 from accounts.models import Customer
 
 
@@ -241,6 +241,77 @@ def confirm_order_payment(order, payment, source="demo_verification"):
             actor_name="System",
             visible_to_customer=True,
         )
+
+
+@api_view(["GET"])
+def get_customer_notification(request, token):
+    notification = get_object_or_404(
+        OrderCustomerNotification.objects.select_related(
+            "order",
+            "order__payment",
+            "item",
+            "event",
+            "support_message",
+        ).prefetch_related(
+            "order__items__events",
+            "order__support_messages",
+        ),
+        token=token,
+        visible_to_customer=True,
+    )
+
+    serializer = OrderCustomerNotificationPublicSerializer(notification)
+    return Response(serializer.data)
+
+
+@api_view(["POST"])
+def acknowledge_customer_notification(request, token):
+    notification = get_object_or_404(
+        OrderCustomerNotification.objects.select_related(
+            "order",
+            "order__payment",
+            "item",
+            "event",
+            "support_message",
+        ).prefetch_related(
+            "order__items__events",
+            "order__support_messages",
+        ),
+        token=token,
+        visible_to_customer=True,
+    )
+
+    notification.is_read_by_customer = True
+    notification.acknowledged_at = timezone.now()
+    notification.save(update_fields=[
+        "is_read_by_customer",
+        "acknowledged_at",
+    ])
+
+    if (
+        notification.support_message
+        and notification.support_message.sender_type != OrderSupportMessage.SENDER_CUSTOMER
+    ):
+        notification.support_message.is_read_by_customer = True
+        notification.support_message.save(update_fields=["is_read_by_customer"])
+
+    updated_notification = (
+        OrderCustomerNotification.objects.select_related(
+            "order",
+            "order__payment",
+            "item",
+            "event",
+            "support_message",
+        )
+        .prefetch_related(
+            "order__items__events",
+            "order__support_messages",
+        )
+        .get(id=notification.id)
+    )
+
+    serializer = OrderCustomerNotificationPublicSerializer(updated_notification)
+    return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 @api_view(["GET"])

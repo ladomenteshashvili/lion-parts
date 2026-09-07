@@ -3,6 +3,7 @@ from django.urls import path
 from .views import (
     acknowledge_order_item_action,
     cancel_order_item_action,
+    acknowledge_customer_notification,
     acknowledge_order_support_messages,
     checkout,
     create_order_support_message,
@@ -10,6 +11,7 @@ from .views import (
     demo_request_item_change,
     resolve_item_action,
     demo_update_item_status,
+    get_customer_notification,
     get_order_detail,
     list_orders,
     verify_payment,
@@ -17,6 +19,16 @@ from .views import (
 
 urlpatterns = [
     path("", list_orders, name="orders-list"),
+    path(
+        "public/notifications/<uuid:token>/",
+        get_customer_notification,
+        name="orders-public-notification",
+    ),
+    path(
+        "public/notifications/<uuid:token>/acknowledge/",
+        acknowledge_customer_notification,
+        name="orders-public-notification-acknowledge",
+    ),
     path("checkout/", checkout, name="orders-checkout"),
     path(
         "<str:order_number>/verify-payment/",
