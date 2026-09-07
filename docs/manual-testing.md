@@ -200,3 +200,132 @@ Check:
 - Orders page shows operator reply badge on affected order.
 - Customer clicks “გასაგებია” and unread support badge disappears.
 - Different verified phone cannot read or send support messages for another customer’s order.
+
+
+## Final employee testing checklist
+
+Use this checklist before release or before giving the app to real customers.
+
+### 1. Login / Profile
+
+- Phone number input is visible for logged out user.
+- SMS code can be sent.
+- SMS code can be verified.
+- New phone requires customer name after code verification.
+- Existing verified phone logs in without asking name again.
+- Verified profile shows customer name and phone.
+- Verified profile does not show SMS send form.
+- Logout clears current browser session.
+
+### 2. Search / Cart / Checkout
+
+- Search by OEM part number works.
+- VIN is optional.
+- Customer sees final price in GEL only.
+- Quantity input works.
+- Add to cart works.
+- Cart shows added item and correct quantity.
+- Checkout creates order.
+- Customer is redirected to order detail.
+- Order status is payment pending.
+- Payment reference is visible.
+
+### 3. Admin payment and item tracking
+
+- Admin can mark payment pending order as paid manually.
+- Frontend order status changes to processing.
+- Item status changes to payment confirmed.
+- Admin can move item through checking, purchased, received USA, shipped to Georgia, received Georgia, ready for pickup and completed.
+- Customer timeline/history shows customer-visible status changes.
+
+### 4. Price change
+
+- Admin can enter proposed_final_price_gel and request price confirmation.
+- Customer sees Orders badge and action-required card.
+- Customer can approve price change.
+- Customer can cancel item if price is not acceptable.
+- Different verified phone cannot approve or cancel the action.
+
+### 5. ETA change
+
+- Admin can enter proposed_eta_days and request ETA confirmation.
+- Customer sees new ETA and expected arrival date.
+- Customer can approve ETA change.
+- Customer can cancel item if ETA is not acceptable.
+
+### 6. Alternative part
+
+- Admin can enter proposed_part_number.
+- Admin can optionally enter proposed_name.
+- Admin can optionally enter proposed_final_price_gel.
+- Admin can optionally enter proposed_eta_days.
+- Customer sees alternative part number.
+- Customer sees changed price/ETA when provided.
+- Customer can approve alternative part.
+- Customer can cancel item if alternative is not acceptable.
+
+### 7. Fitment issue
+
+- Admin can request VIN fitment confirmation with action_message.
+- VIN is not required for this test stage.
+- Customer sees action required.
+- Customer can approve.
+- Customer can cancel item.
+
+### 8. Weight correction before purchase
+
+- Admin can request weight/dimensions price change before item is purchased.
+- Customer sees normal approve/cancel decision.
+- Approval applies changed price.
+- Cancel cancels item.
+
+### 9. Weight correction after purchase / notice only
+
+- Item status is purchased or later.
+- weight_source is manual/customer.
+- Admin enters proposed_final_price_gel and requests weight/dimensions confirmation.
+- Customer sees only “გასაგებია”.
+- Customer must not see cancel button.
+- Customer must not see normal confirmation button.
+- Clicking “გასაგებია” clears badge.
+- Item remains purchased or its current logistics status.
+- Changed final price remains applied.
+
+### 10. Support messaging
+
+- Customer can send support message for whole order.
+- Customer can send support message linked to item.
+- Admin can reply from Order support messages inline.
+- Customer sees operator reply.
+- Header Orders badge increases for unread operator reply.
+- Orders page shows operator reply badge.
+- Customer clicks “გასაგებია” and unread badge disappears.
+
+### 11. Admin operator task filters
+
+Orders admin:
+
+- “ახალი გადახდილი — შესამოწმებელი” filter works.
+- “Customer პასუხს ელოდება” filter works.
+- “Customer-ის ახალი შეტყობინება” filter works.
+- “გზაში / ლოგისტიკა” filter works.
+- “მზადაა გასაცემად” filter works.
+
+Order items admin:
+
+- “გადახდილია — შესამოწმებელი” filter works.
+- “Customer პასუხს ელოდება” filter works.
+- Purchased / received USA / shipped / received Georgia / ready pickup filters work.
+
+Support messages admin:
+
+- “Customer-ის ახალი შეტყობინება” filter works.
+- “მონიშნე operator-ის მიერ წაკითხულად” action works.
+
+### 12. Privacy
+
+- Unverified user cannot see orders.
+- Different verified phone cannot see another customer’s orders.
+- Different verified phone cannot open another customer’s order detail.
+- Different verified phone cannot send support message on another customer’s order.
+
