@@ -8,6 +8,7 @@ from rest_framework.test import APIClient
 from cart.models import Cart, CartItem
 from orders.models import Order, OrderItem, OrderItemEvent, Payment
 from accounts.models import Customer
+from orders.admin import set_order_item_status_from_admin
 
 
 @override_settings(ENABLE_DEMO_ORDER_ENDPOINTS=True)
@@ -521,6 +522,127 @@ class OrderFlowTests(TestCase):
         item = order.items.first()
 
         return order, item
+
+
+class AdminOrderItemStatusTests(TestCase):
+    def setUp(self):
+        self.order = Order.objects.create(
+            order_number="LP-ADMIN-0001",
+            session_id="admin-session",
+            customer_name="Admin Customer",
+            customer_phone="599123456",
+            vin="",
+            note="",
+            payment_type=Order.PAYMENT_FULL,
+            status=Order.STATUS_PROCESSING,
+            total_gel=Decimal("650.00"),
+        )
+
+        self.payment = Payment.objects.create(
+            order=self.order,
+            payment_reference="PAY-ADMIN-0001",
+            provider=Payment.PROVIDER_DEMO,
+            status=Payment.STATUS_PAID,
+            amount_gel=Decimal("650.00"),
+            currency="GEL",
+            paid_at=timezone.now(),
+        )
+
+        self.item = OrderItem.objects.create(
+            order=self.order,
+            cart_item_id="admin-cart-item",
+            quote_id="admin-quote",
+            part_option_id="admin-option",
+            part_number="ADMIN123",
+            name="Admin Test Part",
+            condition="New",
+            brand="OEM",
+            availability="Available",
+            eta_days=14,
+            expected_arrival_date=timezone.localdate() + timedelta(days=14),
+            weight_kg=Decimal("2.50"),
+            final_price_gel=Decimal("650.00"),
+            currency="GEL",
+            note="",
+            customer_notice="",
+            weight_source="api",
+            quantity=1,
+            item_status=OrderItem.ITEM_STATUS_PAYMENT_CONFIRMED,
+            action_required=False,
+            action_type=OrderItem.ACTION_TYPE_NONE,
+            action_message="",
+        )
+
+    def test_admin_status_update_creates_customer_visible_event(self):
+        result = set_order_item_status_from_admin(
+            self.item,
+            OrderItem.ITEM_STATUS_PURCHASED,
+            actor_name="operator@example.com",
+        )
+
+        self.assertEqual(result, "updated")
+
+        self.item.refresh_from_db()
+        self.order.refresh_from_db()
+
+        self.assertEqual(self.item.item_status, OrderItem.ITEM_STATUS_PURCHASED)
+        self.assertEqual(self.order.status, Order.STATUS_PROCESSING)
+
+        event = self.item.events.last()
+
+        self.assertIsNotNone(event)
+        self.assertEqual(event.event_type, OrderItemEvent.EVENT_TYPE_STATUS_CHANGED)
+        self.assertEqual(event.title, "ნაწილი შეძენილია")
+        self.assertEqual(event.actor_type, OrderItemEvent.ACTOR_TYPE_ADMIN)
+        self.assertEqual(event.actor_name, "operator@example.com")
+        self.assertTrue(event.visible_to_customer)
+        self.assertEqual(
+            event.old_value["item_status"],
+            OrderItem.ITEM_STATUS_PAYMENT_CONFIRMED,
+        )
+        self.assertEqual(
+            event.new_value["item_status"],
+            OrderItem.ITEM_STATUS_PURCHASED,
+        )
+
+    def test_admin_completed_status_completes_order_when_all_items_completed(self):
+        result = set_order_item_status_from_admin(
+            self.item,
+            OrderItem.ITEM_STATUS_COMPLETED,
+            actor_name="Admin",
+        )
+
+        self.assertEqual(result, "updated")
+
+        self.item.refresh_from_db()
+        self.order.refresh_from_db()
+
+        self.assertEqual(self.item.item_status, OrderItem.ITEM_STATUS_COMPLETED)
+        self.assertEqual(self.order.status, Order.STATUS_COMPLETED)
+
+    def test_admin_status_update_skips_payment_pending_order(self):
+        self.order.status = Order.STATUS_PAYMENT_PENDING
+        self.order.save(update_fields=["status", "updated_at"])
+
+        self.payment.status = Payment.STATUS_PENDING
+        self.payment.paid_at = None
+        self.payment.save(update_fields=["status", "paid_at", "updated_at"])
+
+        self.item.item_status = OrderItem.ITEM_STATUS_CREATED
+        self.item.save(update_fields=["item_status", "updated_at"])
+
+        result = set_order_item_status_from_admin(
+            self.item,
+            OrderItem.ITEM_STATUS_PURCHASED,
+            actor_name="Admin",
+        )
+
+        self.assertEqual(result, "skipped_payment_pending")
+
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.item_status, OrderItem.ITEM_STATUS_CREATED)
+        self.assertEqual(self.item.events.count(), 0)
+
 
 class DisabledDemoEndpointTests(TestCase):
     def setUp(self):
