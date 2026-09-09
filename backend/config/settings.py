@@ -138,11 +138,11 @@ MAILERS = {
 }
 
 
-CORS_ALLOWED_ORIGINS = [
-    "http://2.28.40.250:5173",
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
+CORS_ALLOWED_ORIGINS = config(
+    "CORS_ALLOWED_ORIGINS",
+    default="http://2.28.40.250:5173,http://localhost:5173,http://127.0.0.1:5173",
+    cast=Csv(),
+)
 
 
 # External parts provider
