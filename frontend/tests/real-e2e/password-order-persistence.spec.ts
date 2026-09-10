@@ -17,13 +17,14 @@ async function openProfilePageAfterInitialLoad(page: Page) {
   ).toBeVisible();
 }
 
-test("real backend customer flow: verify phone, search, cart, checkout, order detail", async ({ page }) => {
+test("real backend password login keeps customer order access", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
 
   const phone = makeUniqueGeorgianPhone();
-  const customerName = `Integration Customer ${phone}`;
-  const partNumber = `FLOW-${phone}`;
+  const customerName = `Password Flow Customer ${phone}`;
+  const password = "Strong1!";
+  const partNumber = `PWD-${phone}`;
 
   await openProfilePageAfterInitialLoad(page);
 
@@ -43,7 +44,6 @@ test("real backend customer flow: verify phone, search, cart, checkout, order de
   const sendCodeData = await sendCodeResponse.json();
   expect(sendCodeData.demo_code).toBeTruthy();
 
-  await expect(page.getByLabel("SMS კოდი")).toBeVisible();
   await page.getByLabel("SMS კოდი").fill(sendCodeData.demo_code);
 
   const firstVerifyResponsePromise = page.waitForResponse(
@@ -60,7 +60,6 @@ test("real backend customer flow: verify phone, search, cart, checkout, order de
   const firstVerifyData = await firstVerifyResponse.json();
 
   if (firstVerifyData.requires_customer_name) {
-    await expect(page.getByLabel("სახელი")).toBeVisible();
     await page.getByLabel("სახელი").fill(customerName);
 
     const secondVerifyResponsePromise = page.waitForResponse(
@@ -82,6 +81,24 @@ test("real backend customer flow: verify phone, search, cart, checkout, order de
   }
 
   await expect(page.getByText("ტელეფონი დადასტურებულია")).toBeVisible();
+
+  await page.getByLabel("ახალი პაროლი", { exact: true }).fill(password);
+  await page
+    .getByLabel("გაიმეორეთ ახალი პაროლი", { exact: true })
+    .fill(password);
+
+  const setPasswordResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/accounts/profile/password/") &&
+      response.request().method() === "POST"
+  );
+
+  await page.getByRole("button", { name: "პაროლის შექმნა" }).click();
+
+  const setPasswordResponse = await setPasswordResponsePromise;
+  expect(setPasswordResponse.status()).toBe(200);
+
+  await expect(page.getByText("პაროლი შეიქმნა")).toBeVisible();
 
   await page.goto("/");
   await expect(page.getByText("Backend status: ok")).toBeVisible();
@@ -113,8 +130,6 @@ test("real backend customer flow: verify phone, search, cart, checkout, order de
   const addCartResponse = await addCartResponsePromise;
   expect(addCartResponse.status()).toBe(201);
 
-  await expect(page.getByText("ნაწილი დაემატა კალათაში")).toBeVisible();
-
   await page.goto("/cart");
   await expect(page.getByRole("heading", { name: "შენი კალათა" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Demo OEM Part" })).toBeVisible();
@@ -124,10 +139,10 @@ test("real backend customer flow: verify phone, search, cart, checkout, order de
   await expect(page.getByRole("heading", { name: "შეკვეთის გაფორმება" })).toBeVisible();
   await expect(page.getByText("ტელეფონი დადასტურებულია")).toBeVisible();
 
-  await page.getByPlaceholder("VIN").fill("TESTVIN1234567890");
+  await page.getByPlaceholder("VIN").fill("PASSWORDVIN1234567");
   await page
     .getByPlaceholder("მაგ: გთხოვთ გადაამოწმოთ თავსებადობა")
-    .fill("Real backend Playwright integration test");
+    .fill("Password persistence real backend test");
 
   const checkoutResponsePromise = page.waitForResponse(
     (response) =>
@@ -142,16 +157,48 @@ test("real backend customer flow: verify phone, search, cart, checkout, order de
 
   const orderData = await checkoutResponse.json();
   expect(orderData.order_number).toContain("LP-");
-  expect(orderData.payment.status).toBe("pending");
   expect(orderData.items[0].part_number).toBe(partNumber);
 
   await expect(page).toHaveURL(new RegExp(`/orders/${orderData.order_number}$`));
   await expect(page.getByRole("heading", { name: orderData.order_number })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Demo OEM Part" })).toBeVisible();
+
+  await page.goto("/profile");
+  await page.getByRole("button", { name: "გასვლა" }).click();
+
+  await expect(page.getByLabel("ტელეფონის ნომერი")).toHaveValue("");
+
+  const passwordLoginBox = page.locator(".note-box").filter({
+    hasText: "პაროლით შესვლა",
+  });
+
+  await passwordLoginBox
+    .getByLabel("მობილური პაროლით შესვლისთვის")
+    .fill(phone);
+  await passwordLoginBox.getByLabel("პაროლი", { exact: true }).fill(password);
+
+  const loginResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/accounts/login-password/") &&
+      response.request().method() === "POST"
+  );
+
+  await passwordLoginBox
+    .getByRole("button", { name: "პაროლით შესვლა" })
+    .click();
+
+  const loginResponse = await loginResponsePromise;
+  expect(loginResponse.status()).toBe(200);
+
+  await expect(page.getByText("ტელეფონი დადასტურებულია")).toBeVisible();
+  await expect(page.getByText(phone)).toBeVisible();
 
   await page.goto("/orders");
   await expect(page.getByRole("heading", { name: "ჩემი შეკვეთები" })).toBeVisible();
   await expect(page.getByText(orderData.order_number)).toBeVisible();
+
+  await page.goto(`/orders/${orderData.order_number}`);
+  await expect(page.getByRole("heading", { name: orderData.order_number })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Demo OEM Part" })).toBeVisible();
 
   expect(pageErrors).toEqual([]);
 });

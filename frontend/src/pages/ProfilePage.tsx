@@ -68,11 +68,17 @@ function ProfilePage() {
       )}
 
       <PhoneVerificationForm
+        key={
+          profile
+            ? `phone-${profile.id}-${profile.customer_phone}`
+            : "phone-guest"
+        }
         initialProfile={profile}
         onVerified={(verifiedProfile) => setProfile(verifiedProfile)}
       />
 
       <PasswordAccountForm
+        key={profile ? `password-${profile.id}` : "password-guest"}
         profile={profile}
         onAuthenticated={(authenticatedProfile) => setProfile(authenticatedProfile)}
         onPasswordUpdated={(updatedProfile) => setProfile(updatedProfile)}

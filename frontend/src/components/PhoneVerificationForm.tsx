@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { FormEvent } from "react";
 
 import {
@@ -19,11 +19,17 @@ function PhoneVerificationForm({
   initialProfile,
   onVerified,
 }: PhoneVerificationFormProps) {
-  const [customerName, setCustomerName] = useState("");
-  const [customerPhone, setCustomerPhone] = useState("");
+  const [customerName, setCustomerName] = useState(
+    initialProfile?.customer_name || ""
+  );
+  const [customerPhone, setCustomerPhone] = useState(
+    initialProfile?.customer_phone || ""
+  );
   const [verificationCode, setVerificationCode] = useState("");
 
-  const [isPhoneVerified, setIsPhoneVerified] = useState(false);
+  const [isPhoneVerified, setIsPhoneVerified] = useState(
+    Boolean(initialProfile?.is_phone_verified)
+  );
   const [isSendingCode, setIsSendingCode] = useState(false);
   const [isVerifyingCode, setIsVerifyingCode] = useState(false);
 
@@ -34,24 +40,6 @@ function PhoneVerificationForm({
 
   const [feedbackType, setFeedbackType] = useState<FeedbackType>("info");
   const [message, setMessage] = useState("");
-
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      if (initialProfile) {
-        setCustomerName(initialProfile.customer_name);
-        setCustomerPhone(initialProfile.customer_phone);
-        setIsPhoneVerified(initialProfile.is_phone_verified);
-        return;
-      }
-
-      setCustomerName("");
-      setCustomerPhone("");
-      resetVerificationState();
-      setMessage("");
-    }, 0);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [initialProfile]);
 
   function showFeedback(type: FeedbackType, text: string) {
     setFeedbackType(type);

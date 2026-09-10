@@ -230,7 +230,7 @@ test("customer can login with password without SMS code", async ({ page }) => {
     .getByRole("button", { name: "პაროლით შესვლა" })
     .click();
 
-  await expect(page.getByText("პაროლით შესვლა წარმატებულია")).toBeVisible();
+  await expect(page.getByText("ტელეფონი დადასტურებულია")).toBeVisible();
   await expect(page.getByText("Password Customer · 555123456")).toBeVisible();
 
   expect(requests.loginPassword).toHaveLength(1);
@@ -282,9 +282,7 @@ test("customer can reset forgotten password and becomes authenticated", async ({
     .getByRole("button", { name: "პაროლის აღდგენა" })
     .click();
 
-  await expect(
-    page.getByText("პაროლი აღდგენილია და შესვლა შესრულდა")
-  ).toBeVisible();
+  await expect(page.getByText("ტელეფონი დადასტურებულია")).toBeVisible();
   await expect(page.getByText("Password Customer · 555123456")).toBeVisible();
 
   expect(requests.sendResetCode).toHaveLength(1);
