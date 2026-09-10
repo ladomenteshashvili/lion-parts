@@ -5,6 +5,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from accounts.models import Customer
+from accounts.customer_sessions import get_customer_for_session
 
 from .providers import (
     PartsProviderError,
@@ -19,7 +20,7 @@ def _get_customer_by_session_id(session_id: str) -> Customer | None:
     if not session_id:
         return None
 
-    return Customer.objects.filter(session_id=session_id).first()
+    return get_customer_for_session(session_id)
 
 
 @api_view(["POST"])
@@ -84,12 +85,9 @@ def get_parts_feed(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    customer = Customer.objects.filter(
-        session_id=session_id,
-        is_phone_verified=True,
-    ).first()
+    customer = get_customer_for_session(session_id)
 
-    if not customer or not customer.phone:
+    if not customer or not customer.is_phone_verified or not customer.phone:
         return Response(
             {
                 "requires_phone_verification": True,
@@ -198,7 +196,7 @@ def create_quote_request(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    customer = Customer.objects.filter(session_id=session_id).first()
+    customer = get_customer_for_session(session_id)
 
     if not customer or not customer.has_quote_request_permission():
         return Response(

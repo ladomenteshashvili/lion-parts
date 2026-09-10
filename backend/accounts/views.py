@@ -9,6 +9,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from .models import Customer, PhoneVerificationCode
+from .customer_sessions import attach_customer_session, get_customer_for_session
 from .serializers import CustomerSerializer
 from .sms import SenderGeError, send_sms
 
@@ -55,7 +56,7 @@ def get_profile(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    customer = Customer.objects.filter(session_id=session_id).first()
+    customer = get_customer_for_session(session_id)
 
     if not customer:
         return Response(
@@ -324,20 +325,32 @@ def verify_phone_code(request):
     verification.verified_at = timezone.now()
     verification.save(update_fields=["status", "verified_at", "attempts"])
 
-    defaults = {
-        "name": final_customer_name,
-        "phone": normalized_phone,
-        "is_phone_verified": True,
-    }
-
     if existing_phone_customer:
-        defaults["tariff"] = existing_phone_customer.tariff
-        defaults["can_request_quote"] = existing_phone_customer.can_request_quote
+        customer = existing_phone_customer
+        customer.session_id = session_id
+        customer.name = final_customer_name
+        customer.phone = normalized_phone
+        customer.is_phone_verified = True
+        customer.save(
+            update_fields=[
+                "session_id",
+                "name",
+                "phone",
+                "is_phone_verified",
+                "updated_at",
+            ]
+        )
+    else:
+        customer, _created = Customer.objects.update_or_create(
+            phone=normalized_phone,
+            defaults={
+                "session_id": session_id,
+                "name": final_customer_name,
+                "is_phone_verified": True,
+            },
+        )
 
-    customer, _created = Customer.objects.update_or_create(
-        session_id=session_id,
-        defaults=defaults,
-    )
+    attach_customer_session(customer, session_id)
 
     serializer = CustomerSerializer(customer)
     return Response(serializer.data, status=status.HTTP_200_OK)

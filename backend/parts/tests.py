@@ -5,7 +5,7 @@ from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from .models import CarrierService, PartQuoteRequest, PartSearchLog
-from accounts.models import Customer, CustomerTariff
+from accounts.models import Customer, CustomerSession, CustomerTariff
 
 @override_settings(PARTS_PROVIDER="demo")
 class PartsSearchApiTests(TestCase):
@@ -163,18 +163,16 @@ class PartsSearchApiTests(TestCase):
         first_session_id = "feed-first-session"
         second_session_id = "feed-second-session"
 
-        Customer.objects.create(
+        first_customer = Customer.objects.create(
             session_id=first_session_id,
             name="Feed Customer",
             phone="555111222",
             is_phone_verified=True,
         )
 
-        Customer.objects.create(
+        CustomerSession.objects.create(
+            customer=first_customer,
             session_id=second_session_id,
-            name="Feed Customer",
-            phone="555111222",
-            is_phone_verified=True,
         )
 
         self.client.post(

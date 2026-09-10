@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Customer, CustomerTariff, PhoneVerificationCode
+from .models import Customer, CustomerSession, CustomerTariff, PhoneVerificationCode
 
 
 @admin.register(CustomerTariff)
@@ -25,6 +25,14 @@ class CustomerTariffAdmin(admin.ModelAdmin):
     readonly_fields = ("created_at", "updated_at")
 
 
+class CustomerSessionInline(admin.TabularInline):
+    model = CustomerSession
+    extra = 0
+    fields = ("session_id", "created_at", "last_seen_at")
+    readonly_fields = ("session_id", "created_at", "last_seen_at")
+    can_delete = True
+
+
 @admin.register(Customer)
 class CustomerAdmin(admin.ModelAdmin):
     list_display = (
@@ -35,12 +43,26 @@ class CustomerAdmin(admin.ModelAdmin):
         "tariff",
         "is_phone_verified",
         "can_request_quote",
+        "session_count",
         "updated_at",
     )
     list_filter = ("tariff", "is_phone_verified", "can_request_quote")
-    search_fields = ("name", "phone", "session_id")
+    search_fields = ("name", "phone", "session_id", "sessions__session_id")
     list_editable = ("tariff", "is_phone_verified", "can_request_quote")
     readonly_fields = ("created_at", "updated_at")
+    inlines = [CustomerSessionInline]
+
+    @admin.display(description="Sessions")
+    def session_count(self, obj):
+        return obj.sessions.count()
+
+
+@admin.register(CustomerSession)
+class CustomerSessionAdmin(admin.ModelAdmin):
+    list_display = ("id", "customer", "session_id", "created_at", "last_seen_at")
+    search_fields = ("session_id", "customer__name", "customer__phone")
+    list_filter = ("created_at", "last_seen_at")
+    readonly_fields = ("created_at", "last_seen_at")
 
 
 @admin.register(PhoneVerificationCode)

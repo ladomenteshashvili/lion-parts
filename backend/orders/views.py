@@ -15,6 +15,7 @@ from cart.models import Cart
 from .models import Order, OrderCustomerNotification, OrderItem, OrderItemEvent, OrderSupportMessage, Payment
 from .serializers import OrderCustomerNotificationPublicSerializer, OrderSerializer
 from accounts.models import Customer
+from accounts.customer_sessions import get_customer_for_session
 
 
 def _demo_order_endpoint_disabled_response():
@@ -26,20 +27,16 @@ def _demo_order_endpoint_disabled_response():
 
 
 def build_customer_order_access_filter(session_id, prefix=""):
-    customer = Customer.objects.filter(
-        session_id=session_id,
-        is_phone_verified=True,
-    ).first()
+    customer = get_customer_for_session(session_id)
 
-    if not customer:
+    if not customer or not customer.is_phone_verified:
         return Q(pk__isnull=True)
 
     access_filter = Q(**{f"{prefix}customer_id": customer.id})
 
     if customer.phone:
-        # Compatibility for older orders or duplicate legacy Customer rows
-        # that were linked only by phone before Order.customer existed.
-        access_filter |= Q(**{f"{prefix}customer__phone": customer.phone})
+        # Compatibility for older orders that were linked only by phone
+        # before Order.customer existed.
         access_filter |= (
             Q(**{f"{prefix}customer__isnull": True})
             & Q(**{f"{prefix}customer_phone": customer.phone})
@@ -403,7 +400,7 @@ def checkout(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    customer = Customer.objects.filter(session_id=session_id).first()
+    customer = get_customer_for_session(session_id)
 
     if not customer or not customer.is_phone_verified:
         return Response(

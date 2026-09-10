@@ -4,7 +4,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from accounts.models import Customer, PhoneVerificationCode
+from accounts.models import Customer, CustomerSession, PhoneVerificationCode
 
 
 class AccountsApiTests(TestCase):
@@ -344,6 +344,75 @@ class AccountsApiTests(TestCase):
         self.assertEqual(customer.phone, "555123456")
         self.assertTrue(customer.is_phone_verified)
         self.assertTrue(customer.can_request_quote)
+
+    @override_settings(SENDER_GE_ENABLED=False)
+    def test_same_phone_login_from_new_session_reuses_customer_account(self):
+        first_send_response = self.client.post(
+            "/api/accounts/send-code/",
+            {
+                "session_id": self.session_id,
+                "customer_phone": "+995555123456",
+            },
+            format="json",
+        )
+
+        first_verify_response = self.client.post(
+            "/api/accounts/verify-code/",
+            {
+                "session_id": self.session_id,
+                "customer_name": "Lado Menteshashvili",
+                "customer_phone": "+995555123456",
+                "code": first_send_response.data["demo_code"],
+            },
+            format="json",
+        )
+
+        self.assertEqual(first_verify_response.status_code, 200)
+
+        second_session_id = "second-browser-session"
+
+        second_send_response = self.client.post(
+            "/api/accounts/send-code/",
+            {
+                "session_id": second_session_id,
+                "customer_phone": "+995555123456",
+            },
+            format="json",
+        )
+
+        second_verify_response = self.client.post(
+            "/api/accounts/verify-code/",
+            {
+                "session_id": second_session_id,
+                "customer_phone": "+995555123456",
+                "code": second_send_response.data["demo_code"],
+            },
+            format="json",
+        )
+
+        self.assertEqual(second_verify_response.status_code, 200)
+        self.assertEqual(Customer.objects.count(), 1)
+
+        customer = Customer.objects.get(phone="555123456")
+
+        self.assertEqual(customer.name, "Lado Menteshashvili")
+        self.assertTrue(customer.is_phone_verified)
+        self.assertEqual(
+            CustomerSession.objects.filter(customer=customer).count(),
+            2,
+        )
+
+        first_profile_response = self.client.get(
+            f"/api/accounts/profile/?session_id={self.session_id}"
+        )
+        second_profile_response = self.client.get(
+            f"/api/accounts/profile/?session_id={second_session_id}"
+        )
+
+        self.assertEqual(first_profile_response.status_code, 200)
+        self.assertEqual(second_profile_response.status_code, 200)
+        self.assertEqual(first_profile_response.data["id"], customer.id)
+        self.assertEqual(second_profile_response.data["id"], customer.id)
 
     @override_settings(SENDER_GE_ENABLED=False)
     def test_verify_phone_code_requires_name_for_new_phone(self):

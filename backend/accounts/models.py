@@ -36,7 +36,7 @@ class CustomerTariff(models.Model):
 class Customer(models.Model):
     session_id = models.CharField(max_length=120, db_index=True)
     name = models.CharField(max_length=120)
-    phone = models.CharField(max_length=40, db_index=True)
+    phone = models.CharField(max_length=40, unique=True)
 
     tariff = models.ForeignKey(
         CustomerTariff,
@@ -82,6 +82,24 @@ class Customer(models.Model):
         tariff = self.get_tariff()
 
         return bool(tariff and tariff.can_enter_weight)
+
+
+class CustomerSession(models.Model):
+    customer = models.ForeignKey(
+        Customer,
+        on_delete=models.CASCADE,
+        related_name="sessions",
+    )
+    session_id = models.CharField(max_length=120, unique=True, db_index=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-last_seen_at"]
+
+    def __str__(self):
+        return f"{self.customer_id} · {self.session_id}"
 
 
 class PhoneVerificationCode(models.Model):
