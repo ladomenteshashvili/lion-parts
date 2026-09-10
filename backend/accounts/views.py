@@ -37,6 +37,34 @@ def is_real_customer_name(name, phone):
     return bool(cleaned_name) and cleaned_name != phone
 
 
+
+def get_verified_customer_for_profile_action(request):
+    session_id = request.data.get("session_id", "").strip()
+
+    if not session_id:
+        return None, Response(
+            {"detail": "session_id is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    customer = get_customer_for_session(session_id)
+
+    if not customer or not customer.is_phone_verified:
+        return None, Response(
+            {"detail": "phone verification required"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    return customer, None
+
+
+def get_customer_legal_entity_profile(customer):
+    try:
+        return customer.legal_entity_profile
+    except LegalEntityProfile.DoesNotExist:
+        return None
+
+
 def get_existing_verified_customer_by_phone(phone):
     return (
         Customer.objects.filter(
@@ -192,6 +220,195 @@ def upsert_legal_entity_profile(request):
             "is_active": True,
         },
     )
+
+    customer.refresh_from_db()
+
+    serializer = CustomerSerializer(customer)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+
+@api_view(["POST"])
+def send_legal_entity_mobile_verification_code(request):
+    customer, error_response = get_verified_customer_for_profile_action(request)
+
+    if error_response:
+        return error_response
+
+    legal_entity = get_customer_legal_entity_profile(customer)
+
+    if not legal_entity:
+        return Response(
+            {"detail": "legal entity profile not found"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if legal_entity.is_mobile_verified:
+        return Response(
+            {
+                "detail": "legal entity mobile already verified",
+                "phone": legal_entity.mobile_phone,
+                "already_verified": True,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    session_id = request.data.get("session_id", "").strip()
+    mobile_phone = legal_entity.mobile_phone
+
+    resend_after = timezone.now() - timedelta(
+        seconds=settings.PHONE_VERIFICATION_RESEND_SECONDS
+    )
+
+    recent_code = PhoneVerificationCode.objects.filter(
+        session_id=session_id,
+        phone=mobile_phone,
+        purpose=PhoneVerificationCode.PURPOSE_LEGAL_ENTITY_MOBILE,
+        status=PhoneVerificationCode.STATUS_PENDING,
+        created_at__gte=resend_after,
+    ).first()
+
+    if recent_code:
+        remaining_seconds = max(
+            0,
+            int((recent_code.expires_at - timezone.now()).total_seconds()),
+        )
+
+        return Response(
+            {
+                "detail": "verification code already sent",
+                "phone": mobile_phone,
+                "expires_in_seconds": remaining_seconds,
+                "retry_after_seconds": settings.PHONE_VERIFICATION_RESEND_SECONDS,
+                "already_sent": True,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    code = generate_sms_code()
+    message = f"Lion Parts legal entity verification code: {code}"
+
+    try:
+        provider_response = send_sms(mobile_phone, message)
+    except SenderGeError as exc:
+        return Response(
+            {"detail": str(exc)},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+
+    expires_at = timezone.now() + timedelta(
+        minutes=settings.PHONE_VERIFICATION_CODE_TTL_MINUTES
+    )
+
+    with transaction.atomic():
+        PhoneVerificationCode.objects.filter(
+            session_id=session_id,
+            phone=mobile_phone,
+            purpose=PhoneVerificationCode.PURPOSE_LEGAL_ENTITY_MOBILE,
+            status=PhoneVerificationCode.STATUS_PENDING,
+        ).update(status=PhoneVerificationCode.STATUS_EXPIRED)
+
+        verification = PhoneVerificationCode(
+            session_id=session_id,
+            phone=mobile_phone,
+            purpose=PhoneVerificationCode.PURPOSE_LEGAL_ENTITY_MOBILE,
+            status=PhoneVerificationCode.STATUS_PENDING,
+            max_attempts=settings.PHONE_VERIFICATION_MAX_ATTEMPTS,
+            expires_at=expires_at,
+            sent_message_id=str(provider_response.get("messageId", "")),
+            provider_response=provider_response,
+        )
+        verification.set_code(code)
+        verification.save()
+
+    response_data = {
+        "detail": "verification code sent",
+        "phone": mobile_phone,
+        "expires_in_seconds": settings.PHONE_VERIFICATION_CODE_TTL_MINUTES * 60,
+    }
+
+    if not settings.SENDER_GE_ENABLED:
+        response_data["demo_code"] = code
+
+    return Response(response_data, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+def verify_legal_entity_mobile_code(request):
+    customer, error_response = get_verified_customer_for_profile_action(request)
+
+    if error_response:
+        return error_response
+
+    legal_entity = get_customer_legal_entity_profile(customer)
+
+    if not legal_entity:
+        return Response(
+            {"detail": "legal entity profile not found"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    code = request.data.get("code", "").strip()
+
+    if not code:
+        return Response(
+            {"detail": "code is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    session_id = request.data.get("session_id", "").strip()
+
+    verification = PhoneVerificationCode.objects.filter(
+        session_id=session_id,
+        phone=legal_entity.mobile_phone,
+        purpose=PhoneVerificationCode.PURPOSE_LEGAL_ENTITY_MOBILE,
+        status=PhoneVerificationCode.STATUS_PENDING,
+    ).first()
+
+    if not verification:
+        return Response(
+            {"detail": "verification code not found"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if verification.is_expired():
+        verification.status = PhoneVerificationCode.STATUS_EXPIRED
+        verification.save(update_fields=["status"])
+
+        return Response(
+            {"detail": "verification code expired"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if verification.attempts >= verification.max_attempts:
+        verification.status = PhoneVerificationCode.STATUS_FAILED
+        verification.save(update_fields=["status"])
+
+        return Response(
+            {"detail": "too many attempts"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    verification.attempts += 1
+
+    if not verification.check_code(code):
+        if verification.attempts >= verification.max_attempts:
+            verification.status = PhoneVerificationCode.STATUS_FAILED
+
+        verification.save(update_fields=["attempts", "status"])
+
+        return Response(
+            {"detail": "invalid verification code"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    verification.status = PhoneVerificationCode.STATUS_VERIFIED
+    verification.verified_at = timezone.now()
+    verification.save(update_fields=["status", "verified_at", "attempts"])
+
+    legal_entity.is_mobile_verified = True
+    legal_entity.mobile_verified_at = timezone.now()
+    legal_entity.save(update_fields=["is_mobile_verified", "mobile_verified_at", "updated_at"])
 
     customer.refresh_from_db()
 
