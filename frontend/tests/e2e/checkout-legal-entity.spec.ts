@@ -172,7 +172,7 @@ test("verified customer can choose legal entity billing at checkout", async ({
 
   await page.getByRole("button", { name: "შეკვეთის შექმნა" }).click();
 
-  await expect(page).toHaveURL(/\\/orders\\/LP-LEGAL-0001/);
+  await expect(page).toHaveURL(/\/orders\/LP-LEGAL-0001/);
 
   expect(checkoutRequests).toHaveLength(1);
   expect(checkoutRequests[0]).toMatchObject({
