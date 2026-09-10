@@ -10,6 +10,10 @@ on:
       - main
       - dev
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend-tests:
     name: Backend tests
@@ -56,14 +60,52 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Run Django system checks
+        working-directory: backend
+        run: python manage.py check
+
+      - name: Check for missing migrations
+        working-directory: backend
+        run: python manage.py makemigrations --check --dry-run
+
       - name: Run backend tests
         working-directory: backend
-        run: |
-          python manage.py test
+        run: python manage.py test
+
+  frontend-static-checks:
+    name: Frontend lint and build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run frontend lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Build frontend
+        working-directory: frontend
+        env:
+          VITE_API_BASE_URL: http://127.0.0.1:8000
+        run: npm run build
 
   frontend-mock-e2e:
     name: Frontend mock E2E
     runs-on: ubuntu-latest
+    needs:
+      - frontend-static-checks
 
     steps:
       - name: Checkout repository
@@ -90,9 +132,22 @@ jobs:
           VITE_API_BASE_URL: http://127.0.0.1:8000
         run: npm run test:e2e:mock
 
+      - name: Upload Playwright mock artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-mock-artifacts
+          path: |
+            frontend/test-results
+            frontend/playwright-report
+          if-no-files-found: ignore
+
   real-backend-e2e:
     name: Real backend E2E
     runs-on: ubuntu-latest
+    needs:
+      - backend-tests
+      - frontend-static-checks
 
     env:
       DJANGO_SETTINGS_MODULE: config.e2e_settings
@@ -153,3 +208,21 @@ jobs:
       - name: Run real backend Playwright flow
         working-directory: frontend
         run: npm run test:e2e:real
+
+      - name: Upload backend E2E logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-e2e-logs
+          path: backend-e2e.log
+          if-no-files-found: ignore
+
+      - name: Upload Playwright real backend artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-real-backend-artifacts
+          path: |
+            frontend/test-results
+            frontend/playwright-report
+          if-no-files-found: ignore
