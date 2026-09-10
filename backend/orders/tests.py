@@ -7,7 +7,7 @@ from rest_framework.test import APIClient
 
 from cart.models import Cart, CartItem
 from orders.models import Order, OrderCustomerNotification, OrderItem, OrderItemEvent, OrderSupportMessage, Payment
-from accounts.models import Customer
+from accounts.models import Customer, CustomerSession
 from orders.admin import request_order_item_action_from_admin, set_order_item_status_from_admin
 
 
@@ -434,11 +434,9 @@ class OrderFlowTests(TestCase):
         order, _item = self._create_order_from_cart()
         other_session_id = "same-phone-new-session"
 
-        Customer.objects.create(
+        CustomerSession.objects.create(
+            customer=self.customer,
             session_id=other_session_id,
-            name="Lado",
-            phone="599123456",
-            is_phone_verified=True,
         )
 
         response = self.client.get(
