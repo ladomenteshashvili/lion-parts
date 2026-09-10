@@ -2,13 +2,15 @@ import secrets
 from datetime import timedelta
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
-from .models import Customer, PhoneVerificationCode
+from .models import Customer, LegalEntityProfile, PhoneVerificationCode
 from .customer_sessions import attach_customer_session, get_customer_for_session
 from .serializers import CustomerSerializer
 from .sms import SenderGeError, send_sms
@@ -66,6 +68,135 @@ def get_profile(request):
 
     serializer = CustomerSerializer(customer)
     return Response(serializer.data)
+
+
+
+LEGAL_ENTITY_REQUIRED_FIELDS = [
+    "company_identification_code",
+    "company_official_name",
+    "legal_address",
+    "contact_first_name",
+    "contact_last_name",
+    "email",
+    "mobile_phone",
+]
+
+
+def clean_required_text(data, field_name):
+    value = str(data.get(field_name, "") or "").strip()
+
+    if not value:
+        raise ValueError(f"{field_name} is required")
+
+    return value
+
+
+def clean_legal_entity_email(email):
+    email = str(email or "").strip().lower()
+
+    if not email:
+        raise ValueError("email is required")
+
+    try:
+        validate_email(email)
+    except ValidationError:
+        raise ValueError("invalid email")
+
+    return email
+
+
+def build_legal_entity_payload(data):
+    payload = {
+        "company_identification_code": clean_required_text(
+            data,
+            "company_identification_code",
+        ),
+        "company_official_name": clean_required_text(
+            data,
+            "company_official_name",
+        ),
+        "legal_address": clean_required_text(data, "legal_address"),
+        "contact_first_name": clean_required_text(data, "contact_first_name"),
+        "contact_last_name": clean_required_text(data, "contact_last_name"),
+        "email": clean_legal_entity_email(data.get("email")),
+    }
+
+    payload["mobile_phone"] = normalize_georgian_phone(
+        clean_required_text(data, "mobile_phone")
+    )
+
+    return payload
+
+
+@api_view(["POST", "PUT", "PATCH"])
+def upsert_legal_entity_profile(request):
+    session_id = request.data.get("session_id", "").strip()
+
+    if not session_id:
+        return Response(
+            {"detail": "session_id is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    customer = get_customer_for_session(session_id)
+
+    if not customer or not customer.is_phone_verified:
+        return Response(
+            {"detail": "phone verification required"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    try:
+        payload = build_legal_entity_payload(request.data)
+    except ValueError as exc:
+        return Response(
+            {"detail": str(exc)},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    duplicate_company = LegalEntityProfile.objects.filter(
+        company_identification_code=payload["company_identification_code"],
+    ).exclude(customer=customer).exists()
+
+    if duplicate_company:
+        return Response(
+            {"detail": "company identification code already exists"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    duplicate_email = LegalEntityProfile.objects.filter(
+        email__iexact=payload["email"],
+    ).exclude(customer=customer).exists()
+
+    if duplicate_email:
+        return Response(
+            {"detail": "email already exists"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    old_profile = getattr(customer, "legal_entity_profile", None)
+
+    is_mobile_verified = payload["mobile_phone"] == customer.phone
+    mobile_verified_at = timezone.now() if is_mobile_verified else None
+
+    if old_profile and old_profile.mobile_phone == payload["mobile_phone"]:
+        is_mobile_verified = old_profile.is_mobile_verified
+        mobile_verified_at = old_profile.mobile_verified_at
+
+    LegalEntityProfile.objects.update_or_create(
+        customer=customer,
+        defaults={
+            **payload,
+            "is_mobile_verified": is_mobile_verified,
+            "mobile_verified_at": mobile_verified_at,
+            "is_active": True,
+        },
+    )
+
+    customer.refresh_from_db()
+
+    serializer = CustomerSerializer(customer)
+    return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 @api_view(["POST"])
