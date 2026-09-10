@@ -12,6 +12,7 @@ export type CustomerProfile = {
   markup_percent: string;
   can_enter_weight: boolean;
   is_phone_verified: boolean;
+  has_password: boolean;
   can_request_quote: boolean;
   created_at: string;
   updated_at: string;
@@ -43,24 +44,28 @@ export function isCustomerProfile(
 }
 
 async function getErrorMessage(response: Response, fallback: string) {
-  try {
-    const data = await response.json();
+  let data: unknown = null;
 
-    if (data?.detail) {
-      return String(data.detail);
-    }
+  try {
+    data = await response.json();
   } catch {
     // Ignore JSON parsing errors and fallback below.
   }
 
-  try {
-    const errorText = await response.text();
+  if (data && typeof data === "object") {
+    const errorData = data as { detail?: unknown; password?: unknown };
 
-    if (errorText) {
-      return errorText;
+    if (errorData.detail) {
+      return String(errorData.detail);
     }
-  } catch {
-    // Ignore text parsing errors and fallback below.
+
+    if (Array.isArray(errorData.password)) {
+      return errorData.password.map(String).join("\n");
+    }
+
+    if (errorData.password) {
+      return String(errorData.password);
+    }
   }
 
   return fallback;
@@ -138,6 +143,129 @@ export async function verifyPhoneCode(payload: {
     const errorMessage = await getErrorMessage(
       response,
       "Verification code check failed"
+    );
+
+    throw new Error(errorMessage);
+  }
+
+  return response.json();
+}
+
+export async function setProfilePassword(payload: {
+  current_password?: string;
+  new_password: string;
+}): Promise<CustomerProfile> {
+  const sessionId = getSessionId();
+
+  const response = await fetch(`${API_BASE_URL}/api/accounts/profile/password/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      session_id: sessionId,
+      current_password: payload.current_password || "",
+      new_password: payload.new_password,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorMessage = await getErrorMessage(
+      response,
+      "Password save failed"
+    );
+
+    throw new Error(errorMessage);
+  }
+
+  return response.json();
+}
+
+export async function loginWithPassword(payload: {
+  customer_phone: string;
+  password: string;
+}): Promise<CustomerProfile> {
+  const sessionId = getSessionId();
+
+  const response = await fetch(`${API_BASE_URL}/api/accounts/login-password/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      session_id: sessionId,
+      customer_phone: payload.customer_phone,
+      password: payload.password,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorMessage = await getErrorMessage(
+      response,
+      "Password login failed"
+    );
+
+    throw new Error(errorMessage);
+  }
+
+  return response.json();
+}
+
+export async function sendPasswordResetCode(payload: {
+  customer_phone: string;
+}): Promise<SendPhoneVerificationResponse> {
+  const sessionId = getSessionId();
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/accounts/password-reset/send-code/`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        session_id: sessionId,
+        customer_phone: payload.customer_phone,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorMessage = await getErrorMessage(
+      response,
+      "Password reset code send failed"
+    );
+
+    throw new Error(errorMessage);
+  }
+
+  return response.json();
+}
+
+export async function resetPassword(payload: {
+  customer_phone: string;
+  code: string;
+  new_password: string;
+}): Promise<CustomerProfile> {
+  const sessionId = getSessionId();
+
+  const response = await fetch(`${API_BASE_URL}/api/accounts/password-reset/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      session_id: sessionId,
+      customer_phone: payload.customer_phone,
+      code: payload.code,
+      new_password: payload.new_password,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorMessage = await getErrorMessage(
+      response,
+      "Password reset failed"
     );
 
     throw new Error(errorMessage);

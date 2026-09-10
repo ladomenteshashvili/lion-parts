@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import PasswordAccountForm from "../components/PasswordAccountForm";
 import PhoneVerificationForm from "../components/PhoneVerificationForm";
 import { getProfile, type CustomerProfile } from "../api/profile";
 import { resetSessionId } from "../api/cart";
@@ -69,6 +70,12 @@ function ProfilePage() {
       <PhoneVerificationForm
         initialProfile={profile}
         onVerified={(verifiedProfile) => setProfile(verifiedProfile)}
+      />
+
+      <PasswordAccountForm
+        profile={profile}
+        onAuthenticated={(authenticatedProfile) => setProfile(authenticatedProfile)}
+        onPasswordUpdated={(updatedProfile) => setProfile(updatedProfile)}
       />
     </section>
   );
