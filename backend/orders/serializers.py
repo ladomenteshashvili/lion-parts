@@ -104,6 +104,8 @@ class OrderSupportMessageSerializer(serializers.ModelSerializer):
 
 
 class OrderSerializer(serializers.ModelSerializer):
+    current_customer_name = serializers.CharField(read_only=True)
+    current_customer_phone = serializers.CharField(read_only=True)
     items = OrderItemSerializer(many=True, read_only=True)
     payment = PaymentSerializer(read_only=True)
     status_label = serializers.CharField(source="get_status_display", read_only=True)
@@ -131,6 +133,8 @@ class OrderSerializer(serializers.ModelSerializer):
             "id",
             "order_number",
             "session_id",
+            "current_customer_name",
+            "current_customer_phone",
             "customer_name",
             "customer_phone",
             "vin",
@@ -148,6 +152,8 @@ class OrderSerializer(serializers.ModelSerializer):
         ]
 
 class PublicOrderSerializer(serializers.ModelSerializer):
+    current_customer_name = serializers.CharField(read_only=True)
+    current_customer_phone = serializers.CharField(read_only=True)
     items = OrderItemSerializer(many=True, read_only=True)
     payment = PaymentSerializer(read_only=True)
     status_label = serializers.CharField(source="get_status_display", read_only=True)
@@ -174,6 +180,8 @@ class PublicOrderSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "order_number",
+            "current_customer_name",
+            "current_customer_phone",
             "customer_name",
             "customer_phone",
             "vin",

@@ -571,8 +571,9 @@ class OrderAdmin(admin.ModelAdmin):
     list_display = (
         "id",
         "order_number",
-        "customer_name",
-        "customer_phone",
+        "current_customer_name",
+        "current_customer_phone",
+        "customer_phone_snapshot",
         "status",
         "payment_status",
         "action_required_items",
@@ -580,18 +581,41 @@ class OrderAdmin(admin.ModelAdmin):
         "total_gel",
         "created_at",
     )
+    list_select_related = ("customer",)
     list_filter = (OperatorOrderTaskFilter, "status", "created_at")
     search_fields = (
         "order_number",
         "session_id",
         "customer_name",
         "customer_phone",
+        "customer__name",
+        "customer__phone",
         "vin",
     )
-    readonly_fields = ("created_at", "updated_at")
+    readonly_fields = (
+        "current_customer_name",
+        "current_customer_phone",
+        "customer_phone_snapshot",
+        "created_at",
+        "updated_at",
+    )
     inlines = [PaymentInline, OrderItemInline, OrderSupportMessageInline]
     actions = ["mark_selected_orders_paid"]
 
+
+    @admin.display(description="Current customer", ordering="customer__name")
+    def current_customer_name(self, obj):
+        return obj.current_customer_name
+
+    @admin.display(description="Current phone", ordering="customer__phone")
+    def current_customer_phone(self, obj):
+        return obj.current_customer_phone
+
+    @admin.display(description="Order phone snapshot")
+    def customer_phone_snapshot(self, obj):
+        if obj.customer_phone != obj.current_customer_phone:
+            return f"{obj.customer_phone} (order)"
+        return obj.customer_phone
 
     @admin.display(description="Action items")
     def action_required_items(self, obj):
