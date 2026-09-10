@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Customer, CustomerSession, CustomerTariff, PhoneVerificationCode
+from .models import Customer, CustomerSession, CustomerTariff, LegalEntityProfile, PhoneVerificationCode
 
 
 @admin.register(CustomerTariff)
@@ -33,6 +33,27 @@ class CustomerSessionInline(admin.TabularInline):
     can_delete = True
 
 
+class LegalEntityProfileInline(admin.StackedInline):
+    model = LegalEntityProfile
+    extra = 0
+    fields = (
+        "company_identification_code",
+        "company_official_name",
+        "legal_address",
+        "contact_first_name",
+        "contact_last_name",
+        "email",
+        "mobile_phone",
+        "is_mobile_verified",
+        "mobile_verified_at",
+        "is_active",
+        "created_at",
+        "updated_at",
+    )
+    readonly_fields = ("created_at", "updated_at")
+    can_delete = True
+
+
 @admin.register(Customer)
 class CustomerAdmin(admin.ModelAdmin):
     list_display = (
@@ -52,7 +73,7 @@ class CustomerAdmin(admin.ModelAdmin):
     list_editable = ("tariff", "is_phone_verified", "can_request_quote")
     exclude = ("password_hash",)
     readonly_fields = ("created_at", "updated_at")
-    inlines = [CustomerSessionInline]
+    inlines = [CustomerSessionInline, LegalEntityProfileInline]
 
     @admin.display(description="Password")
     def has_password_display(self, obj):
@@ -61,6 +82,35 @@ class CustomerAdmin(admin.ModelAdmin):
     @admin.display(description="Sessions")
     def session_count(self, obj):
         return obj.sessions.count()
+
+
+
+@admin.register(LegalEntityProfile)
+class LegalEntityProfileAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "company_official_name",
+        "company_identification_code",
+        "customer",
+        "email",
+        "mobile_phone",
+        "is_mobile_verified",
+        "is_active",
+        "updated_at",
+    )
+    list_filter = ("is_mobile_verified", "is_active", "created_at", "updated_at")
+    search_fields = (
+        "company_identification_code",
+        "company_official_name",
+        "legal_address",
+        "contact_first_name",
+        "contact_last_name",
+        "email",
+        "mobile_phone",
+        "customer__name",
+        "customer__phone",
+    )
+    readonly_fields = ("created_at", "updated_at")
 
 
 @admin.register(CustomerSession)

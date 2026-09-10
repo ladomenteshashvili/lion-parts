@@ -99,6 +99,43 @@ class Customer(models.Model):
         return check_password(raw_password, self.password_hash)
 
 
+
+class LegalEntityProfile(models.Model):
+    customer = models.OneToOneField(
+        Customer,
+        on_delete=models.CASCADE,
+        related_name="legal_entity_profile",
+    )
+
+    company_identification_code = models.CharField(
+        max_length=80,
+        unique=True,
+        db_index=True,
+    )
+    company_official_name = models.CharField(max_length=255)
+    legal_address = models.TextField()
+
+    contact_first_name = models.CharField(max_length=120)
+    contact_last_name = models.CharField(max_length=120)
+
+    email = models.EmailField(unique=True, db_index=True)
+    mobile_phone = models.CharField(max_length=40, db_index=True)
+
+    is_mobile_verified = models.BooleanField(default=False)
+    mobile_verified_at = models.DateTimeField(null=True, blank=True)
+
+    is_active = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["company_official_name", "company_identification_code"]
+
+    def __str__(self):
+        return f"{self.company_official_name} · {self.company_identification_code}"
+
+
 class CustomerSession(models.Model):
     customer = models.ForeignKey(
         Customer,
