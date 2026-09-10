@@ -52,6 +52,7 @@ export type SendPhoneVerificationResponse = {
   retry_after_seconds?: number;
   demo_code?: string;
   already_sent?: boolean;
+  already_verified?: boolean;
 };
 
 export type VerifyPhoneCodeNeedsNameResponse = {
@@ -118,6 +119,66 @@ export async function getProfile(): Promise<CustomerProfile | null> {
   return response.json();
 }
 
+
+
+export async function sendLegalEntityMobileVerificationCode(): Promise<SendPhoneVerificationResponse> {
+  const sessionId = getSessionId();
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/accounts/profile/legal-entity/send-code/`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        session_id: sessionId,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorMessage = await getErrorMessage(
+      response,
+      "Legal entity mobile verification code send failed"
+    );
+
+    throw new Error(errorMessage);
+  }
+
+  return response.json();
+}
+
+export async function verifyLegalEntityMobileCode(payload: {
+  code: string;
+}): Promise<CustomerProfile> {
+  const sessionId = getSessionId();
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/accounts/profile/legal-entity/verify-code/`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        session_id: sessionId,
+        code: payload.code,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorMessage = await getErrorMessage(
+      response,
+      "Legal entity mobile verification failed"
+    );
+
+    throw new Error(errorMessage);
+  }
+
+  return response.json();
+}
 
 export async function saveLegalEntityProfile(
   payload: LegalEntityProfilePayload
