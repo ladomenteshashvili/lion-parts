@@ -12,6 +12,7 @@ class CustomerSerializer(serializers.ModelSerializer):
     markup_percent = serializers.SerializerMethodField()
     can_request_quote = serializers.SerializerMethodField()
     can_enter_weight = serializers.SerializerMethodField()
+    has_password = serializers.SerializerMethodField()
 
     class Meta:
         model = Customer
@@ -24,6 +25,7 @@ class CustomerSerializer(serializers.ModelSerializer):
             "customer_tariff_name",
             "markup_percent",
             "is_phone_verified",
+            "has_password",
             "can_request_quote",
             "can_enter_weight",
             "created_at",
@@ -46,3 +48,6 @@ class CustomerSerializer(serializers.ModelSerializer):
 
     def get_can_enter_weight(self, obj):
         return obj.has_weight_entry_permission()
+
+    def get_has_password(self, obj):
+        return obj.has_password
