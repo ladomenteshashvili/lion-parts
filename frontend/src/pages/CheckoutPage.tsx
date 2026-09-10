@@ -19,6 +19,7 @@ function CheckoutPage() {
   const [vin, setVin] = useState("");
   const [note, setNote] = useState("");
   const [useLegalEntityBilling, setUseLegalEntityBilling] = useState(false);
+  const [courierDeliveryRequested, setCourierDeliveryRequested] = useState(false);
 
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -100,6 +101,7 @@ function CheckoutPage() {
         vin: vin.trim() || undefined,
         note: note.trim() || undefined,
         use_legal_entity_billing: effectiveUseLegalEntityBilling,
+        courier_delivery_requested: courierDeliveryRequested,
       });
 
       window.dispatchEvent(new Event("lion-parts-cart-updated"));
@@ -348,6 +350,29 @@ function CheckoutPage() {
             placeholder="მაგ: გთხოვთ გადაამოწმოთ თავსებადობა"
           />
         </label>
+
+        <div className="checkout-policy-box">
+          <strong>მიწოდება</strong>
+
+          <label>
+            <input
+              type="checkbox"
+              checked={courierDeliveryRequested}
+              onChange={(event) =>
+                setCourierDeliveryRequested(event.target.checked)
+              }
+            />{" "}
+            მინდა კურიერით მიწოდება
+          </label>
+
+          {courierDeliveryRequested && (
+            <p className="customer-notice">
+              კურიერის ღირებულება ამ ეტაპზე არ ემატება ჯამს. ოპერატორი
+              დაგიკავშირდებათ მიწოდების მისამართისა და ღირებულების
+              დასაზუსტებლად.
+            </p>
+          )}
+        </div>
 
         <div className="payment-demo-box">
           <strong>გადახდა</strong>

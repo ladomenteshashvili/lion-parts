@@ -57,6 +57,13 @@ def normalize_checkout_phone(phone):
     return digits
 
 
+def should_use_courier_delivery(value):
+    if isinstance(value, bool):
+        return value
+
+    return str(value or "").strip().lower() in ["1", "true", "yes", "on"]
+
+
 def should_use_legal_entity_billing(value):
     if isinstance(value, bool):
         return value
@@ -388,6 +395,9 @@ def checkout(request):
             request.data.get("use_legal_entity", False),
         )
     )
+    courier_delivery_requested = should_use_courier_delivery(
+        request.data.get("courier_delivery_requested", False)
+    )
 
     if not session_id:
         return Response(
@@ -518,6 +528,7 @@ def checkout(request):
             **legal_entity_snapshot,
             vin=vin,
             note=note,
+            courier_delivery_requested=courier_delivery_requested,
             payment_type=Order.PAYMENT_FULL,
             status=Order.STATUS_PAYMENT_PENDING,
             total_gel=total_gel,
