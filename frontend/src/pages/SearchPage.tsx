@@ -104,7 +104,11 @@ function SearchPage() {
   }
 
   useEffect(() => {
-    loadFeed();
+    const timeoutId = window.setTimeout(() => {
+      void loadFeed();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, []);
 
   async function handleFeedSearch(item: PartsFeedItem) {

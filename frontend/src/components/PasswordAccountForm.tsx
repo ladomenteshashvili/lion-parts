@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { FormEvent } from "react";
 
 import {
@@ -25,7 +25,7 @@ function PasswordAccountForm({
   onAuthenticated,
   onPasswordUpdated,
 }: PasswordAccountFormProps) {
-  const [loginPhone, setLoginPhone] = useState("");
+  const [loginPhone, setLoginPhone] = useState(profile?.customer_phone || "");
   const [loginPassword, setLoginPassword] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
@@ -35,7 +35,7 @@ function PasswordAccountForm({
   const [isSavingPassword, setIsSavingPassword] = useState(false);
 
   const [isResetOpen, setIsResetOpen] = useState(false);
-  const [resetPhone, setResetPhone] = useState("");
+  const [resetPhone, setResetPhone] = useState(profile?.customer_phone || "");
   const [resetCode, setResetCode] = useState("");
   const [resetNewPassword, setResetNewPassword] = useState("");
   const [resetRepeatPassword, setResetRepeatPassword] = useState("");
@@ -46,17 +46,6 @@ function PasswordAccountForm({
 
   const [feedbackType, setFeedbackType] = useState<FeedbackType>("info");
   const [message, setMessage] = useState("");
-
-  useEffect(() => {
-    if (!profile) {
-      setLoginPhone("");
-      setResetPhone("");
-      return;
-    }
-
-    setLoginPhone(profile.customer_phone);
-    setResetPhone(profile.customer_phone);
-  }, [profile]);
 
   function showFeedback(type: FeedbackType, text: string) {
     setFeedbackType(type);

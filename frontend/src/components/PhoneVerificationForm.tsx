@@ -36,17 +36,21 @@ function PhoneVerificationForm({
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    if (initialProfile) {
-      setCustomerName(initialProfile.customer_name);
-      setCustomerPhone(initialProfile.customer_phone);
-      setIsPhoneVerified(initialProfile.is_phone_verified);
-      return;
-    }
+    const timeoutId = window.setTimeout(() => {
+      if (initialProfile) {
+        setCustomerName(initialProfile.customer_name);
+        setCustomerPhone(initialProfile.customer_phone);
+        setIsPhoneVerified(initialProfile.is_phone_verified);
+        return;
+      }
 
-    setCustomerName("");
-    setCustomerPhone("");
-    resetVerificationState();
-    setMessage("");
+      setCustomerName("");
+      setCustomerPhone("");
+      resetVerificationState();
+      setMessage("");
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [initialProfile]);
 
   function showFeedback(type: FeedbackType, text: string) {
