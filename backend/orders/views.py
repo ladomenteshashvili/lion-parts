@@ -14,7 +14,7 @@ from rest_framework.response import Response
 from cart.models import Cart
 from .models import Order, OrderCustomerNotification, OrderItem, OrderItemEvent, OrderSupportMessage, Payment
 from .serializers import OrderCustomerNotificationPublicSerializer, OrderSerializer
-from accounts.models import Customer
+from accounts.models import Customer, LegalEntityProfile
 from accounts.customer_sessions import get_customer_for_session
 
 
@@ -55,6 +55,20 @@ def normalize_checkout_phone(phone):
         raise ValueError("customer_phone must be a Georgian mobile number")
 
     return digits
+
+
+def should_use_legal_entity_billing(value):
+    if isinstance(value, bool):
+        return value
+
+    return str(value or "").strip().lower() in ["1", "true", "yes", "on"]
+
+
+def get_customer_legal_entity_for_checkout(customer):
+    try:
+        return customer.legal_entity_profile
+    except LegalEntityProfile.DoesNotExist:
+        return None
 
 
 def generate_order_number():
@@ -352,7 +366,7 @@ def get_order_detail(request, order_number):
         )
 
     order = get_object_or_404(
-        Order.objects.select_related("payment").prefetch_related("items__events", "support_messages"),
+        Order.objects.select_related("payment", "legal_entity_profile").prefetch_related("items__events", "support_messages"),
         build_customer_order_access_filter(session_id),
         order_number=order_number,
     )
@@ -368,6 +382,12 @@ def checkout(request):
     customer_phone = request.data.get("customer_phone", "").strip()
     vin = request.data.get("vin", "").strip()
     note = request.data.get("note", "").strip()
+    use_legal_entity_billing = should_use_legal_entity_billing(
+        request.data.get(
+            "use_legal_entity_billing",
+            request.data.get("use_legal_entity", False),
+        )
+    )
 
     if not session_id:
         return Response(
@@ -415,7 +435,55 @@ def checkout(request):
         )
 
     customer_name = customer.name
-    customer_phone = customer.phone        
+    customer_phone = customer.phone
+
+    billing_type = Order.BILLING_PERSONAL
+    legal_entity_profile = None
+    legal_entity_snapshot = {
+        "legal_entity_company_identification_code": "",
+        "legal_entity_company_official_name": "",
+        "legal_entity_legal_address": "",
+        "legal_entity_contact_first_name": "",
+        "legal_entity_contact_last_name": "",
+        "legal_entity_email": "",
+        "legal_entity_mobile_phone": "",
+    }
+
+    if use_legal_entity_billing:
+        legal_entity_profile = get_customer_legal_entity_for_checkout(customer)
+
+        if not legal_entity_profile:
+            return Response(
+                {"detail": "legal entity profile is required for legal checkout"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not legal_entity_profile.is_active:
+            return Response(
+                {"detail": "legal entity profile is inactive"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not legal_entity_profile.is_mobile_verified:
+            return Response(
+                {"detail": "legal entity mobile must be verified"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        billing_type = Order.BILLING_LEGAL_ENTITY
+        legal_entity_snapshot = {
+            "legal_entity_company_identification_code": (
+                legal_entity_profile.company_identification_code
+            ),
+            "legal_entity_company_official_name": (
+                legal_entity_profile.company_official_name
+            ),
+            "legal_entity_legal_address": legal_entity_profile.legal_address,
+            "legal_entity_contact_first_name": legal_entity_profile.contact_first_name,
+            "legal_entity_contact_last_name": legal_entity_profile.contact_last_name,
+            "legal_entity_email": legal_entity_profile.email,
+            "legal_entity_mobile_phone": legal_entity_profile.mobile_phone,
+        }
 
     try:
         cart = Cart.objects.prefetch_related("items").get(session_id=session_id)
@@ -445,6 +513,9 @@ def checkout(request):
             customer=customer,
             customer_name=customer_name,
             customer_phone=customer_phone,
+            billing_type=billing_type,
+            legal_entity_profile=legal_entity_profile,
+            **legal_entity_snapshot,
             vin=vin,
             note=note,
             payment_type=Order.PAYMENT_FULL,
@@ -519,7 +590,7 @@ def checkout(request):
         cart.items.all().delete()
 
     updated_order = (
-        Order.objects.select_related("payment")
+        Order.objects.select_related("payment", "legal_entity_profile")
         .prefetch_related("items__events", "support_messages")
         .get(id=order.id)
     )
@@ -635,7 +706,7 @@ def cancel_order_item_action(request, item_id):
     )
 
     updated_order = (
-        Order.objects.select_related("payment")
+        Order.objects.select_related("payment", "legal_entity_profile")
         .prefetch_related("items__events", "support_messages")
         .get(id=order.id)
     )
@@ -705,7 +776,7 @@ def acknowledge_order_item_action(request, item_id):
     )
 
     updated_order = (
-        Order.objects.select_related("payment")
+        Order.objects.select_related("payment", "legal_entity_profile")
         .prefetch_related("items__events", "support_messages")
         .get(id=order.id)
     )
@@ -733,7 +804,7 @@ def create_order_support_message(request, order_number):
         )
 
     order = get_object_or_404(
-        Order.objects.select_related("payment").prefetch_related(
+        Order.objects.select_related("payment", "legal_entity_profile").prefetch_related(
             "items__events",
             "support_messages",
         ),
@@ -764,7 +835,7 @@ def create_order_support_message(request, order_number):
     )
 
     updated_order = (
-        Order.objects.select_related("payment")
+        Order.objects.select_related("payment", "legal_entity_profile")
         .prefetch_related("items__events", "support_messages")
         .get(id=order.id)
     )
@@ -784,7 +855,7 @@ def acknowledge_order_support_messages(request, order_number):
         )
 
     order = get_object_or_404(
-        Order.objects.select_related("payment").prefetch_related(
+        Order.objects.select_related("payment", "legal_entity_profile").prefetch_related(
             "items__events",
             "support_messages",
         ),
@@ -800,7 +871,7 @@ def acknowledge_order_support_messages(request, order_number):
     ).update(is_read_by_customer=True)
 
     updated_order = (
-        Order.objects.select_related("payment")
+        Order.objects.select_related("payment", "legal_entity_profile")
         .prefetch_related("items__events", "support_messages")
         .get(id=order.id)
     )
@@ -839,7 +910,7 @@ def verify_payment(request, order_number):
 
             if payment.status == Payment.STATUS_PAID:
                 updated_order = (
-                    Order.objects.select_related("payment")
+                    Order.objects.select_related("payment", "legal_entity_profile")
                     .prefetch_related("items__events", "support_messages")
                     .get(id=order.id)
                 )
@@ -870,7 +941,7 @@ def verify_payment(request, order_number):
         )
 
     updated_order = (
-        Order.objects.select_related("payment")
+        Order.objects.select_related("payment", "legal_entity_profile")
         .prefetch_related("items__events", "support_messages")
         .get(
             order_number=order_number,
@@ -906,7 +977,7 @@ def demo_confirm_payment(request, order_number):
 
             if payment.status == Payment.STATUS_PAID:
                 updated_order = (
-                    Order.objects.select_related("payment")
+                    Order.objects.select_related("payment", "legal_entity_profile")
                     .prefetch_related("items__events", "support_messages")
                     .get(id=order.id)
                 )
@@ -932,7 +1003,7 @@ def demo_confirm_payment(request, order_number):
         )
 
     updated_order = (
-        Order.objects.select_related("payment")
+        Order.objects.select_related("payment", "legal_entity_profile")
         .prefetch_related("items__events", "support_messages")
         .get(
             order_number=order_number,
