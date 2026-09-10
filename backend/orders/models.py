@@ -28,6 +28,13 @@ class Order(models.Model):
 
     order_number = models.CharField(max_length=40, unique=True, db_index=True)
     session_id = models.CharField(max_length=120, db_index=True)
+    customer = models.ForeignKey(
+        "accounts.Customer",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="orders",
+    )
 
     customer_name = models.CharField(max_length=120)
     customer_phone = models.CharField(max_length=40)

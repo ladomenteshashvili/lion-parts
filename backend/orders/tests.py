@@ -866,6 +866,55 @@ class OrderFlowTests(TestCase):
         self.assertEqual(notification.item, item)
 
 
+
+    def test_checkout_links_order_to_customer_account(self):
+        response = self.client.post(
+            "/api/orders/checkout/",
+            {
+                "session_id": self.session_id,
+                "customer_name": "Lado",
+                "customer_phone": "599123456",
+                "vin": "",
+                "note": "",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+
+        order = Order.objects.get(session_id=self.session_id)
+
+        self.assertEqual(order.customer_id, self.customer.id)
+        self.assertEqual(order.customer_phone, self.customer.phone)
+
+    def test_order_detail_still_works_after_admin_changes_customer_phone(self):
+        order, _item = self._create_order_from_cart()
+
+        self.customer.phone = "599777777"
+        self.customer.save(update_fields=["phone", "updated_at"])
+
+        response = self.client.get(
+            f"/api/orders/{order.order_number}/?session_id={self.session_id}",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["order_number"], order.order_number)
+
+    def test_orders_list_still_works_after_admin_changes_customer_phone(self):
+        order, _item = self._create_order_from_cart()
+
+        self.customer.phone = "599777777"
+        self.customer.save(update_fields=["phone", "updated_at"])
+
+        response = self.client.get(
+            f"/api/orders/?session_id={self.session_id}",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["order_number"], order.order_number)
+
+
     def _create_order_from_cart(self):
         response = self.client.post(
             "/api/orders/checkout/",
