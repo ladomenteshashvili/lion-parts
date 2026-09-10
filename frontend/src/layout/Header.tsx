@@ -46,12 +46,15 @@ function Header() {
   }
 
   useEffect(() => {
-    loadCounts();
+    const timeoutId = window.setTimeout(() => {
+      void loadCounts();
+    }, 0);
 
     window.addEventListener("lion-parts-cart-updated", loadCounts);
     window.addEventListener("lion-parts-orders-updated", loadCounts);
 
     return () => {
+      window.clearTimeout(timeoutId);
       window.removeEventListener("lion-parts-cart-updated", loadCounts);
       window.removeEventListener("lion-parts-orders-updated", loadCounts);
     };
