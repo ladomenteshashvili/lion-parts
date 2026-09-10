@@ -1,6 +1,27 @@
 from rest_framework import serializers
 
-from .models import Customer
+from .models import Customer, LegalEntityProfile
+
+
+
+class LegalEntityProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LegalEntityProfile
+        fields = [
+            "id",
+            "company_identification_code",
+            "company_official_name",
+            "legal_address",
+            "contact_first_name",
+            "contact_last_name",
+            "email",
+            "mobile_phone",
+            "is_mobile_verified",
+            "mobile_verified_at",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
 
 
 class CustomerSerializer(serializers.ModelSerializer):
@@ -13,6 +34,7 @@ class CustomerSerializer(serializers.ModelSerializer):
     can_request_quote = serializers.SerializerMethodField()
     can_enter_weight = serializers.SerializerMethodField()
     has_password = serializers.SerializerMethodField()
+    legal_entity = serializers.SerializerMethodField()
 
     class Meta:
         model = Customer
@@ -28,6 +50,7 @@ class CustomerSerializer(serializers.ModelSerializer):
             "has_password",
             "can_request_quote",
             "can_enter_weight",
+            "legal_entity",
             "created_at",
             "updated_at",
         ]
@@ -48,6 +71,14 @@ class CustomerSerializer(serializers.ModelSerializer):
 
     def get_can_enter_weight(self, obj):
         return obj.has_weight_entry_permission()
+
+    def get_legal_entity(self, obj):
+        try:
+            legal_entity = obj.legal_entity_profile
+        except LegalEntityProfile.DoesNotExist:
+            return None
+
+        return LegalEntityProfileSerializer(legal_entity).data
 
     def get_has_password(self, obj):
         return obj.has_password
