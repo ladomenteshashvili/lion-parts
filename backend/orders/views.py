@@ -31,10 +31,21 @@ def build_customer_order_access_filter(session_id, prefix=""):
         is_phone_verified=True,
     ).first()
 
-    if customer and customer.phone:
-        return Q(**{f"{prefix}customer_phone": customer.phone})
+    if not customer:
+        return Q(pk__isnull=True)
 
-    return Q(pk__isnull=True)
+    access_filter = Q(**{f"{prefix}customer_id": customer.id})
+
+    if customer.phone:
+        # Compatibility for older orders or duplicate legacy Customer rows
+        # that were linked only by phone before Order.customer existed.
+        access_filter |= Q(**{f"{prefix}customer__phone": customer.phone})
+        access_filter |= (
+            Q(**{f"{prefix}customer__isnull": True})
+            & Q(**{f"{prefix}customer_phone": customer.phone})
+        )
+
+    return access_filter
 
 
 def normalize_checkout_phone(phone):
@@ -434,6 +445,7 @@ def checkout(request):
         order = Order.objects.create(
             order_number=generate_order_number(),
             session_id=session_id,
+            customer=customer,
             customer_name=customer_name,
             customer_phone=customer_phone,
             vin=vin,
