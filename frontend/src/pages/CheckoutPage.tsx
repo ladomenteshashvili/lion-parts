@@ -18,6 +18,7 @@ function CheckoutPage() {
   const [customerPhone, setCustomerPhone] = useState("");
   const [vin, setVin] = useState("");
   const [note, setNote] = useState("");
+  const [useLegalEntityBilling, setUseLegalEntityBilling] = useState(false);
 
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -62,6 +63,12 @@ function CheckoutPage() {
   }, [items]);
 
   const isVerifiedProfile = Boolean(profile?.is_phone_verified);
+  const legalEntity = profile?.legal_entity || null;
+  const canUseLegalEntityBilling = Boolean(
+    legalEntity?.is_active && legalEntity?.is_mobile_verified
+  );
+  const effectiveUseLegalEntityBilling =
+    useLegalEntityBilling && canUseLegalEntityBilling;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -76,6 +83,13 @@ function CheckoutPage() {
       return;
     }
 
+    if (useLegalEntityBilling && !canUseLegalEntityBilling) {
+      setError(
+        "იურიდიულ პირზე შეკვეთისთვის ჯერ პროფილში შეავსეთ და დაადასტურეთ კომპანიის მონაცემები."
+      );
+      return;
+    }
+
     setIsSubmitting(true);
     setError("");
 
@@ -85,6 +99,7 @@ function CheckoutPage() {
         customer_phone: profile.customer_phone,
         vin: vin.trim() || undefined,
         note: note.trim() || undefined,
+        use_legal_entity_billing: effectiveUseLegalEntityBilling,
       });
 
       window.dispatchEvent(new Event("lion-parts-cart-updated"));
@@ -162,6 +177,65 @@ function CheckoutPage() {
           <span>
             {profile?.customer_name} · {profile?.customer_phone}
           </span>
+        </div>
+      )}
+
+      {isVerifiedProfile && (
+        <div className="checkout-policy-box">
+          <strong>ვისზე გაფორმდეს შეკვეთა</strong>
+
+          <div className="checkout-form">
+            <label>
+              <input
+                type="radio"
+                name="billing_type"
+                checked={!effectiveUseLegalEntityBilling}
+                onChange={() => setUseLegalEntityBilling(false)}
+              />{" "}
+              პირად პირზე
+            </label>
+
+            <label>
+              <input
+                type="radio"
+                name="billing_type"
+                checked={effectiveUseLegalEntityBilling}
+                disabled={!canUseLegalEntityBilling}
+                onChange={() => setUseLegalEntityBilling(true)}
+              />{" "}
+              იურიდიულ პირზე
+            </label>
+          </div>
+
+          {legalEntity ? (
+            <div className="profile-status">
+              <strong>
+                {legalEntity.company_official_name} ·{" "}
+                {legalEntity.company_identification_code}
+              </strong>
+              <span>
+                {legalEntity.email} · {legalEntity.mobile_phone}
+              </span>
+            </div>
+          ) : (
+            <p className="muted">
+              იურიდიულ პირზე შეკვეთისთვის ჯერ პროფილში შეავსეთ კომპანიის
+              მონაცემები.
+            </p>
+          )}
+
+          {legalEntity && !legalEntity.is_mobile_verified && (
+            <p className="form-error">
+              იურიდიულ პირზე შეკვეთისთვის კომპანიის მობილური უნდა იყოს
+              დადასტურებული.
+            </p>
+          )}
+
+          {legalEntity && !legalEntity.is_active && (
+            <p className="form-error">
+              კომპანიის პროფილი არააქტიურია. დაუკავშირდით ოპერატორს.
+            </p>
+          )}
         </div>
       )}
 
