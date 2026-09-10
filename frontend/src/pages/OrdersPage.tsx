@@ -162,6 +162,17 @@ function OrdersPage() {
                 {order.customer_name} · {order.customer_phone}
                 {order.vin ? ` · VIN: ${order.vin}` : ""}
               </p>
+
+              {order.billing_type === "legal_entity" ? (
+                <p className="muted">
+                  გაფორმებულია იურიდიულ პირზე:{" "}
+                  <strong>{order.legal_entity_company_official_name}</strong> ·{" "}
+                  {order.legal_entity_company_identification_code}
+                </p>
+              ) : (
+                <p className="muted">გაფორმებულია პირად პირზე</p>
+              )}
+
               <p className="muted">
                 Items: {order.items.length} · Created:{" "}
                 {new Date(order.created_at).toLocaleString("ka-GE")}

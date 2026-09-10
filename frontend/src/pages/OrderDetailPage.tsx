@@ -588,6 +588,33 @@ function isOrderCompleted(order: BackendOrder) {
         </div>
       </div>
 
+      {order.billing_type === "legal_entity" ? (
+        <div className="note-box">
+          <strong>შეკვეთა გაფორმებულია იურიდიულ პირზე</strong>
+          <p>
+            {order.legal_entity_company_official_name} ·{" "}
+            {order.legal_entity_company_identification_code}
+          </p>
+          <p className="muted">
+            იურიდიული მისამართი: {order.legal_entity_legal_address || "—"}
+          </p>
+          <p className="muted">
+            საკონტაქტო პირი: {order.legal_entity_contact_first_name}{" "}
+            {order.legal_entity_contact_last_name}
+          </p>
+          <p className="muted">
+            {order.legal_entity_email} · {order.legal_entity_mobile_phone}
+          </p>
+        </div>
+      ) : (
+        <div className="note-box">
+          <strong>შეკვეთა გაფორმებულია პირად პირზე</strong>
+          <p className="muted">
+            {order.customer_name} · {order.customer_phone}
+          </p>
+        </div>
+      )}
+
       {actionRequiredItems.length > 0 && (
         <div className="action-required-card">
           <strong>საჭიროა თქვენი მოქმედება</strong>
