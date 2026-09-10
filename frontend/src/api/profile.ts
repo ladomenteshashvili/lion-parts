@@ -2,6 +2,32 @@ import { getSessionId } from "./cart";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
+export type LegalEntityProfile = {
+  id: number;
+  company_identification_code: string;
+  company_official_name: string;
+  legal_address: string;
+  contact_first_name: string;
+  contact_last_name: string;
+  email: string;
+  mobile_phone: string;
+  is_mobile_verified: boolean;
+  mobile_verified_at: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type LegalEntityProfilePayload = {
+  company_identification_code: string;
+  company_official_name: string;
+  legal_address: string;
+  contact_first_name: string;
+  contact_last_name: string;
+  email: string;
+  mobile_phone: string;
+};
+
 export type CustomerProfile = {
   id: number;
   session_id: string;
@@ -14,6 +40,7 @@ export type CustomerProfile = {
   is_phone_verified: boolean;
   has_password: boolean;
   can_request_quote: boolean;
+  legal_entity?: LegalEntityProfile | null;
   created_at: string;
   updated_at: string;
 };
@@ -86,6 +113,35 @@ export async function getProfile(): Promise<CustomerProfile | null> {
 
   if (!response.ok) {
     throw new Error("Profile load failed");
+  }
+
+  return response.json();
+}
+
+
+export async function saveLegalEntityProfile(
+  payload: LegalEntityProfilePayload
+): Promise<CustomerProfile> {
+  const sessionId = getSessionId();
+
+  const response = await fetch(`${API_BASE_URL}/api/accounts/profile/legal-entity/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      session_id: sessionId,
+      ...payload,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorMessage = await getErrorMessage(
+      response,
+      "Legal entity profile save failed"
+    );
+
+    throw new Error(errorMessage);
   }
 
   return response.json();

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import LegalEntityProfileForm from "../components/LegalEntityProfileForm";
 import PasswordAccountForm from "../components/PasswordAccountForm";
 import PhoneVerificationForm from "../components/PhoneVerificationForm";
 import { getProfile, type CustomerProfile } from "../api/profile";
@@ -82,6 +83,12 @@ function ProfilePage() {
         profile={profile}
         onAuthenticated={(authenticatedProfile) => setProfile(authenticatedProfile)}
         onPasswordUpdated={(updatedProfile) => setProfile(updatedProfile)}
+      />
+
+      <LegalEntityProfileForm
+        key={profile ? `legal-${profile.id}` : "legal-guest"}
+        profile={profile}
+        onSaved={(updatedProfile) => setProfile(updatedProfile)}
       />
     </section>
   );
