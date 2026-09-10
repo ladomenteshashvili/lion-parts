@@ -42,6 +42,7 @@ class CustomerAdmin(admin.ModelAdmin):
         "session_id",
         "tariff",
         "is_phone_verified",
+        "has_password_display",
         "can_request_quote",
         "session_count",
         "updated_at",
@@ -49,8 +50,13 @@ class CustomerAdmin(admin.ModelAdmin):
     list_filter = ("tariff", "is_phone_verified", "can_request_quote")
     search_fields = ("name", "phone", "session_id", "sessions__session_id")
     list_editable = ("tariff", "is_phone_verified", "can_request_quote")
+    exclude = ("password_hash",)
     readonly_fields = ("created_at", "updated_at")
     inlines = [CustomerSessionInline]
+
+    @admin.display(description="Password")
+    def has_password_display(self, obj):
+        return "Yes" if obj.has_password else "No"
 
     @admin.display(description="Sessions")
     def session_count(self, obj):

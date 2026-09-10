@@ -37,6 +37,7 @@ class Customer(models.Model):
     session_id = models.CharField(max_length=120, db_index=True)
     name = models.CharField(max_length=120)
     phone = models.CharField(max_length=40, unique=True)
+    password_hash = models.CharField(max_length=256, blank=True)
 
     tariff = models.ForeignKey(
         CustomerTariff,
@@ -83,6 +84,20 @@ class Customer(models.Model):
 
         return bool(tariff and tariff.can_enter_weight)
 
+    @property
+    def has_password(self):
+        return bool(self.password_hash)
+
+    def set_password(self, raw_password):
+        self.password_hash = make_password(raw_password)
+        self.save(update_fields=["password_hash", "updated_at"])
+
+    def check_password(self, raw_password):
+        if not self.password_hash:
+            return False
+
+        return check_password(raw_password, self.password_hash)
+
 
 class CustomerSession(models.Model):
     customer = models.ForeignKey(
@@ -104,9 +119,11 @@ class CustomerSession(models.Model):
 
 class PhoneVerificationCode(models.Model):
     PURPOSE_LOGIN = "login"
+    PURPOSE_PASSWORD_RESET = "password_reset"
 
     PURPOSE_CHOICES = [
         (PURPOSE_LOGIN, "Login"),
+        (PURPOSE_PASSWORD_RESET, "Password reset"),
     ]
 
     STATUS_PENDING = "pending"
