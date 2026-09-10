@@ -92,6 +92,7 @@ export type BackendOrder = {
   legal_entity_mobile_phone?: string;
   vin: string;
   note: string;
+  courier_delivery_requested?: boolean;
   payment_type: "full";
   payment: OrderPayment | null;
   status: string;
@@ -143,6 +144,7 @@ export async function checkoutOrder(payload: {
   vin?: string;
   note?: string;
   use_legal_entity_billing?: boolean;
+  courier_delivery_requested?: boolean;
 }): Promise<BackendOrder> {
   const sessionId = getSessionId();
 

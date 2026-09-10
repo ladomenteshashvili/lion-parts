@@ -78,6 +78,8 @@ class Order(models.Model):
 
     note = models.TextField(blank=True)
 
+    courier_delivery_requested = models.BooleanField(default=False, db_index=True)
+
     payment_type = models.CharField(
         max_length=20,
         choices=PAYMENT_CHOICES,
