@@ -2,6 +2,8 @@ import { useState, type FormEvent } from "react";
 
 import {
   saveLegalEntityProfile,
+  sendLegalEntityMobileVerificationCode,
+  verifyLegalEntityMobileCode,
   type CustomerProfile,
   type LegalEntityProfilePayload,
 } from "../api/profile";
@@ -35,6 +37,9 @@ function LegalEntityProfileForm({
     getInitialForm(profile)
   );
   const [isSaving, setIsSaving] = useState(false);
+  const [isSendingCode, setIsSendingCode] = useState(false);
+  const [isVerifyingCode, setIsVerifyingCode] = useState(false);
+  const [verificationCode, setVerificationCode] = useState("");
   const [feedbackType, setFeedbackType] = useState<FeedbackType>("info");
   const [message, setMessage] = useState("");
 
@@ -43,11 +48,11 @@ function LegalEntityProfileForm({
   }
 
   const legalEntity = profile.legal_entity || null;
+  const needsMobileVerification =
+    Boolean(legalEntity) && legalEntity?.is_mobile_verified === false;
+  const isBusy = isSaving || isSendingCode || isVerifyingCode;
 
-  function updateField(
-    field: keyof LegalEntityProfilePayload,
-    value: string
-  ) {
+  function updateField(field: keyof LegalEntityProfilePayload, value: string) {
     setForm((currentForm) => ({
       ...currentForm,
       [field]: value,
@@ -95,8 +100,16 @@ function LegalEntityProfileForm({
         mobile_phone: form.mobile_phone.trim(),
       });
 
-      showFeedback("success", "კომპანიის მონაცემები შენახულია");
+      const savedLegalEntity = updatedProfile.legal_entity;
+
       onSaved(updatedProfile);
+
+      showFeedback(
+        "success",
+        savedLegalEntity?.is_mobile_verified
+          ? "კომპანიის მონაცემები შენახულია და მობილური დადასტურებულია"
+          : "კომპანიის მონაცემები შენახულია. მობილურის დასადასტურებლად გაგზავნეთ კოდი."
+      );
     } catch (error) {
       const errorMessage =
         error instanceof Error
@@ -106,6 +119,64 @@ function LegalEntityProfileForm({
       showFeedback("error", errorMessage);
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleSendMobileCode() {
+    setIsSendingCode(true);
+    setMessage("");
+
+    try {
+      const response = await sendLegalEntityMobileVerificationCode();
+
+      if (response.already_verified) {
+        showFeedback("success", "კომპანიის მობილური უკვე დადასტურებულია");
+        return;
+      }
+
+      const demoCodeText = response.demo_code
+        ? ` სატესტო კოდი: ${response.demo_code}`
+        : "";
+
+      showFeedback("success", `კოდი გაგზავნილია.${demoCodeText}`);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "კოდის გაგზავნა ვერ მოხერხდა";
+
+      showFeedback("error", errorMessage);
+    } finally {
+      setIsSendingCode(false);
+    }
+  }
+
+  async function handleVerifyMobileCode() {
+    const cleanedCode = verificationCode.trim();
+
+    if (!cleanedCode) {
+      showFeedback("error", "შეიყვანეთ დადასტურების კოდი");
+      return;
+    }
+
+    setIsVerifyingCode(true);
+    setMessage("");
+
+    try {
+      const updatedProfile = await verifyLegalEntityMobileCode({
+        code: cleanedCode,
+      });
+
+      onSaved(updatedProfile);
+      setVerificationCode("");
+      showFeedback("success", "კომპანიის მობილური დადასტურებულია");
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "მობილურის დადასტურება ვერ მოხერხდა";
+
+      showFeedback("error", errorMessage);
+    } finally {
+      setIsVerifyingCode(false);
     }
   }
 
@@ -136,7 +207,7 @@ function LegalEntityProfileForm({
             onChange={(event) =>
               updateField("company_identification_code", event.target.value)
             }
-            disabled={isSaving}
+            disabled={isBusy}
           />
         </label>
 
@@ -147,7 +218,7 @@ function LegalEntityProfileForm({
             onChange={(event) =>
               updateField("company_official_name", event.target.value)
             }
-            disabled={isSaving}
+            disabled={isBusy}
           />
         </label>
 
@@ -155,10 +226,8 @@ function LegalEntityProfileForm({
           იურიდიული მისამართი
           <textarea
             value={form.legal_address}
-            onChange={(event) =>
-              updateField("legal_address", event.target.value)
-            }
-            disabled={isSaving}
+            onChange={(event) => updateField("legal_address", event.target.value)}
+            disabled={isBusy}
           />
         </label>
 
@@ -169,7 +238,7 @@ function LegalEntityProfileForm({
             onChange={(event) =>
               updateField("contact_first_name", event.target.value)
             }
-            disabled={isSaving}
+            disabled={isBusy}
           />
         </label>
 
@@ -180,7 +249,7 @@ function LegalEntityProfileForm({
             onChange={(event) =>
               updateField("contact_last_name", event.target.value)
             }
-            disabled={isSaving}
+            disabled={isBusy}
           />
         </label>
 
@@ -190,7 +259,7 @@ function LegalEntityProfileForm({
             type="email"
             value={form.email}
             onChange={(event) => updateField("email", event.target.value)}
-            disabled={isSaving}
+            disabled={isBusy}
           />
         </label>
 
@@ -198,29 +267,69 @@ function LegalEntityProfileForm({
           მობილური ნომერი
           <input
             value={form.mobile_phone}
-            onChange={(event) =>
-              updateField("mobile_phone", event.target.value)
-            }
+            onChange={(event) => updateField("mobile_phone", event.target.value)}
             placeholder="მაგ: 599123456 ან +995599123456"
-            disabled={isSaving}
+            disabled={isBusy}
           />
         </label>
 
         {legalEntity && (
           <p className="muted">
             მობილურის სტატუსი:{" "}
-            {legalEntity.is_mobile_verified ? "დადასტურებულია" : "დასადასტურებელია"}
+            {legalEntity.is_mobile_verified
+              ? "დადასტურებულია"
+              : "დასადასტურებელია"}
           </p>
         )}
 
         <div className="profile-actions">
-          <button type="submit" disabled={isSaving}>
+          <button type="submit" disabled={isBusy}>
             {isSaving ? "ინახება..." : "კომპანიის მონაცემების შენახვა"}
           </button>
         </div>
-
-        {message && <p className={feedbackClassName}>{message}</p>}
       </form>
+
+      {needsMobileVerification && (
+        <div className="note-box">
+          <strong>კომპანიის მობილურის დადასტურება</strong>
+          <p className="muted">
+            კოდი გაიგზავნება შენახულ კომპანიის მობილურზე:{" "}
+            {legalEntity?.mobile_phone}
+          </p>
+
+          <div className="profile-actions">
+            <button
+              type="button"
+              className="button-secondary"
+              onClick={handleSendMobileCode}
+              disabled={isBusy}
+            >
+              {isSendingCode ? "იგზავნება..." : "კოდის გაგზავნა"}
+            </button>
+          </div>
+
+          <label>
+            დადასტურების კოდი
+            <input
+              value={verificationCode}
+              onChange={(event) => setVerificationCode(event.target.value)}
+              disabled={isBusy}
+            />
+          </label>
+
+          <div className="profile-actions">
+            <button
+              type="button"
+              onClick={handleVerifyMobileCode}
+              disabled={isBusy}
+            >
+              {isVerifyingCode ? "მოწმდება..." : "მობილურის დადასტურება"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {message && <p className={feedbackClassName}>{message}</p>}
     </div>
   );
 }
