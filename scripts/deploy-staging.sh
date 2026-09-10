@@ -29,12 +29,27 @@ sudo chown -R www-data:www-data /var/www/lionparts-backend-static
 echo "Build frontend..."
 cd ../frontend
 
-cat > .env.production <<'ENVEOF'
+BUILD_COMMIT="$(git rev-parse --short HEAD)"
+BUILD_TIME="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+BUILD_ID="${BUILD_COMMIT}-${BUILD_TIME}"
+
+cat > .env.production <<ENVEOF
 VITE_API_BASE_URL=https://api-test.lionparts.ge
+VITE_APP_BUILD_ID=${BUILD_ID}
 ENVEOF
 
 npm install
 npm run build
+
+cat > dist/build-info.json <<ENVEOF
+{
+  "build_id": "${BUILD_ID}",
+  "commit_sha": "${BUILD_COMMIT}",
+  "built_at": "${BUILD_TIME}"
+}
+ENVEOF
+
+echo "Frontend build id: ${BUILD_ID}"
 
 echo "Publish frontend..."
 sudo mkdir -p /var/www/lionparts-staging
