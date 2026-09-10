@@ -913,6 +913,22 @@ class OrderFlowTests(TestCase):
         self.assertEqual(response.data[0]["order_number"], order.order_number)
 
 
+
+    def test_order_api_shows_current_customer_phone_and_keeps_order_snapshot(self):
+        order, _item = self._create_order_from_cart()
+
+        self.customer.phone = "599777777"
+        self.customer.save(update_fields=["phone", "updated_at"])
+
+        response = self.client.get(
+            f"/api/orders/{order.order_number}/?session_id={self.session_id}",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["current_customer_phone"], "599777777")
+        self.assertEqual(response.data["customer_phone"], "599123456")
+
+
     def _create_order_from_cart(self):
         response = self.client.post(
             "/api/orders/checkout/",

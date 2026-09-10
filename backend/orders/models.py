@@ -66,6 +66,18 @@ class Order(models.Model):
     def __str__(self):
         return self.order_number
 
+    @property
+    def current_customer_name(self):
+        if self.customer_id and self.customer and self.customer.name:
+            return self.customer.name
+        return self.customer_name
+
+    @property
+    def current_customer_phone(self):
+        if self.customer_id and self.customer and self.customer.phone:
+            return self.customer.phone
+        return self.customer_phone
+
 
 class Payment(models.Model):
     STATUS_PENDING = "pending"
