@@ -157,10 +157,12 @@ class CustomerSession(models.Model):
 class PhoneVerificationCode(models.Model):
     PURPOSE_LOGIN = "login"
     PURPOSE_PASSWORD_RESET = "password_reset"
+    PURPOSE_LEGAL_ENTITY_MOBILE = "legal_entity_mobile"
 
     PURPOSE_CHOICES = [
         (PURPOSE_LOGIN, "Login"),
         (PURPOSE_PASSWORD_RESET, "Password reset"),
+        (PURPOSE_LEGAL_ENTITY_MOBILE, "Legal entity mobile"),
     ]
 
     STATUS_PENDING = "pending"
