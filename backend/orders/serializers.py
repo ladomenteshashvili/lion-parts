@@ -106,6 +106,7 @@ class OrderSupportMessageSerializer(serializers.ModelSerializer):
 class OrderSerializer(serializers.ModelSerializer):
     current_customer_name = serializers.CharField(read_only=True)
     current_customer_phone = serializers.CharField(read_only=True)
+    legal_entity_profile_id = serializers.IntegerField(read_only=True)
     items = OrderItemSerializer(many=True, read_only=True)
     payment = PaymentSerializer(read_only=True)
     status_label = serializers.CharField(source="get_status_display", read_only=True)
@@ -137,6 +138,15 @@ class OrderSerializer(serializers.ModelSerializer):
             "current_customer_phone",
             "customer_name",
             "customer_phone",
+            "billing_type",
+            "legal_entity_profile_id",
+            "legal_entity_company_identification_code",
+            "legal_entity_company_official_name",
+            "legal_entity_legal_address",
+            "legal_entity_contact_first_name",
+            "legal_entity_contact_last_name",
+            "legal_entity_email",
+            "legal_entity_mobile_phone",
             "vin",
             "note",
             "payment_type",
@@ -154,6 +164,7 @@ class OrderSerializer(serializers.ModelSerializer):
 class PublicOrderSerializer(serializers.ModelSerializer):
     current_customer_name = serializers.CharField(read_only=True)
     current_customer_phone = serializers.CharField(read_only=True)
+    legal_entity_profile_id = serializers.IntegerField(read_only=True)
     items = OrderItemSerializer(many=True, read_only=True)
     payment = PaymentSerializer(read_only=True)
     status_label = serializers.CharField(source="get_status_display", read_only=True)
@@ -184,6 +195,15 @@ class PublicOrderSerializer(serializers.ModelSerializer):
             "current_customer_phone",
             "customer_name",
             "customer_phone",
+            "billing_type",
+            "legal_entity_profile_id",
+            "legal_entity_company_identification_code",
+            "legal_entity_company_official_name",
+            "legal_entity_legal_address",
+            "legal_entity_contact_first_name",
+            "legal_entity_contact_last_name",
+            "legal_entity_email",
+            "legal_entity_mobile_phone",
             "vin",
             "note",
             "payment_type",

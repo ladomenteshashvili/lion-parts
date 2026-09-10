@@ -574,6 +574,8 @@ class OrderAdmin(admin.ModelAdmin):
         "current_customer_name",
         "current_customer_phone",
         "customer_phone_snapshot",
+        "billing_type",
+        "legal_entity_company_official_name",
         "status",
         "payment_status",
         "action_required_items",
@@ -581,8 +583,8 @@ class OrderAdmin(admin.ModelAdmin):
         "total_gel",
         "created_at",
     )
-    list_select_related = ("customer",)
-    list_filter = (OperatorOrderTaskFilter, "status", "created_at")
+    list_select_related = ("customer", "legal_entity_profile")
+    list_filter = (OperatorOrderTaskFilter, "billing_type", "status", "created_at")
     search_fields = (
         "order_number",
         "session_id",
@@ -590,12 +592,26 @@ class OrderAdmin(admin.ModelAdmin):
         "customer_phone",
         "customer__name",
         "customer__phone",
+        "legal_entity_company_identification_code",
+        "legal_entity_company_official_name",
+        "legal_entity_email",
+        "legal_entity_mobile_phone",
+        "legal_entity_profile__company_identification_code",
+        "legal_entity_profile__company_official_name",
         "vin",
     )
     readonly_fields = (
         "current_customer_name",
         "current_customer_phone",
         "customer_phone_snapshot",
+        "legal_entity_profile",
+        "legal_entity_company_identification_code",
+        "legal_entity_company_official_name",
+        "legal_entity_legal_address",
+        "legal_entity_contact_first_name",
+        "legal_entity_contact_last_name",
+        "legal_entity_email",
+        "legal_entity_mobile_phone",
         "created_at",
         "updated_at",
     )

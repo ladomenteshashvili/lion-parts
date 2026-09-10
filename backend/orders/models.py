@@ -26,6 +26,14 @@ class Order(models.Model):
         (PAYMENT_FULL, "100% payment"),
     ]
 
+    BILLING_PERSONAL = "personal"
+    BILLING_LEGAL_ENTITY = "legal_entity"
+
+    BILLING_CHOICES = [
+        (BILLING_PERSONAL, "Personal"),
+        (BILLING_LEGAL_ENTITY, "Legal entity"),
+    ]
+
     order_number = models.CharField(max_length=40, unique=True, db_index=True)
     session_id = models.CharField(max_length=120, db_index=True)
     customer = models.ForeignKey(
@@ -38,6 +46,34 @@ class Order(models.Model):
 
     customer_name = models.CharField(max_length=120)
     customer_phone = models.CharField(max_length=40)
+
+    billing_type = models.CharField(
+        max_length=30,
+        choices=BILLING_CHOICES,
+        default=BILLING_PERSONAL,
+        db_index=True,
+    )
+    legal_entity_profile = models.ForeignKey(
+        "accounts.LegalEntityProfile",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="orders",
+    )
+    legal_entity_company_identification_code = models.CharField(
+        max_length=80,
+        blank=True,
+    )
+    legal_entity_company_official_name = models.CharField(
+        max_length=255,
+        blank=True,
+    )
+    legal_entity_legal_address = models.TextField(blank=True)
+    legal_entity_contact_first_name = models.CharField(max_length=120, blank=True)
+    legal_entity_contact_last_name = models.CharField(max_length=120, blank=True)
+    legal_entity_email = models.EmailField(blank=True)
+    legal_entity_mobile_phone = models.CharField(max_length=40, blank=True)
+
     vin = models.CharField(max_length=40, blank=True)
 
     note = models.TextField(blank=True)
