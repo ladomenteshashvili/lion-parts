@@ -81,6 +81,15 @@ export type BackendOrder = {
   session_id: string;
   customer_name: string;
   customer_phone: string;
+  billing_type?: "personal" | "legal_entity";
+  legal_entity_profile_id?: number | null;
+  legal_entity_company_identification_code?: string;
+  legal_entity_company_official_name?: string;
+  legal_entity_legal_address?: string;
+  legal_entity_contact_first_name?: string;
+  legal_entity_contact_last_name?: string;
+  legal_entity_email?: string;
+  legal_entity_mobile_phone?: string;
   vin: string;
   note: string;
   payment_type: "full";
@@ -133,6 +142,7 @@ export async function checkoutOrder(payload: {
   customer_phone: string;
   vin?: string;
   note?: string;
+  use_legal_entity_billing?: boolean;
 }): Promise<BackendOrder> {
   const sessionId = getSessionId();
 
