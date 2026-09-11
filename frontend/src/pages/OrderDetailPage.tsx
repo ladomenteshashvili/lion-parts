@@ -7,6 +7,8 @@ import {
   cancelOrderItemAction,
   getOrderDetail,
   resolveOrderItemAction,
+  resolveCourierDeliveryFee,
+  declineCourierDeliveryFee,
   sendOrderSupportMessage,
   type BackendOrder,
   type OrderItem,
@@ -91,6 +93,8 @@ function OrderDetailPage() {
   const [isResolvingAction, setIsResolvingAction] = useState(false);
   const [isCancellingAction, setIsCancellingAction] = useState(false);
   const [isAcknowledgingAction, setIsAcknowledgingAction] = useState(false);
+  const [isResolvingCourierFee, setIsResolvingCourierFee] = useState(false);
+  const [isDecliningCourierFee, setIsDecliningCourierFee] = useState(false);
   const [supportMessage, setSupportMessage] = useState("");
   const [supportItemId, setSupportItemId] = useState("");
   const [isSendingSupport, setIsSendingSupport] = useState(false);
@@ -295,6 +299,55 @@ function isOrderCompleted(order: BackendOrder) {
       !item.proposed_eta_days
     );
   }
+
+  async function handleResolveCourierFee() {
+    if (!orderNumber) {
+      return;
+    }
+
+    setIsResolvingCourierFee(true);
+    setError("");
+
+    try {
+      const updatedOrder = await resolveCourierDeliveryFee(orderNumber);
+      setOrder(updatedOrder);
+      window.dispatchEvent(new Event("lion-parts-orders-updated"));
+    } catch (error) {
+      console.error("Resolve courier fee failed", error);
+      setError("კურიერის ფასის დადასტურება ვერ მოხერხდა");
+    } finally {
+      setIsResolvingCourierFee(false);
+    }
+  }
+
+  async function handleDeclineCourierFee() {
+    if (!orderNumber) {
+      return;
+    }
+
+    const shouldDecline = window.confirm(
+      "გინდათ უარი თქვათ კურიერით მიწოდების ამ ფასზე?"
+    );
+
+    if (!shouldDecline) {
+      return;
+    }
+
+    setIsDecliningCourierFee(true);
+    setError("");
+
+    try {
+      const updatedOrder = await declineCourierDeliveryFee(orderNumber);
+      setOrder(updatedOrder);
+      window.dispatchEvent(new Event("lion-parts-orders-updated"));
+    } catch (error) {
+      console.error("Decline courier fee failed", error);
+      setError("კურიერის ფასის უარყოფა ვერ მოხერხდა");
+    } finally {
+      setIsDecliningCourierFee(false);
+    }
+  }
+
 
   async function handleResolveItemAction() {
     if (!selectedItem) {
@@ -587,6 +640,58 @@ function isOrderCompleted(order: BackendOrder) {
           <strong>{Number(order.total_gel).toLocaleString("ka-GE")} ₾</strong>
         </div>
       </div>
+
+      {order.courier_delivery_action_required && (
+        <div className="customer-notice">
+          <strong>კურიერის ღირებულება დასადასტურებელია</strong>
+
+          <p>
+            {order.courier_delivery_action_message ||
+              "კურიერით მიწოდების ღირებულება დასადასტურებელია."}
+          </p>
+
+          <p>
+            შემოთავაზებული თანხა:{" "}
+            <strong>
+              {Number(
+                order.proposed_courier_delivery_fee_gel || 0
+              ).toLocaleString("ka-GE")}{" "}
+              ₾
+            </strong>
+          </p>
+
+          <div>
+            <button
+              type="button"
+              onClick={handleResolveCourierFee}
+              disabled={isResolvingCourierFee || isDecliningCourierFee}
+            >
+              {isResolvingCourierFee ? "იგზავნება..." : "დადასტურება"}
+            </button>{" "}
+            <button
+              type="button"
+              onClick={handleDeclineCourierFee}
+              disabled={isResolvingCourierFee || isDecliningCourierFee}
+            >
+              {isDecliningCourierFee ? "იგზავნება..." : "უარყოფა"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {order.courier_delivery_requested &&
+        !order.courier_delivery_action_required && (
+          <div className="customer-notice">
+            <strong>კურიერით მიწოდება მოთხოვნილია</strong>
+            <p>
+              {Number(order.courier_delivery_fee_gel || 0) > 0
+                ? `კურიერის დადასტურებული ღირებულება: ${Number(
+                    order.courier_delivery_fee_gel || 0
+                  ).toLocaleString("ka-GE")} ₾.`
+                : "ოპერატორი დაგიკავშირდებათ მიწოდების მისამართისა და ღირებულების დასაზუსტებლად."}
+            </p>
+          </div>
+        )}
 
       {order.billing_type === "legal_entity" ? (
         <div className="note-box">
