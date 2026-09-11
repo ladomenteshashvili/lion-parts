@@ -230,3 +230,17 @@ INVOICE_FOOTER_TEXT = config(
     "INVOICE_FOOTER_TEXT",
     default="This invoice was generated from Lion Parts admin order data.",
 )
+
+
+# Invoice document display settings
+INVOICE_DOCUMENT_TITLE = config("INVOICE_DOCUMENT_TITLE", default="INVOICE")
+INVOICE_DOCUMENT_SUBTITLE = config("INVOICE_DOCUMENT_SUBTITLE", default="")
+INVOICE_SHOW_DRAFT_WATERMARK = config(
+    "INVOICE_SHOW_DRAFT_WATERMARK",
+    default=False,
+    cast=bool,
+)
+INVOICE_DRAFT_WATERMARK_TEXT = config(
+    "INVOICE_DRAFT_WATERMARK_TEXT",
+    default="DRAFT",
+)
