@@ -598,3 +598,72 @@ class PartQuoteRequestApiTests(TestCase):
         self.assertIsNotNone(quote_request.price_ready_at)
         self.assertEqual(quote_request.name, "NO-WEIGHT-3")
         self.assertTrue(quote_request.is_price_ready)
+
+    def test_verified_regular_customer_can_create_weight_price_request(self):
+        customer = Customer.objects.get(session_id=self.session_id)
+        customer.can_request_quote = False
+        customer.is_phone_verified = True
+        customer.save(update_fields=[
+            "can_request_quote",
+            "is_phone_verified",
+            "updated_at",
+        ])
+
+        response = self.client.post(
+            "/api/parts/quote-requests/",
+            {
+                "session_id": self.session_id,
+                "request_type": "weight_price",
+                "part_number": "MISSING-WEIGHT-1",
+                "customer_phone": customer.phone,
+                "quote_id": "AMT-MISSING-WEIGHT-1",
+                "part_option_id": "AMT-1-MISSING-WEIGHT-1",
+                "name": "Part missing weight",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        quote_request = PartQuoteRequest.objects.get()
+        self.assertEqual(
+            quote_request.request_type,
+            PartQuoteRequest.REQUEST_TYPE_WEIGHT_PRICE,
+        )
+        self.assertEqual(quote_request.customer_phone, customer.phone)
+
+    def test_unverified_customer_cannot_create_weight_price_request(self):
+        response = self.client.post(
+            "/api/parts/quote-requests/",
+            {
+                "session_id": self.session_id,
+                "request_type": "weight_price",
+                "part_number": "MISSING-WEIGHT-2",
+                "customer_phone": "+995555123456",
+                "quote_id": "AMT-MISSING-WEIGHT-2",
+                "part_option_id": "AMT-1-MISSING-WEIGHT-2",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data["detail"], "phone verification is required")
+
+    def test_weight_price_request_requires_selected_offer(self):
+        customer = Customer.objects.get(session_id=self.session_id)
+        customer.is_phone_verified = True
+        customer.save(update_fields=["is_phone_verified", "updated_at"])
+
+        response = self.client.post(
+            "/api/parts/quote-requests/",
+            {
+                "session_id": self.session_id,
+                "request_type": "weight_price",
+                "part_number": "MISSING-WEIGHT-3",
+                "customer_phone": customer.phone,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("quote_id", response.data)
+        self.assertIn("part_option_id", response.data)

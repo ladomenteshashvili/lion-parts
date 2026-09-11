@@ -81,6 +81,14 @@ class PartSearchLog(models.Model):
 
         
 class PartQuoteRequest(models.Model):
+    REQUEST_TYPE_MANUAL_SEARCH = "manual_search"
+    REQUEST_TYPE_WEIGHT_PRICE = "weight_price"
+
+    REQUEST_TYPE_CHOICES = [
+        (REQUEST_TYPE_MANUAL_SEARCH, "Manual part search"),
+        (REQUEST_TYPE_WEIGHT_PRICE, "Missing weight price preparation"),
+    ]
+
     STATUS_NEW = "new"
     STATUS_CONTACTED = "contacted"
     STATUS_RESOLVED = "resolved"
@@ -94,6 +102,12 @@ class PartQuoteRequest(models.Model):
     ]
 
     session_id = models.CharField(max_length=255, db_index=True)
+    request_type = models.CharField(
+        max_length=30,
+        choices=REQUEST_TYPE_CHOICES,
+        default=REQUEST_TYPE_MANUAL_SEARCH,
+        db_index=True,
+    )
     part_number = models.CharField(max_length=100)
     vin = models.CharField(max_length=17, blank=True)
     customer_name = models.CharField(max_length=150, blank=True)

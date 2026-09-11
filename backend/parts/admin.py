@@ -65,6 +65,7 @@ class PartSearchLogAdmin(admin.ModelAdmin):
 class PartQuoteRequestAdmin(admin.ModelAdmin):
     list_display = (
         "id",
+        "request_type",
         "part_number",
         "customer_phone",
         "customer_name",
@@ -75,7 +76,7 @@ class PartQuoteRequestAdmin(admin.ModelAdmin):
         "customer_link",
         "created_at",
     )
-    list_filter = ("status", "price_ready_at", "created_at")
+    list_filter = ("request_type", "status", "price_ready_at", "created_at")
     search_fields = (
         "part_number",
         "vin",
@@ -97,6 +98,7 @@ class PartQuoteRequestAdmin(admin.ModelAdmin):
         ("მოთხოვნა", {
             "fields": (
                 "part_number",
+                "request_type",
                 "vin",
                 "customer_name",
                 "customer_phone",
