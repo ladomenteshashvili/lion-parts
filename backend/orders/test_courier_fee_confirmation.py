@@ -9,7 +9,7 @@ from rest_framework.test import APIClient
 from accounts.models import Customer, CustomerSession
 from cart.models import Cart, CartItem
 from orders.admin import OrderAdmin
-from orders.models import Order, OrderSupportMessage
+from orders.models import Order, OrderCustomerNotification, OrderSupportMessage
 from orders.serializers import OrderSerializer
 
 
@@ -167,3 +167,15 @@ class CourierFeeConfirmationTests(TestCase):
             ).count(),
             1,
         )
+
+        notification = OrderCustomerNotification.objects.get(order=order)
+
+        self.assertEqual(
+            notification.notification_type,
+            OrderCustomerNotification.TYPE_ACTION_REQUIRED,
+        )
+        self.assertEqual(notification.title, "კურიერის ფასის დადასტურება")
+        self.assertTrue(notification.visible_to_customer)
+        self.assertFalse(notification.is_read_by_customer)
+        self.assertIsNotNone(notification.token)
+        self.assertIn("12.00", notification.message)
