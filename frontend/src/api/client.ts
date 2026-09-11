@@ -28,7 +28,7 @@ export type PartOption = {
   requires_weight_input?: boolean;
   weight_kg?: number | null;
   note?: string;
-  weight_source?: "api" | "customer" | "";
+  weight_source?: "api" | "customer" | "operator" | "";
   customer_notice?: string;  
 };
 
@@ -46,6 +46,13 @@ export type PartQuoteRequestPayload = {
   customer_name?: string;
   customer_phone: string;
   comment?: string;
+  quote_id?: string;
+  part_option_id?: string;
+  name?: string;
+  condition?: string;
+  brand?: string;
+  availability?: string;
+  eta_days?: number;
 };
 
 export type PartQuoteRequestResponse = {
@@ -63,7 +70,7 @@ export type PartQuoteRequestResponse = {
 
 
 export type PartsFeedItem = {
-  id: number;
+  id: number | string;
   part_number: string;
   vin: string;
   provider: string;
@@ -71,6 +78,16 @@ export type PartsFeedItem = {
   found_count: number;
   top_result_name: string;
   top_result_price_gel: number | null;
+  feed_status: "search_result" | "processing" | "price_ready" | "cancelled";
+  quote_request_id: number | null;
+  notification_token: string | null;
+  part_option_id: string;
+  condition: string;
+  brand: string;
+  availability: string;
+  eta_days: number | null;
+  weight_kg: number | null;
+  operator_message: string;
   created_at: string;
 };
 
@@ -154,6 +171,53 @@ export async function calculatePartPrice(
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(errorText || "Part price calculation failed");
+  }
+
+  return response.json();
+}
+
+export type PreparedQuote = {
+  id: number;
+  token: string;
+  part_number: string;
+  vin: string;
+  quote_id: string;
+  part_option_id: string;
+  name: string;
+  condition: string;
+  brand: string;
+  availability: string;
+  eta_days: number | null;
+  weight_kg: string | null;
+  final_price_gel: string;
+  currency: "GEL";
+  operator_message: string;
+  price_ready_at: string;
+  is_acknowledged: boolean;
+};
+
+export async function getPreparedQuote(token: string): Promise<PreparedQuote> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/parts/public/quote-requests/${encodeURIComponent(token)}/`
+  );
+
+  if (!response.ok) {
+    throw new Error("Prepared quote load failed");
+  }
+
+  return response.json();
+}
+
+export async function acknowledgePreparedQuote(
+  token: string
+): Promise<PreparedQuote> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/parts/public/quote-requests/${encodeURIComponent(token)}/acknowledge/`,
+    { method: "POST" }
+  );
+
+  if (!response.ok) {
+    throw new Error("Prepared quote acknowledge failed");
   }
 
   return response.json();

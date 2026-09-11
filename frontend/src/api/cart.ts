@@ -72,12 +72,12 @@ export async function addCartItem(item: {
   condition: string;
   brand: string;
   availability: string;
-  eta_days: number;
+  eta_days?: number | null;
   weight_kg?: number | null;  
   final_price_gel: number;
   currency: "GEL";
   note?: string;
-  weight_source?: "api" | "customer" | "";
+  weight_source?: "api" | "customer" | "operator" | "";
   customer_notice?: string;  
   quantity: number;
 }): Promise<BackendCart> {

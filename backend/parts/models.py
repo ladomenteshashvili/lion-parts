@@ -1,4 +1,5 @@
 from decimal import Decimal
+import uuid
 
 from django.db import models
 
@@ -99,6 +100,38 @@ class PartQuoteRequest(models.Model):
     customer_phone = models.CharField(max_length=50)
     comment = models.TextField(blank=True)
 
+    # The searched offer is copied here so the operator can prepare a stable
+    # customer-facing quote even if the supplier response changes later.
+    quote_id = models.CharField(max_length=120, blank=True)
+    part_option_id = models.CharField(max_length=120, blank=True)
+    name = models.CharField(max_length=255, blank=True)
+    condition = models.CharField(max_length=80, blank=True)
+    brand = models.CharField(max_length=120, blank=True)
+    availability = models.CharField(max_length=120, blank=True)
+    eta_days = models.PositiveIntegerField(null=True, blank=True)
+    prepared_weight_kg = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+    final_price_gel = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+    currency = models.CharField(max_length=10, default="GEL")
+    operator_message = models.TextField(blank=True)
+
+    notification_token = models.UUIDField(
+        default=uuid.uuid4,
+        unique=True,
+        db_index=True,
+    )
+    price_ready_at = models.DateTimeField(null=True, blank=True)
+    notification_acknowledged_at = models.DateTimeField(null=True, blank=True)
+
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
@@ -114,3 +147,7 @@ class PartQuoteRequest(models.Model):
 
     def __str__(self):
         return f"{self.part_number} - {self.customer_phone}"
+
+    @property
+    def is_price_ready(self):
+        return bool(self.price_ready_at and self.final_price_gel is not None)

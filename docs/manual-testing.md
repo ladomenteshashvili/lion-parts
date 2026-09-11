@@ -1,397 +1,723 @@
-# Lion Parts Manual Testing Checklist
+# Lion Parts დიზაინერის სატესტო და გამოყენების ინსტრუქცია
 
-ეს ფაილი არის ხელით ტესტირების მთავარი სია. ყოველი ახალი ფუნქციის დამატებისას უნდა განახლდეს.
+ეს დოკუმენტი აღწერს Lion Parts-ის სატესტო გარემოში Customer frontend-ისა და Admin Operator panel-ის სრულ შემოწმებას. ინსტრუქცია განახლებულია მიმდინარე `main` ვერსიის მიხედვით და მოიცავს Parts Feed-ს, ოპერატორის მიერ წონისა და ფასის მომზადებას, pre-order magic link-ს, ანგარიშს, პაროლით შესვლას, იურიდიულ პირს, checkout-ს, კურიერის ფასის შეთანხმებას, order notification link-ებსა და ინვოისს.
 
-## Server startup
+## ლინკები და წვდომა
 
-1. Pull latest main.
-2. Run backend migrations.
-3. Start backend on port 8000.
-4. Start frontend on port 5173.
-5. Open http://2.28.40.250:5173/
-6. Check backend health at http://2.28.40.250:8000/api/health/
+Customer frontend:
 
-Expected backend health: status ok.
+`https://test.lionparts.ge`
 
-## Profile / phone login
+Admin Operator panel:
 
-Check:
+`https://api-test.lionparts.ge/admin/`
 
-- Phone number input is visible for logged out user.
-- SMS code can be sent.
-- SMS code can be verified.
-- New phone requires customer name after code verification.
-- Existing verified phone logs in without asking name again.
-- Verified profile shows customer name and phone.
-- Verified profile does not show SMS send form.
-- Verified profile shows logout button.
-- Logout clears current browser session.
-- After logout, empty phone login form is shown.
+Operator login:
 
-## Search page
+- Username: `operator1`
+- Password: `***`
 
-Page: /
+## ტესტირებამდე
 
-Check:
+1. ძირითადი სცენარი გაიარეთ ჩვეულებრივ browser-ში.
+2. სხვა მომხმარებლისა და direct link-ის ტესტებისთვის გამოიყენეთ Incognito ან Private window.
+3. ჩაინიშნეთ შექმნილი `ORDER_NUMBER`, მომხმარებლის ტელეფონი და გამოყენებული part number.
+4. თუ გვერდი ახალ ვერსიას აღმოაჩენს, ის cache-ს გაასუფთავებს და განახლდება. უჩვეულო ქცევისას ერთხელ დახურეთ და თავიდან გახსენით გვერდი.
+5. ახალი შეკვეთა თავდაპირველად იქმნება `Payment pending` სტატუსით. რეალური ონლაინ გადახდა ჯერ არ გამოიყენება; თანხას operator ადასტურებს Admin-იდან.
 
-- Backend status is ok.
-- Search by OEM part number works.
-- VIN is optional.
-- Search result shows Quote ID.
-- Customer sees final price in GEL only.
-- Quantity input works.
-- Add to cart works.
-- Added item shows as already added.
+# ნაწილი 1 Customer frontend
 
-Suggested test part numbers:
+## 1 მთავარი გვერდი და ძიება
 
-- 68275354AC
-- 51118070648
+გახსენით `https://test.lionparts.ge`.
 
-## Search Feed
+გააკეთეთ:
 
-Page: /
+1. ჩაწერეთ OEM part number.
+2. სურვილისამებრ ჩაწერეთ VIN.
+3. დააჭირეთ ძიებას.
 
-Section: ჩემი ნაწილები / ბოლო ძიებები
+შეამოწმეთ:
 
-Check:
+- ჩანს search page და მიღებული offer cards.
+- თითოეულ შეთავაზებაზე ჩანს part option, ფასი მხოლოდ GEL-ში, ETA და quantity selector.
+- `Add to cart` მუშაობს.
+- უკვე დამატებულ ნაწილზე შესაბამისი მდგომარეობა ჩანს.
+- რამდენიმე შეთავაზების დაბრუნებისას თითოეული option ცალკე და გასაგებად ჩანს.
 
-- Feed is visible for verified phone.
-- New search appears in feed.
-- VIN appears in feed when search used VIN.
-- Feed shows found count.
-- Restart search button runs the same search again.
-- Same verified phone in another browser/session can see the same feed.
-- Different verified phone cannot see another customer’s feed.
+სატესტო part number-ები:
 
-## Cart
+- `68275354AC`
+- `51118070648`
 
-Page: /cart
+## 2 ჩემი ნაწილები და ბოლო ძიებები
 
-Check:
+ეს ნაწილი შეამოწმეთ ტელეფონდადასტურებული მომხმარებლით.
 
-- Added part appears in cart.
-- Quantity is correct.
-- Total GEL is correct.
-- Remove item works.
-- Checkout link/button works.
+1. შეასრულეთ ძიება part number-ით.
+2. თუ შესაძლებელია, მეორე ძიებაში დაამატეთ VIN.
+3. დაბრუნდით მთავარ გვერდზე და ნახეთ `ჩემი ნაწილები` ან `ბოლო ძიებები`.
 
-## Checkout
+შეამოწმეთ:
 
-Page: /checkout
+- ახალი ძიება feed-ში გამოჩნდა.
+- ჩანს part number, VIN თუ იყო მითითებული და ნაპოვნი შედეგების რაოდენობა.
+- განმეორებითი ძიების ღილაკი იმავე მონაცემებით უშვებს ძიებას.
+- იგივე ტელეფონით სხვა browser-ში შესვლისას ძიებების ისტორია ჩანს.
+- სხვა ტელეფონს ამ მომხმარებლის ისტორია არ უჩანს.
 
-Check:
+## 2.1 წონა არ არის — ოპერატორთან ფასის მოთხოვნა
 
-- Checkout shows phone verification form inline when phone is not verified.
-- Checkout does not redirect to Profile for phone verification.
-- After SMS verification, customer stays on Checkout.
-- After verification, create order button becomes available.
-- Customer name and phone are taken from verified profile.
-- VIN can be entered.
-- Comment can be entered.
-- Order is created successfully.
-- Customer is redirected to order detail.
-- Order status is payment pending.
-- Payment reference is visible.
+ეს სცენარი შეამოწმეთ მომხმარებლით, რომელსაც `can_request_quote` უფლება აქვს.
 
-## Orders list
+1. მოძებნეთ ნაწილი, რომლის შეთავაზებას `requires_weight_input` აქვს.
+2. result card-ზე უნდა გამოჩნდეს `საჭიროა წონა` მდგომარეობა.
+3. დააჭირეთ `ოპერატორს გადაამოწმებინე`.
+4. მოთხოვნის წარმატების ტექსტში ჩაინიშნეთ Request ID.
+5. მთავარ გვერდზე `Parts Feed`-ში იპოვეთ იგივე ნაწილი.
 
-Page: /orders
+შეამოწმეთ:
 
-Check:
+- Feed-ში ჩანს `ფასი მუშავდება` სტატუსი.
+- ჩანს part number, VIN თუ იყო და Request ID.
+- მოთხოვნის განმეორებით დაჭერა აქტიურ დუბლიკატს არ ქმნის.
+- ამ ეტაპზე ფასი, magic link და კალათაში დამატების ღილაკი არ ჩანს.
 
-- Verified phone can see its own orders.
-- Unverified user sees phone verification required card.
-- Different verified phone cannot see another phone’s orders.
-- Order list shows order number, status, total and date.
+## 2.2 Operator ამზადებს წონასა და ფასს
 
-## Order detail
+Admin-ში გახსენით `Parts → Part quote requests` და იპოვეთ შესაბამისი Request ID.
 
-Page: /orders/<ORDER_NUMBER>
+1. გახსენით მოთხოვნა.
+2. შეავსეთ `prepared_weight_kg`.
+3. შეავსეთ `final_price_gel`.
+4. საჭიროებისამებრ შეავსეთ `eta_days`, `name`, `brand`, `availability` და `operator_message`.
+5. დააჭირეთ Save.
+6. დაბრუნდით list-ში და მონიშნეთ მოთხოვნა.
+7. Actions dropdown-ში აირჩიეთ `მომხმარებელს: ფასი მზადაა — magic link-ის შექმნა`.
+8. დააჭირეთ Go.
 
-Check:
+შეამოწმეთ:
 
-- Verified owner phone can open order detail.
-- Different verified phone gets not found/error.
-- Order total is visible.
-- Payment pending message is visible when unpaid.
-- Payment reference is visible when unpaid.
-- Items list is visible.
-- Item detail modal opens.
-- Customer-visible timeline/history is visible.
-- Internal/admin-only events are not visible to customer.
+- წონის ან საბოლოო ფასის გარეშე მოთხოვნა გამოტოვებულია და Admin აჩვენებს გაფრთხილებას.
+- სწორად შევსებული მოთხოვნა ხდება `Resolved`.
+- ივსება `price_ready_at`.
+- list-სა და detail-ში ჩნდება `Customer magic link`.
 
-## Manual admin payment confirmation
+## 2.3 Parts Feed-ში მომზადებული ფასი
 
-Admin: http://2.28.40.250:8000/admin/
+Customer frontend-ის მთავარ გვერდზე განაახლეთ `Parts Feed`.
 
-Check:
+შეამოწმეთ:
 
-- Open Orders.
-- Find payment pending order.
-- Use admin action to mark selected order as paid manually.
-- Refresh frontend order detail.
-- Order status changes to processing.
-- Payment status changes to paid.
-- Item status changes to payment confirmed.
+- იგივე ნაწილი ჩანს `ფასი მზადაა` სტატუსით.
+- ჩანს ოპერატორის მიერ მომზადებული საბოლოო ფასი და წონა.
+- `შეთავაზების გახსნა` გადადის `/q/<token>` მისამართზე.
+- `კალათაში დამატება` ამატებს ზუსტად მომზადებულ შეთავაზებას, ფასსა და წონას.
+- სხვა დადასტურებული ტელეფონის Parts Feed-ში ეს მოთხოვნა არ ჩანს.
 
-## Safety endpoints
+## 2.4 Pre-order magic link
 
-These endpoints must return 404 by default:
+Admin-ში დააკოპირეთ `Customer magic link` და გახსენით Incognito-ში. ლინკი იქნება მსგავსი:
 
-- POST /api/orders/LP-TEST/demo-confirm-payment/
-- POST /api/orders/LP-TEST/verify-payment/
-- POST /api/orders/items/999/demo-request-change/
-- POST /api/orders/items/999/demo-update-status/
+`https://test.lionparts.ge/q/<token>`
 
-## Admin search logs
+შეამოწმეთ:
 
-Admin section: Parts / Part search logs
+- იხსნება ტელეფონის დადასტურების გარეშე.
+- დაუმუშავებელი მოთხოვნის token საჯაროდ არ იხსნება.
+- ჩანს part number, VIN თუ იყო, მომზადებული წონა, საბოლოო ფასი, ETA და operator message.
+- `გასაგებია` მოთხოვნას acknowledged მდგომარეობაში გადაიყვანს.
+- `კალათაში დამატება` მუშაობს Incognito browser-ის მიმდინარე კალათაზე.
+- კალათიდან შესაძლებელია ჩვეულებრივი Checkout flow-ის გაგრძელება.
 
-Check:
+## 3 კალათაში დამატება
 
-- Part number is visible.
-- VIN is visible.
-- Customer phone is visible.
-- Customer name is visible.
-- Session ID is visible.
-- Provider is visible.
-- Found count is visible.
+Search result-იდან:
 
-## Automated checks before merge/release
+1. აირჩიეთ quantity.
+2. დააჭირეთ `Add to cart`.
+3. header-იდან გადადით Cart-ზე.
 
-Run:
+პირდაპირი მისამართი: `https://test.lionparts.ge/cart`
 
-./scripts/check.sh
+შეამოწმეთ:
 
-Expected:
+- დამატებული ნაწილი, quantity, ერთეულის ფასი და total სწორია.
+- რამდენიმე ნაწილის დამატება მუშაობს.
+- ნაწილის წაშლა მუშაობს და total ახლდება.
+- Checkout button გადადის შეკვეთის გაფორმებაზე.
+- თუ სანდო მომხმარებელს აქვს წონის შეყვანის უფლება და Search result-ს წონა აკლია, result card-ზე წონის ხელით მითითება და ფასის გადათვლა მუშაობს; Cart-ში უკვე გადათვლილი ფასი და წონა ჩანს.
+- მომხმარებლის მიერ შეყვანილი წონის შემთხვევაში ჩანს გაფრთხილება, რომ საბოლოო წონა მოგვიანებით დადგინდება.
 
-- Backend tests pass.
-- Frontend mock E2E passes.
-- Real backend E2E passes.
+# ნაწილი 2 ანგარიში და შესვლა
 
+## 4 SMS კოდით შესვლა
 
-## Customer action required
+გახსენით Profile ან დაიწყეთ Checkout არავერიფიცირებული browser-იდან.
 
-Check:
+1. შეიყვანეთ ქართული მობილური ნომერი.
+2. გააგზავნეთ SMS კოდი.
+3. შეიყვანეთ მიღებული კოდი.
+4. თუ ნომერი ახალია, შეიყვანეთ მომხმარებლის სახელი.
 
-- Admin can request price change confirmation from Order items.
-- Admin can request ETA change confirmation from Order items.
-- Customer sees action-required badge in the Orders navigation.
-- Customer sees action-required summary at the top of Orders page.
-- Customer sees action-required badge on the affected order card.
-- Customer can open item details and approve the change.
-- Customer can open item details and cancel the item if the change is not acceptable.
-- After approval, item returns to checking and order returns to processing.
-- After cancelling the only item, item becomes cancelled and order becomes cancelled.
-- Different verified phone cannot approve or cancel another customer’s item.
+შეამოწმეთ:
 
+- ვერიფიკაციის შემდეგ იმავე გვერდზე რჩებით.
+- Profile-ზე ჩანს მომხმარებლის სახელი და დადასტურებული ტელეფონი.
+- ძველი, უკვე რეგისტრირებული ნომერი სახელის ხელახლა შეყვანას არ ითხოვს.
+- იგივე ნომრით სხვა browser-ში შესვლისას ძველი შეკვეთები ჩანს.
 
-## Support messaging
+## 5 პაროლის შექმნა და შეცვლა
 
-Check:
+ჯერ შედით SMS კოდით, შემდეგ Profile-ზე გახსენით პაროლის ბლოკი.
 
-- Customer can open order detail and see Support section.
-- Customer can send a support message for the whole order.
-- Customer can send a support message linked to a specific item.
-- Admin can open Order in Django Admin and add an operator reply in Support messages inline.
-- Admin reply appears on customer order detail.
-- Header Orders badge increases when there is unread operator reply.
-- Orders page shows operator reply badge on affected order.
-- Customer clicks “გასაგებია” and unread support badge disappears.
-- Different verified phone cannot read or send support messages for another customer’s order.
+პაროლის მოთხოვნა: მინიმუმ 8 სიმბოლო, დიდი ასო, პატარა ასო, ციფრი და სპეციალური სიმბოლო.
 
+შეამოწმეთ ორი სცენარი:
 
-## Final employee testing checklist
+1. პაროლის არმქონე მომხმარებელმა შეავსოს `ახალი პაროლი` და მისი გამეორება, შემდეგ შექმნას პაროლი.
+2. პაროლის მქონე მომხმარებელმა შეიყვანოს მიმდინარე პაროლი, ახალი პაროლი და გამეორება, შემდეგ შეცვალოს პაროლი.
 
-Use this checklist before release or before giving the app to real customers.
+მოსალოდნელი შედეგი:
 
-### 1. Login / Profile
+- წარმატების შეტყობინება სწორად ჩანს.
+- არასწორი მიმდინარე პაროლი არ მიიღება.
+- მოთხოვნებთან შეუსაბამო ან ერთმანეთისგან განსხვავებული ახალი პაროლები არ მიიღება.
 
-- Phone number input is visible for logged out user.
-- SMS code can be sent.
-- SMS code can be verified.
-- New phone requires customer name after code verification.
-- Existing verified phone logs in without asking name again.
-- Verified profile shows customer name and phone.
-- Verified profile does not show SMS send form.
-- Logout clears current browser session.
+## 6 პაროლით შესვლა და აღდგენა
 
-### 2. Search / Cart / Checkout
+1. Profile-იდან გამოდით.
+2. `პაროლით შესვლა` ბლოკში შეიყვანეთ მობილური და პაროლი.
+3. შეამოწმეთ, რომ SMS-ის გარეშე შედიხართ იმავე ანგარიშში და ძველი შეკვეთები ჩანს.
+4. ხელახლა გამოდით და დააჭირეთ `პაროლი დამავიწყდა`.
+5. შეიყვანეთ ტელეფონი, გააგზავნეთ აღდგენის SMS კოდი, მიუთითეთ ახალი პაროლი და გაიმეორეთ.
 
-- Search by OEM part number works.
-- VIN is optional.
-- Customer sees final price in GEL only.
-- Quantity input works.
-- Add to cart works.
-- Cart shows added item and correct quantity.
-- Checkout creates order.
-- Customer is redirected to order detail.
-- Order status is payment pending.
-- Payment reference is visible.
+შეამოწმეთ:
 
-### 3. Admin payment and item tracking
+- აღდგენის შემდეგ შესვლა ავტომატურად სრულდება.
+- ახალი პაროლი მუშაობს, ძველი აღარ მუშაობს.
+- არასწორი SMS კოდი და სუსტი პაროლი შესაბამის შეცდომას აჩვენებს.
 
-- Admin can mark payment pending order as paid manually.
-- Frontend order status changes to processing.
-- Item status changes to payment confirmed.
-- Admin can move item through checking, purchased, received USA, shipped to Georgia, received Georgia, ready for pickup and completed.
-- Customer timeline/history shows customer-visible status changes.
+## 7 ტელეფონის შეცვლა და გასვლა
 
-### 4. Price change
+Profile-ზე შეამოწმეთ:
 
-- Admin can enter proposed_final_price_gel and request price confirmation.
-- Customer sees Orders badge and action-required card.
-- Customer can approve price change.
-- Customer can cancel item if price is not acceptable.
-- Different verified phone cannot approve or cancel the action.
+- სხვა ნომერზე გადასვლა ითხოვს ახალი ნომრის SMS ვერიფიკაციას.
+- გასვლა ასუფთავებს მიმდინარე browser session-ს და ძველ კალათას აღარ აჩვენებს.
+- იმავე ტელეფონით ხელახლა შესვლის შემდეგ შეკვეთები კვლავ ჩანს.
+- ერთი browser-ის კალათა სხვა browser-ში ავტომატურად არ გადადის.
 
-### 5. ETA change
+# ნაწილი 3 იურიდიული პირის პროფილი
 
-- Admin can enter proposed_eta_days and request ETA confirmation.
-- Customer sees new ETA and expected arrival date.
-- Customer can approve ETA change.
-- Customer can cancel item if ETA is not acceptable.
+## 8 კომპანიის მონაცემების დამატება
 
-### 6. Alternative part
+ჯერ შედით მომხმარებლის ანგარიშში, შემდეგ Profile-ზე გახსენით `იურიდიული პირის მონაცემები`.
 
-- Admin can enter proposed_part_number.
-- Admin can optionally enter proposed_name.
-- Admin can optionally enter proposed_final_price_gel.
-- Admin can optionally enter proposed_eta_days.
-- Customer sees alternative part number.
-- Customer sees changed price/ETA when provided.
-- Customer can approve alternative part.
-- Customer can cancel item if alternative is not acceptable.
+შეავსეთ ყველა აუცილებელი ველი:
 
-### 7. Fitment issue
+- კომპანიის საიდენტიფიკაციო კოდი
+- კომპანიის ოფიციალური სახელწოდება
+- იურიდიული მისამართი
+- საკონტაქტო პირის სახელი
+- საკონტაქტო პირის გვარი
+- ელ.ფოსტა
+- კომპანიის მობილური ნომერი
 
-- Admin can request VIN fitment confirmation with action_message.
-- VIN is not required for this test stage.
-- Customer sees action required.
-- Customer can approve.
-- Customer can cancel item.
+დააჭირეთ `კომპანიის მონაცემების შენახვა`.
 
-### 8. Weight correction before purchase
+შეამოწმეთ:
 
-- Admin can request weight/dimensions price change before item is purchased.
-- Customer sees normal approve/cancel decision.
-- Approval applies changed price.
-- Cancel cancels item.
+- ყველა ცარიელი სავალდებულო ველი იწვევს გასაგებ შეცდომას.
+- შენახვის შემდეგ ჩანს კომპანიის სახელი, საიდენტიფიკაციო კოდი და მობილურის სტატუსი.
+- გვერდის განახლების შემდეგ მონაცემები არ იკარგება.
 
-### 9. Weight correction after purchase / notice only
+## 9 კომპანიის მობილურის დადასტურება
 
-- Item status is purchased or later.
-- weight_source is manual/customer.
-- Admin enters proposed_final_price_gel and requests weight/dimensions confirmation.
-- Customer sees only “გასაგებია”.
-- Customer must not see cancel button.
-- Customer must not see normal confirmation button.
-- Clicking “გასაგებია” clears badge.
-- Item remains purchased or its current logistics status.
-- Changed final price remains applied.
+კომპანიის მონაცემების შენახვის შემდეგ:
 
-### 10. Support messaging
+1. დააჭირეთ `კოდის გაგზავნა`.
+2. კოდი მიიღეთ კომპანიის პროფილში მითითებულ მობილურზე.
+3. შეიყვანეთ კოდი.
+4. დააჭირეთ `მობილურის დადასტურება`.
 
-- Customer can send support message for whole order.
-- Customer can send support message linked to item.
-- Admin can reply from Order support messages inline.
-- Customer sees operator reply.
-- Header Orders badge increases for unread operator reply.
-- Orders page shows operator reply badge.
-- Customer clicks “გასაგებია” and unread badge disappears.
+შეამოწმეთ:
 
-### 11. Admin operator task filters
+- კომპანიის მობილურის სტატუსი ხდება `დადასტურებულია`.
+- მომხმარებლის ძირითადი ტელეფონის ვერიფიკაცია და კომპანიის მობილურის ვერიფიკაცია დამოუკიდებელი პროცესებია.
+- კომპანიის მობილურის შეცვლისას ის ხელახლა ხდება დასადასტურებელი.
 
-Orders admin:
+# ნაწილი 4 Checkout და შეკვეთის შექმნა
 
-- “ახალი გადახდილი — შესამოწმებელი” filter works.
-- “Customer პასუხს ელოდება” filter works.
-- “Customer-ის ახალი შეტყობინება” filter works.
-- “გზაში / ლოგისტიკა” filter works.
-- “მზადაა გასაცემად” filter works.
+## 10 Checkout-ზე ტელეფონის დადასტურება
 
-Order items admin:
+Cart-იდან დააჭირეთ Checkout-ს.
 
-- “გადახდილია — შესამოწმებელი” filter works.
-- “Customer პასუხს ელოდება” filter works.
-- Purchased / received USA / shipped / received Georgia / ready pickup filters work.
+თუ მომხმარებელი ჯერ არ არის დადასტურებული:
 
-Support messages admin:
+1. ტელეფონის ვერიფიკაციის ფორმა უნდა გამოჩნდეს უშუალოდ Checkout-ზე.
+2. გააგზავნეთ SMS კოდი და დაადასტურეთ ნომერი.
+3. ვერიფიკაციის შემდეგ უნდა დარჩეთ Checkout-ზე; Profile-ზე გადამისამართება არ უნდა მოხდეს.
 
-- “Customer-ის ახალი შეტყობინება” filter works.
-- “მონიშნე operator-ის მიერ წაკითხულად” action works.
+## 11 პირად ან იურიდიულ პირზე გაფორმება
 
-### 12. Privacy
+ტელეფონის დადასტურების შემდეგ Checkout-ზე შეამოწმეთ `ვისზე გაფორმდეს შეკვეთა`.
 
-- Unverified user cannot see orders.
-- Different verified phone cannot see another customer’s orders.
-- Different verified phone cannot open another customer’s order detail.
-- Different verified phone cannot send support message on another customer’s order.
+პირადი პირის სცენარი:
 
+1. აირჩიეთ `პირად პირზე`.
+2. დარწმუნდით, რომ მომხმარებლის სახელი და ტელეფონი ავტომატურად არის აღებული პროფილიდან.
 
-## Notification magic links
+იურიდიული პირის სცენარი:
 
-Check:
+1. წინასწარ შეავსეთ კომპანიის პროფილი და დაადასტურეთ კომპანიის მობილური.
+2. Checkout-ზე აირჩიეთ `იურიდიულ პირზე`.
+3. გადაამოწმეთ კომპანიის სახელი, საიდენტიფიკაციო კოდი, ელ.ფოსტა და მობილური.
 
-- Admin creates operator support reply.
-- Order customer notification is created automatically.
-- Admin can copy Customer link from Order customer notifications.
-- Opening `/n/<token>` works without phone verification.
-- The notification message opens as a forced modal.
-- Modal cannot be closed by background click or X button.
-- Only “გასაგებია” closes the message.
-- After “გასაგებია”, the notification becomes read.
-- Support reply message also becomes read by customer.
-- Order details are visible on the notification link page.
-- Public notification link does not expose session_id.
-- Public notification link does not allow approve/cancel/support send actions.
-- Normal order detail page also pops unread operator support message on entry.
+შეამოწმეთ უარყოფითი შემთხვევებიც:
 
+- კომპანიის პროფილის გარეშე იურიდიულ პირზე შეკვეთა ვერ ფორმდება.
+- დაუდასტურებელი კომპანიის მობილურით იურიდიულ პირზე შეკვეთა ვერ ფორმდება.
+- Admin-ში არააქტიური კომპანიის პროფილით იურიდიულ პირზე შეკვეთა ვერ ფორმდება.
 
-## Notification deep links UX
+## 12 Checkout-ის დამატებითი ველები და კურიერის მოთხოვნა
 
-Check four notification link states:
+1. სურვილისამებრ შეავსეთ VIN.
+2. სურვილისამებრ შეავსეთ კომენტარი.
+3. ცალკე ტესტში მონიშნეთ `მინდა კურიერით მიწოდება`.
+4. დააჭირეთ `შეკვეთის შექმნა`.
 
-### 1. Order update link
+შეამოწმეთ:
 
-- Admin changes an order/item status that creates customer-visible order update.
-- Order customer notification is created automatically.
-- Open `/n/<token>`.
-- Phone verification is not required.
-- Page explains why the link was sent.
-- Order summary is visible.
-- Forced message modal appears if unread.
-- Modal has no X/close.
-- Only “გასაგებია” closes it.
+- კურიერის არჩევისას ჩანს განმარტება, რომ მისი ფასი ჯერ არ ემატება total-ს.
+- შეკვეთა იქმნება `Payment pending` სტატუსით.
+- მომხმარებელი გადადის ახლად შექმნილი შეკვეთის detail გვერდზე.
+- ჩანს payment reference.
+- order detail-ზე ჩანს პირადი ან იურიდიული პირის ის მონაცემები, რომლებიც შეკვეთის შექმნისას იყო გამოყენებული.
 
-### 2. Item update link
+# ნაწილი 5 Orders და Tracking
 
-- Admin changes a specific item status or creates item-related update.
-- Open `/n/<token>`.
-- Page explains this is a part update.
-- Affected item is highlighted.
-- Affected item modal opens automatically.
-- Customer can reopen item details from the page.
+## 13 Orders list
 
-### 3. Support reply link
+გახსენით `https://test.lionparts.ge/orders`.
 
-- Admin creates operator support reply.
-- Notification is created automatically.
-- Open `/n/<token>`.
-- Page explains this is an operator reply.
-- Support history is visible.
-- The exact operator reply is highlighted.
-- Forced unread modal shows the operator message.
-- “გასაგებია” marks it read.
+შეამოწმეთ:
 
-### 4. Action required link
+- ჩანს მხოლოდ მიმდინარე ტელეფონზე მიბმული შეკვეთები.
+- თითოეულ ბარათზე ჩანს order number, status, total და თარიღი.
+- action required-ისას შესაბამისი badge ჩანს.
+- operator-ის წაუკითხავი პასუხისას შესაბამისი support badge ჩანს.
+- არავერიფიცირებულ მომხმარებელს ეჩვენება ტელეფონის დადასტურების ფორმა.
 
-- Admin requests price / ETA / fitment / alternative confirmation.
-- Open `/n/<token>`.
-- Page explains customer action is required.
-- Affected item modal opens automatically.
-- Changed price / ETA / alternative number is visible when provided.
-- Public link does not allow approve/cancel.
-- Page links customer to full order page for phone verification and decision.
+## 14 Order detail და Tracking
 
+Orders list-იდან გახსენით შეკვეთა ან გამოიყენეთ:
+
+`https://test.lionparts.ge/orders/<ORDER_NUMBER>`
+
+შეამოწმეთ:
+
+- order summary, status, total, payment status და payment reference სწორია.
+- ჩანს billing type და შესაბამისი პირადი ან კომპანიის მონაცემები.
+- ჩანს item list, თითოეული ნაწილის status და detail modal.
+- ჩანს თითოეული ნაწილის timeline და შეკვეთის საერთო progress.
+- მხოლოდ customer-visible მოვლენებია ნაჩვენები; internal admin events არ ჩანს.
+- support section მუშაობს.
+- ჩანს `ინვოისის ნახვა / PDF` ღილაკი.
+
+## 15 Direct order link და ტელეფონის ვერიფიკაცია
+
+Incognito-ში გახსენით:
+
+`https://test.lionparts.ge/orders/<ORDER_NUMBER>`
+
+შეამოწმეთ:
+
+1. URL იგივე რჩება.
+2. ჩნდება inline phone verification form.
+3. სწორი ტელეფონის SMS კოდით დადასტურების შემდეგ იგივე order detail იხსნება.
+4. სხვა ტელეფონით შესვლისას შეკვეთის მონაცემები არ უნდა გაიხსნას.
+
+# ნაწილი 6 Admin Operator panel
+
+## 16 Admin-ში შესვლა
+
+გახსენით `https://api-test.lionparts.ge/admin/` და შედით operator user-ით.
+
+მიმდინარე ფუნქციების შესამოწმებლად საჭიროა შემდეგი განყოფილებები:
+
+- Accounts: Customers, Customer tariffs, Customer sessions, Legal entity profiles, Phone verification codes
+- Orders: Orders, Order items, Payments, Order support messages, Order customer notifications, Order item events
+- Parts: Part search logs, Part quote requests
+
+## 17 გადახდის ხელით დადასტურება
+
+Admin-ში შედით `Orders → Orders`.
+
+1. იპოვეთ `Payment pending` შეკვეთა.
+2. მონიშნეთ checkbox-ით.
+3. Actions dropdown-ში აირჩიეთ `თანხა მიღებულია — შეკვეთის დადასტურება`.
+4. დააჭირეთ `Go`.
+
+შეამოწმეთ frontend-ზე:
+
+- order status გახდა Processing.
+- payment status გახდა Paid.
+- item status გახდა Payment confirmed.
+- გადახდის განმეორებით დადასტურება ორჯერ არ უნდა შესრულდეს.
+
+## 18 ნაწილის სტატუსების შეცვლა
+
+Admin-ში შედით `Orders → Order items`.
+
+Payment pending შეკვეთაზე სტატუსის შეცვლა არ უნდა შესრულდეს. გადახდის დადასტურების შემდეგ მონიშნეთ item და თანმიმდევრობით გაუშვით:
+
+1. `ოპერატორი: შემოწმება დაიწყო`
+2. `ოპერატორი: ნაწილი შეძენილია`
+3. `ოპერატორი: მიღებულია აშშ-ში`
+4. `ოპერატორი: გამოიგზავნა საქართველოში`
+5. `ოპერატორი: მიღებულია საქართველოში`
+6. `ოპერატორი: მზად არის გასაცემად`
+7. `ოპერატორი: დასრულებულია`
+
+ცალკე item-ზე შესაძლებელია `ოპერატორი: გაუქმებულია` სცენარის შემოწმებაც.
+
+ყოველი მოქმედების შემდეგ frontend-ზე შეამოწმეთ item status, item timeline და order-ის საერთო progress.
+
+## 19 Operator task filters
+
+Orders list-ში შეამოწმეთ ფილტრები:
+
+- ახალი გადახდილი — შესამოწმებელი
+- Customer პასუხს ელოდება
+- Customer-ის ახალი შეტყობინება
+- გზაში ან ლოგისტიკა
+- მზადაა გასაცემად
+
+Order items list-ში შეამოწმეთ:
+
+- გადახდილია — შესამოწმებელი
+- Customer პასუხს ელოდება
+- Purchased
+- Received USA
+- Shipped to Georgia
+- Received Georgia
+- Ready for pickup
+
+Order support messages-ში შეამოწმეთ `Customer-ის ახალი შეტყობინება` filter და `მონიშნე operator-ის მიერ წაკითხულად` action.
+
+# ნაწილი 7 Customer action required
+
+ყველა item-level მოქმედება იწყება `Admin → Orders → Order items`-იდან.
+
+საერთო წესი:
+
+1. გახსენით კონკრეტული item.
+2. შეავსეთ შესაბამისი proposed ველები და `action_message`.
+3. დააჭირეთ Save.
+4. დაბრუნდით list-ში, მონიშნეთ item და გაუშვით შესაბამისი action.
+5. Payment pending შეკვეთაზე action request არ უნდა გაიგზავნოს.
+
+## 20 Price change
+
+შეავსეთ:
+
+- `proposed_final_price_gel` — ახალი ფასი
+- `action_message` — ცვლილების მიზეზი
+
+გაუშვით `მომხმარებელს: ფასის ცვლილების დადასტურება`.
+
+Customer-ზე შეამოწმეთ ახალი ფასი, მიზეზი, approve და cancel. Approve-ის შემდეგ total უნდა განახლდეს და item დაბრუნდეს Checking-ზე. Cancel-ისას item უქმდება.
+
+## 21 ETA change
+
+შეავსეთ:
+
+- `proposed_eta_days` — დღეების ახალი რაოდენობა
+- `action_message` — ცვლილების მიზეზი
+
+გაუშვით `მომხმარებელს: ETA ცვლილების დადასტურება`.
+
+Customer-ზე შეამოწმეთ ახალი ETA, მოსალოდნელი თარიღი, approve და cancel.
+
+## 22 Alternative part
+
+შეავსეთ:
+
+- `proposed_part_number` — აუცილებელი ალტერნატიული part number
+- `proposed_name` — ალტერნატიული ნაწილის სახელი, თუ ცნობილია
+- `proposed_final_price_gel` — თუ ფასი იცვლება
+- `proposed_eta_days` — თუ ETA იცვლება
+- `action_message` — შეთავაზების მიზეზი
+
+გაუშვით `მომხმარებელს: ალტერნატიული ნაწილის დადასტურება`.
+
+Customer-ზე შეამოწმეთ ალტერნატიული ნომერი და ყველა შეცვლილი დეტალი, approve და cancel.
+
+## 23 VIN fitment issue
+
+შეავსეთ `action_message` თავსებადობის საკითხის აღწერით და გაუშვით `მომხმარებელს: VIN fitment დადასტურება`.
+
+Customer-ზე შეამოწმეთ შეტყობინება, approve და cancel. მიმდინარე სატესტო ეტაპზე VIN-ის არსებობა ამ action-ის გასაშვებად სავალდებულო არ არის.
+
+## 24 Weight correction შეძენამდე
+
+თუ item ჯერ არ არის Purchased ან უფრო გვიან ეტაპზე:
+
+1. შეავსეთ `proposed_final_price_gel`.
+2. `action_message`-ში აღწერეთ რეალური წონის ან ზომის გავლენა.
+3. გაუშვით `მომხმარებელს: წონის/ზომის ცვლილების დადასტურება`.
+
+Customer-ს უნდა შეეძლოს approve ან cancel. Approve-ისას ფასი და total ახლდება.
+
+## 25 Weight correction შეძენის შემდეგ
+
+ამ სცენარისთვის item უნდა იყოს Purchased ან უფრო გვიან ეტაპზე და `weight_source` უნდა იყოს manual ან customer.
+
+1. შეავსეთ `proposed_final_price_gel` და `action_message`.
+2. გაუშვით `მომხმარებელს: წონის/ზომის ცვლილების დადასტურება`.
+
+Customer-ზე შეამოწმეთ:
+
+- ჩანს მხოლოდ ინფორმაციული ცვლილება და `გასაგებია`.
+- approve და cancel ღილაკები არ ჩანს.
+- `გასაგებია` ასუფთავებს badge-ს.
+- item ინარჩუნებს მიმდინარე logistics status-ს.
+- შეცვლილი final price რჩება გამოყენებული.
+
+## 26 სხვა საკითხი
+
+შეავსეთ `action_message` და გაუშვით `მომხმარებელს: სხვა საკითხის დადასტურება`.
+
+Customer-ზე შეამოწმეთ action required card და გადაწყვეტილების ღილაკები.
+
+# ნაწილი 8 Support messages
+
+## 27 Customer აგზავნის შეტყობინებას
+
+Order detail-ის ქვედა Support section-ში:
+
+1. აირჩიეთ მთელი order ან კონკრეტული item.
+2. ჩაწერეთ შეტყობინება.
+3. დააჭირეთ გაგზავნას.
+
+შეამოწმეთ, რომ შეტყობინება history-ში გამოჩნდა და Admin-ში ჩანს როგორც customer-ის ახალი შეტყობინება.
+
+## 28 Operator პასუხობს Admin-იდან
+
+Admin-ში შედით `Orders → Orders`.
+
+1. გახსენით იგივე order.
+2. ჩამოდით Support messages inline-მდე.
+3. დაამატეთ ახალი support message.
+4. `sender_type` აირჩიეთ Operator.
+5. ჩაწერეთ პასუხი და დააჭირეთ Save.
+
+Frontend-ზე შეამოწმეთ:
+
+- ჩანს unread operator reply popup.
+- popup იხურება `გასაგებია` ღილაკით.
+- პასუხი ჩანს support history-ში.
+- header Orders badge და order card badge სწორად ახლდება.
+- `გასაგებია`-ს შემდეგ unread მდგომარეობა ქრება.
+
+# ნაწილი 9 Notification magic links
+
+## 29 Notification link-ის პოვნა
+
+Admin-ში გახსენით `Orders → Order customer notifications`.
+
+1. იპოვეთ ბოლო notification.
+2. დააკოპირეთ `Customer link`.
+3. გახსენით Incognito ან Private window-ში.
+
+ლინკი იქნება მსგავსი: `https://test.lionparts.ge/n/<token>`.
+
+შეამოწმეთ:
+
+- ლინკი იხსნება ტელეფონის დადასტურების გარეშე.
+- public გვერდი არ აჩვენებს `session_id`-ს.
+- unread შეტყობინება იხსნება forced modal-ში.
+- modal-ს არ აქვს X და background click-ით არ იხურება.
+- `გასაგებია` კითხულად მონიშნავს შეტყობინებას.
+- public notification გვერდიდან approve, cancel და ახალი support message აკრძალულია.
+- გადაწყვეტილებისთვის მომხმარებელი გადადის სრულ order page-ზე და ადასტურებს ტელეფონს.
+
+## 30 Notification link-ის ოთხი ძირითადი ტიპი
+
+ცალ-ცალკე შეამოწმეთ:
+
+1. Order update — status-ის განახლება და order summary.
+2. Item update — affected item-ის გამოყოფა და modal-ის ავტომატური გახსნა.
+3. Support reply — operator-ის ზუსტი პასუხი, support history და `გასაგებია`.
+4. Action required — ახალი ფასი, ETA ან ალტერნატიული part number, affected item და full order page-ზე გადასვლა.
+
+# ნაწილი 10 კურიერით მიწოდება
+
+## 31 კურიერის მოთხოვნის შექმნა
+
+Checkout-ზე მონიშნეთ `მინდა კურიერით მიწოდება` და შექმენით შეკვეთა.
+
+Order detail-ზე უნდა ეწეროს, რომ კურიერი მოთხოვნილია, მაგრამ ფასი ჯერ დაზუსტებული არ არის და total-ში არ შედის.
+
+## 32 Operator აგზავნის კურიერის ფასს
+
+Admin-ში გახსენით `Orders → Orders` და კონკრეტულ order-ში შეავსეთ:
+
+- `proposed_courier_delivery_fee_gel`
+- `courier_delivery_action_message`, თუ საჭიროა ინდივიდუალური ტექსტი
+
+დააჭირეთ Save, შემდეგ დაბრუნდით list-ში:
+
+1. მონიშნეთ შეკვეთა.
+2. გაუშვით `კურიერის ფასის customer-თან დასადასტურებლად გაგზავნა`.
+
+თუ შეკვეთაზე კურიერი არ იყო მოთხოვნილი ან proposed fee ცარიელია, action-მა შეკვეთა უნდა გამოტოვოს.
+
+## 33 Customer ადასტურებს ან უარყოფს კურიერის ფასს
+
+Order detail-ზე შეამოწმეთ შემოთავაზებული თანხა და ორი ღილაკი:
+
+- `დადასტურება`
+- `უარყოფა`
+
+დადასტურების სცენარი:
+
+- კურიერის ფასი ემატება order total-ს.
+- order ბრუნდება Processing-ზე.
+- ჩანს დადასტურებული კურიერის ღირებულება.
+- გადახდილი თანხის შემდეგ დარჩენილი თანხა სწორად უნდა ითვალისწინებდეს დამატებულ კურიერს.
+
+უარყოფის სცენარი:
+
+- კურიერის თანხა total-ს არ ემატება.
+- order ბრუნდება Processing-ზე.
+- ჩანს, რომ კურიერის საკითხი კვლავ ოპერატორთან დასაზუსტებელია.
+
+კურიერის notification magic link public რეჟიმში მხოლოდ ინფორმაციას აჩვენებს. საბოლოო პასუხისთვის მომხმარებელი უნდა გადავიდეს full order page-ზე და ტელეფონი დაადასტუროს.
+
+# ნაწილი 11 ინვოისი
+
+## 34 Customer invoice
+
+გახსენით Customer order detail და დააჭირეთ `ინვოისის ნახვა / PDF`.
+
+შეამოწმეთ:
+
+- ინვოისი იხსნება ახალ tab-ში.
+- ჩანს invoice number, issue date, order number და order status.
+- ჩანს seller data და buyer data.
+- პირად შეკვეთაზე ჩანს ფიზიკური პირის მონაცემები.
+- იურიდიულ შეკვეთაზე ჩანს კომპანიის სახელი, საიდენტიფიკაციო კოდი, მისამართი, საკონტაქტო პირი, ტელეფონი და ელ.ფოსტა.
+- ჩანს ყველა item, quantity, unit price, line total და order total.
+- დადასტურებული კურიერის თანხა ცალკე line-ად ჩანს.
+- payment status და paid date, თუ არსებობს, სწორია.
+- Print ღილაკი მუშაობს და browser-იდან შესაძლებელია `Save as PDF`.
+
+სხვა ტელეფონით ან არასწორი session-ით ამ შეკვეთის invoice არ უნდა გაიხსნას.
+
+## 35 Admin invoice და CSV export
+
+Admin-ში `Orders → Orders`:
+
+1. გახსენით order და დააჭირეთ `Print invoice`, ან list-ში გამოიყენეთ Invoice link.
+2. მონიშნეთ ერთი ან რამდენიმე order და გაუშვით `Invoice CSV export`.
+
+შეამოწმეთ:
+
+- Admin invoice-ის მონაცემები ემთხვევა customer invoice-ს.
+- სატესტო ან draft რეჟიმის watermark და document title ჩანს გარემოს პარამეტრების შესაბამისად.
+- CSV-ში არის invoice number, order number, buyer მონაცემები, item lines, courier line, totals და payment/order statuses.
+
+# ნაწილი 12 Customer tariff და permissions
+
+## 36 მომხმარებლის უფლებების შეცვლა
+
+Admin-ში შედით `Accounts → Customers`.
+
+1. მოძებნეთ customer ტელეფონით.
+2. გახსენით customer.
+3. შეცვალეთ tariff.
+4. ჩართეთ ან გამორთეთ `can_request_quote`, თუ ინდივიდუალური override გჭირდებათ.
+5. tariff-ში გადაამოწმეთ `can_enter_weight`.
+6. დააჭირეთ Save.
+
+Frontend-ზე იმავე მომხმარებლით შეამოწმეთ:
+
+- შეთავაზების მოთხოვნის უფლება სწორად იცვლება.
+- ხელით წონის შეყვანის შესაძლებლობა მხოლოდ დაშვებულ მომხმარებელს აქვს.
+- შესაბამისი markup და საბოლოო GEL ფასი იცვლება tariff-ის წესის მიხედვით.
+
+# ნაწილი 13 კონფიდენციალურობა და რეგრესია
+
+## 37 სავალდებულო უარყოფითი ტესტები
+
+შეამოწმეთ:
+
+- არავერიფიცირებული მომხმარებელი ვერ ხედავს orders list-ს.
+- სხვა ტელეფონი ვერ ხედავს სხვის შეკვეთებს და invoice-ს.
+- სხვა ტელეფონი ვერ ხსნის სხვის order detail-ს.
+- სხვა ტელეფონი ვერ აგზავნის support message-ს და ვერ ასრულებს approve, cancel ან courier გადაწყვეტილებას სხვის შეკვეთაზე.
+- customer frontend-ზე internal admin-only event არ ჩანს.
+- public notification link read-only რჩება.
+- უკვე შესრულებული action-ის განმეორებითი შესრულება არ ცვლის მონაცემებს მეორედ.
+- Payment pending order-ზე item status და action request operator-ისგან არ სრულდება.
+
+## 38 ტექნიკური უსაფრთხოების შემოწმება
+
+თუ დიზაინერის ტესტირების ფარგლებს სცდება, ეს ნაწილი developer-მა უნდა შეამოწმოს. Production safety რეჟიმში legacy demo endpoint-ები უნდა იყოს გამორთული და აბრუნებდეს 404-ს:
+
+- `POST /api/orders/LP-TEST/demo-confirm-payment/`
+- `POST /api/orders/LP-TEST/verify-payment/`
+- `POST /api/orders/items/999/demo-request-change/`
+- `POST /api/orders/items/999/demo-update-status/`
+
+# შეხვედრის მოკლე თანმიმდევრობა
+
+1. Customer frontend და Search
+2. წონის არმქონე ნაწილზე operator quote request
+3. Parts Feed-ში `ფასი მუშავდება`
+4. Admin-ში წონისა და ფასის შევსება
+5. `ფასი მზადაა` action და `/q/<token>` magic link
+6. Parts Feed-იდან მომზადებული ნაწილის Cart-ში დამატება
+7. Add to cart და Cart
+8. Checkout-ზე SMS verification
+9. პირად პირზე order-ის შექმნა
+10. Profile-ზე პაროლის შექმნა
+11. Logout და პაროლით ხელახლა შესვლა
+12. პაროლის აღდგენის მოკლე ტესტი
+13. კომპანიის პროფილის შევსება
+14. კომპანიის მობილურის დადასტურება
+15. იურიდიულ პირზე order-ის შექმნა
+16. Checkout-ზე კურიერის მოთხოვნა
+17. Orders list და Order detail
+18. Admin login და Payment confirm
+19. Item status updates
+20. Price change action
+21. ETA change action
+22. Alternative part action
+23. VIN fitment action
+24. Weight correction შეძენამდე
+25. Weight correction შეძენის შემდეგ
+26. Customer support message
+27. Operator reply
+28. Order notification magic link Incognito-ში
+29. Direct order link phone verification
+30. კურიერის ფასის გაგზავნა
+31. კურიერის ფასის დადასტურება და უარყოფა ორ ცალკე order-ზე
+32. Customer invoice და Print ან Save as PDF
+33. Admin invoice და CSV export
+34. Customer tariff და permissions
+35. სხვა ტელეფონით privacy test
+
+# შედეგების ჩაწერა
+
+თითოეული პრობლემისთვის ჩაინიშნეთ:
+
+- რომელი ნაბიჯი შესრულდა
+- გამოყენებული URL და ORDER_NUMBER
+- გამოყენებული მომხმარებლის ტელეფონი
+- მოსალოდნელი შედეგი
+- რეალურად მიღებული შედეგი
+- screenshot ან screen recording
+- browser და მოწყობილობა
+- პრობლემა მეორდება თუ არა Incognito-ში

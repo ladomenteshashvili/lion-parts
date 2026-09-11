@@ -1,10 +1,13 @@
 from decimal import Decimal
 from unittest.mock import patch
 
+from django.contrib.admin.sites import AdminSite
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from .models import CarrierService, PartQuoteRequest, PartSearchLog
+from .admin import PartQuoteRequestAdmin
 from accounts.models import Customer, CustomerSession, CustomerTariff
 
 @override_settings(PARTS_PROVIDER="demo")
@@ -477,3 +480,121 @@ class PartQuoteRequestApiTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("customer_phone", response.data)
+
+    def test_create_weight_quote_request_copies_selected_offer(self):
+        response = self.client.post(
+            "/api/parts/quote-requests/",
+            {
+                "session_id": self.session_id,
+                "part_number": "51118070648",
+                "customer_phone": "+995555123456",
+                "quote_id": "AMT-51118070648",
+                "part_option_id": "AMT-1-51118070648",
+                "name": "Front bumper cover",
+                "condition": "New",
+                "brand": "BMW",
+                "availability": "Price returned",
+                "eta_days": 14,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        quote_request = PartQuoteRequest.objects.get()
+        self.assertEqual(quote_request.quote_id, "AMT-51118070648")
+        self.assertEqual(quote_request.part_option_id, "AMT-1-51118070648")
+        self.assertEqual(quote_request.name, "Front bumper cover")
+        self.assertEqual(quote_request.eta_days, 14)
+
+    def test_feed_shows_processing_and_then_ready_price(self):
+        customer = Customer.objects.get(session_id=self.session_id)
+        customer.is_phone_verified = True
+        customer.save(update_fields=["is_phone_verified", "updated_at"])
+
+        quote_request = PartQuoteRequest.objects.create(
+            session_id=self.session_id,
+            part_number="NO-WEIGHT-1",
+            customer_name=customer.name,
+            customer_phone=customer.phone,
+            name="Part without supplier weight",
+        )
+
+        response = self.client.get(
+            f"/api/parts/feed/?session_id={self.session_id}",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["results"][0]["feed_status"], "processing")
+        self.assertIsNone(response.data["results"][0]["notification_token"])
+
+        quote_request.prepared_weight_kg = Decimal("3.40")
+        quote_request.final_price_gel = Decimal("725.50")
+        quote_request.status = PartQuoteRequest.STATUS_RESOLVED
+        quote_request.price_ready_at = timezone.now()
+        quote_request.save()
+
+        response = self.client.get(
+            f"/api/parts/feed/?session_id={self.session_id}",
+        )
+        item = response.data["results"][0]
+        self.assertEqual(item["feed_status"], "price_ready")
+        self.assertEqual(item["top_result_price_gel"], Decimal("725.50"))
+        self.assertEqual(item["weight_kg"], Decimal("3.40"))
+        self.assertEqual(item["notification_token"], quote_request.notification_token)
+
+    def test_prepared_quote_magic_link_is_public_only_after_price_is_ready(self):
+        quote_request = PartQuoteRequest.objects.create(
+            session_id=self.session_id,
+            part_number="NO-WEIGHT-2",
+            customer_name="Test Customer",
+            customer_phone="+995555123456",
+            name="Prepared part",
+        )
+        detail_url = (
+            f"/api/parts/public/quote-requests/"
+            f"{quote_request.notification_token}/"
+        )
+
+        self.assertEqual(self.client.get(detail_url).status_code, 404)
+
+        quote_request.prepared_weight_kg = Decimal("2.50")
+        quote_request.final_price_gel = Decimal("650.00")
+        quote_request.price_ready_at = timezone.now()
+        quote_request.status = PartQuoteRequest.STATUS_RESOLVED
+        quote_request.save()
+
+        response = self.client.get(detail_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["part_number"], "NO-WEIGHT-2")
+        self.assertEqual(response.data["final_price_gel"], "650.00")
+        self.assertFalse(response.data["is_acknowledged"])
+
+        acknowledge_response = self.client.post(
+            f"{detail_url}acknowledge/",
+            {},
+            format="json",
+        )
+        self.assertEqual(acknowledge_response.status_code, 200)
+        self.assertTrue(acknowledge_response.data["is_acknowledged"])
+
+    def test_admin_action_marks_complete_quote_ready(self):
+        quote_request = PartQuoteRequest.objects.create(
+            session_id=self.session_id,
+            part_number="NO-WEIGHT-3",
+            customer_name="Test Customer",
+            customer_phone="+995555123456",
+            prepared_weight_kg=Decimal("4.20"),
+            final_price_gel=Decimal("810.00"),
+        )
+        model_admin = PartQuoteRequestAdmin(PartQuoteRequest, AdminSite())
+        model_admin.message_user = lambda *args, **kwargs: None
+
+        model_admin.mark_price_ready(
+            None,
+            PartQuoteRequest.objects.filter(pk=quote_request.pk),
+        )
+
+        quote_request.refresh_from_db()
+        self.assertEqual(quote_request.status, PartQuoteRequest.STATUS_RESOLVED)
+        self.assertIsNotNone(quote_request.price_ready_at)
+        self.assertEqual(quote_request.name, "NO-WEIGHT-3")
+        self.assertTrue(quote_request.is_price_ready)
