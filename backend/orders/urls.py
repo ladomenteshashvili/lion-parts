@@ -15,6 +15,7 @@ from .views import (
     demo_update_item_status,
     get_customer_notification,
     get_order_detail,
+    get_order_invoice,
     list_orders,
     verify_payment,
 )
@@ -61,6 +62,11 @@ urlpatterns = [
         "<str:order_number>/decline-courier-fee/",
         decline_courier_delivery_fee,
         name="orders-decline-courier-fee",
+    ),
+    path(
+        "<str:order_number>/invoice/",
+        get_order_invoice,
+        name="orders-invoice",
     ),
     path("<str:order_number>/", get_order_detail, name="orders-detail"),
     path(

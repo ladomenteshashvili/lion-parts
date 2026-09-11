@@ -6,6 +6,7 @@ import {
   acknowledgeOrderSupportMessages,
   cancelOrderItemAction,
   getOrderDetail,
+  getOrderInvoiceUrl,
   resolveOrderItemAction,
   resolveCourierDeliveryFee,
   declineCourierDeliveryFee,
@@ -638,6 +639,14 @@ function isOrderCompleted(order: BackendOrder) {
             {getOrderStatusLabel(order.status)}
           </span>
           <strong>{Number(order.total_gel).toLocaleString("ka-GE")} ₾</strong>
+          <a
+            className="button-link"
+            href={getOrderInvoiceUrl(order.order_number)}
+            target="_blank"
+            rel="noreferrer"
+          >
+            ინვოისის ნახვა / PDF
+          </a>
         </div>
       </div>
 
