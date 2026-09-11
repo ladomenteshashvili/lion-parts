@@ -3,6 +3,7 @@ from decimal import Decimal
 import uuid
 
 from django.conf import settings
+from django.http import HttpResponse
 from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
@@ -13,6 +14,7 @@ from rest_framework.response import Response
 
 from cart.models import Cart
 from .models import Order, OrderCustomerNotification, OrderItem, OrderItemEvent, OrderSupportMessage, Payment
+from .invoices import render_order_invoice_html
 from .serializers import OrderCustomerNotificationPublicSerializer, OrderSerializer
 from accounts.models import Customer, LegalEntityProfile
 from accounts.customer_sessions import get_customer_for_session
@@ -388,6 +390,28 @@ def list_orders(request):
     )
     serializer = OrderSerializer(orders, many=True)
     return Response(serializer.data)
+
+
+@api_view(["GET"])
+def get_order_invoice(request, order_number):
+    session_id = request.query_params.get("session_id", "")
+
+    queryset = (
+        Order.objects
+        .select_related("payment", "customer", "legal_entity_profile")
+        .prefetch_related("items")
+        .filter(build_customer_order_access_filter(session_id))
+    )
+
+    order = get_object_or_404(queryset, order_number=order_number)
+
+    response = HttpResponse(
+        render_order_invoice_html(order),
+        content_type="text/html; charset=utf-8",
+    )
+    response["X-Robots-Tag"] = "noindex, nofollow"
+
+    return response
 
 
 @api_view(["GET"])

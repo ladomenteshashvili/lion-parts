@@ -144,6 +144,15 @@ export async function getOrders(): Promise<BackendOrder[]> {
   return response.json();
 }
 
+export function getOrderInvoiceUrl(orderNumber: string): string {
+  const sessionId = getSessionId();
+
+  return `${API_BASE_URL}/api/orders/${encodeURIComponent(
+    orderNumber
+  )}/invoice/?session_id=${encodeURIComponent(sessionId)}`;
+}
+
+
 export async function checkoutOrder(payload: {
   customer_name: string;
   customer_phone: string;
