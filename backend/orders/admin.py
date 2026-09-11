@@ -722,6 +722,7 @@ class OrderAdmin(admin.ModelAdmin):
         try:
             payment = order.payment
             payment_status = payment.status
+            payment_status_label = payment.get_status_display()
             paid_at = (
                 timezone.localtime(payment.paid_at).strftime("%Y-%m-%d %H:%M")
                 if payment.paid_at
@@ -729,8 +730,10 @@ class OrderAdmin(admin.ModelAdmin):
             )
         except Payment.DoesNotExist:
             payment_status = "missing"
+            payment_status_label = "Missing"
             paid_at = ""
 
+        order_status_label = order.get_status_display()
         invoice_number = build_invoice_number(order)
         issue_date = timezone.localtime(order.created_at).strftime("%Y-%m-%d")
         created_at = timezone.localtime(order.created_at).strftime("%Y-%m-%d %H:%M")
@@ -738,6 +741,23 @@ class OrderAdmin(admin.ModelAdmin):
             settings,
             "INVOICE_PAYMENT_DUE_TEXT",
             "Payment due upon receipt.",
+        )
+        invoice_amount_note = getattr(
+            settings,
+            "INVOICE_AMOUNT_NOTE",
+            "All amounts are in GEL and include VAT unless otherwise noted.",
+        )
+        invoice_show_payment_badge = getattr(
+            settings,
+            "INVOICE_SHOW_PAYMENT_BADGE",
+            True,
+        )
+
+        payment_badge_class = (
+            "paid" if payment_status == Payment.STATUS_PAID else "not-paid"
+        )
+        payment_badge_text = (
+            "PAID" if payment_status == Payment.STATUS_PAID else payment_status_label.upper()
         )
 
         rows = []
@@ -827,6 +847,12 @@ class OrderAdmin(admin.ModelAdmin):
             if invoice_show_draft_watermark
             else ""
         )
+        payment_badge_html = (
+            f'<div class="payment-badge {payment_badge_class}">'
+            f'{escape(payment_badge_text)}</div>'
+            if invoice_show_payment_badge
+            else ""
+        )
 
         html = f"""
 <!doctype html>
@@ -852,6 +878,24 @@ class OrderAdmin(admin.ModelAdmin):
       z-index: -1;
       letter-spacing: 8px;
       pointer-events: none;
+    }}
+    .payment-badge {{
+      display: inline-block;
+      margin-top: 10px;
+      padding: 6px 12px;
+      border: 2px solid #222;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }}
+    .payment-badge.paid {{
+      border-color: #1f7a1f;
+      color: #1f7a1f;
+    }}
+    .payment-badge.not-paid {{
+      border-color: #777;
+      color: #555;
     }}
     .top {{
       display: flex;
@@ -932,12 +976,13 @@ class OrderAdmin(admin.ModelAdmin):
     <div>
       <h1>{escape(invoice_document_title)}</h1>
       {subtitle_html}
+      {payment_badge_html}
       <div><strong>Invoice number:</strong> {escape(invoice_number)}</div>
       <div><strong>Issue date:</strong> {escape(issue_date)}</div>
       <div><strong>Order:</strong> {escape(order.order_number)}</div>
       <div><strong>Created:</strong> {escape(created_at)}</div>
-      <div><strong>Status:</strong> {escape(order.status)}</div>
-      <div><strong>Payment:</strong> {escape(payment_status)}</div>
+      <div><strong>Status:</strong> {escape(order_status_label)}</div>
+      <div><strong>Payment:</strong> {escape(payment_status_label)}</div>
       <div><strong>Paid at:</strong> {escape(paid_at or "—")}</div>
       <div><strong>Payment due:</strong> {escape(payment_due_text)}</div>
     </div>
@@ -984,6 +1029,10 @@ class OrderAdmin(admin.ModelAdmin):
   <div class="total">
     Total: {format_admin_money(order.total_gel)} GEL
   </div>
+
+  <p class="muted">
+    {escape(invoice_amount_note)}
+  </p>
 
   <p class="muted">
     {escape(invoice_footer_text)}

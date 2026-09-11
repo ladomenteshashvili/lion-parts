@@ -67,6 +67,8 @@ class AdminInvoicePrintViewTests(TestCase):
             INVOICE_DRAFT_WATERMARK_TEXT="DEMO",
             INVOICE_NUMBER_PREFIX="TESTINV",
             INVOICE_PAYMENT_DUE_TEXT="Test payment due text.",
+            INVOICE_AMOUNT_NOTE="Test amount note.",
+            INVOICE_SHOW_PAYMENT_BADGE=True,
             INVOICE_SELLER_NAME="Test Seller LLC",
             INVOICE_SELLER_IDENTIFICATION_CODE="123456789",
             INVOICE_SELLER_ADDRESS="Test Seller Address",
@@ -88,6 +90,10 @@ class AdminInvoicePrintViewTests(TestCase):
         self.assertIn("Payment due", content)
         self.assertIn("Test payment due text.", content)
         self.assertIn("Paid at", content)
+        self.assertIn("PENDING", content)
+        self.assertIn("Pending", content)
+        self.assertIn("Processing", content)
+        self.assertIn("Test amount note.", content)
         self.assertIn("LP-PRINT-0001", content)
         self.assertIn("Print Customer", content)
         self.assertIn("PRINTVIN123", content)

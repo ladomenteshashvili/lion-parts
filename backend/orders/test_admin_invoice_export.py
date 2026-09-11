@@ -59,10 +59,12 @@ class AdminInvoiceExportTests(TestCase):
         request.user = user
 
         admin_model = OrderAdmin(Order, AdminSite())
-        response = admin_model.export_selected_orders_invoice_csv(
-            request,
-            Order.objects.filter(id=order.id),
-        )
+
+        with self.settings(INVOICE_NUMBER_PREFIX="INV"):
+            response = admin_model.export_selected_orders_invoice_csv(
+                request,
+                Order.objects.filter(id=order.id),
+            )
 
         content = response.content.decode("utf-8-sig")
 
