@@ -93,6 +93,12 @@ export type BackendOrder = {
   vin: string;
   note: string;
   courier_delivery_requested?: boolean;
+  courier_delivery_fee_gel?: string;
+  proposed_courier_delivery_fee_gel?: string | null;
+  courier_delivery_action_required?: boolean;
+  courier_delivery_action_message?: string;
+  courier_delivery_confirmed_at?: string | null;
+  courier_delivery_rejected_at?: string | null;
   payment_type: "full";
   payment: OrderPayment | null;
   status: string;
@@ -166,6 +172,63 @@ export async function checkoutOrder(payload: {
 
   return response.json();
 }
+
+export async function resolveCourierDeliveryFee(
+  orderNumber: string
+): Promise<BackendOrder> {
+  const sessionId = getSessionId();
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/orders/${encodeURIComponent(
+      orderNumber
+    )}/resolve-courier-fee/`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        session_id: sessionId,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Resolve courier fee failed");
+  }
+
+  return response.json();
+}
+
+export async function declineCourierDeliveryFee(
+  orderNumber: string
+): Promise<BackendOrder> {
+  const sessionId = getSessionId();
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/orders/${encodeURIComponent(
+      orderNumber
+    )}/decline-courier-fee/`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        session_id: sessionId,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Decline courier fee failed");
+  }
+
+  return response.json();
+}
+
 
 export async function getOrderDetail(orderNumber: string): Promise<BackendOrder> {
   const sessionId = getSessionId();
