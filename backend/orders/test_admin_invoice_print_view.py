@@ -59,7 +59,17 @@ class AdminInvoicePrintViewTests(TestCase):
         request.user = user
 
         admin_model = OrderAdmin(Order, AdminSite())
-        response = admin_model.admin_invoice_print_view(request, order.id)
+
+        with self.settings(
+            INVOICE_SELLER_NAME="Test Seller LLC",
+            INVOICE_SELLER_IDENTIFICATION_CODE="123456789",
+            INVOICE_SELLER_ADDRESS="Test Seller Address",
+            INVOICE_SELLER_PHONE="+995555000000",
+            INVOICE_SELLER_EMAIL="seller@example.com",
+            INVOICE_SELLER_BANK_DETAILS="Test Bank Details",
+            INVOICE_FOOTER_TEXT="Test invoice footer text.",
+        ):
+            response = admin_model.admin_invoice_print_view(request, order.id)
 
         content = response.content.decode("utf-8")
 
@@ -73,6 +83,13 @@ class AdminInvoicePrintViewTests(TestCase):
         self.assertIn("კურიერით მიწოდება", content)
         self.assertIn("162.00", content)
         self.assertIn("Print / Save as PDF", content)
+        self.assertIn("Test Seller LLC", content)
+        self.assertIn("123456789", content)
+        self.assertIn("Test Seller Address", content)
+        self.assertIn("+995555000000", content)
+        self.assertIn("seller@example.com", content)
+        self.assertIn("Test Bank Details", content)
+        self.assertIn("Test invoice footer text.", content)
 
     def test_order_admin_invoice_print_link_is_available(self):
         order = Order.objects.create(

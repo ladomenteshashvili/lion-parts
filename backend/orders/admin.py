@@ -747,6 +747,38 @@ class OrderAdmin(admin.ModelAdmin):
                 """
             )
 
+        seller_name = getattr(settings, "INVOICE_SELLER_NAME", "Lion Parts")
+        seller_identification_code = getattr(
+            settings,
+            "INVOICE_SELLER_IDENTIFICATION_CODE",
+            "",
+        )
+        seller_address = getattr(settings, "INVOICE_SELLER_ADDRESS", "")
+        seller_phone = getattr(settings, "INVOICE_SELLER_PHONE", "")
+        seller_email = getattr(settings, "INVOICE_SELLER_EMAIL", "")
+        seller_bank_details = getattr(settings, "INVOICE_SELLER_BANK_DETAILS", "")
+        invoice_footer_text = getattr(
+            settings,
+            "INVOICE_FOOTER_TEXT",
+            "This invoice was generated from Lion Parts admin order data.",
+        )
+
+        seller_lines = [f"<strong>{escape(seller_name or 'Seller')}</strong>"]
+
+        for label, value in [
+            ("ID Code", seller_identification_code),
+            ("Address", seller_address),
+            ("Phone", seller_phone),
+            ("Email", seller_email),
+            ("Bank", seller_bank_details),
+        ]:
+            if value:
+                seller_lines.append(
+                    f"<div><strong>{escape(label)}:</strong> {escape(value)}</div>"
+                )
+
+        seller_html = "\n".join(seller_lines)
+
         html = f"""
 <!doctype html>
 <html lang="ka">
@@ -837,8 +869,7 @@ class OrderAdmin(admin.ModelAdmin):
     </div>
     <div>
       <strong>Seller</strong><br>
-      Lion Parts<br>
-      Tbilisi, Georgia
+      {seller_html}
     </div>
   </div>
 
@@ -881,7 +912,7 @@ class OrderAdmin(admin.ModelAdmin):
   </div>
 
   <p class="muted">
-    This invoice was generated from Lion Parts admin order data.
+    {escape(invoice_footer_text)}
   </p>
 </body>
 </html>
