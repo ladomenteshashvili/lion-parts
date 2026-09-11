@@ -747,6 +747,19 @@ class OrderAdmin(admin.ModelAdmin):
                 """
             )
 
+        invoice_document_title = getattr(settings, "INVOICE_DOCUMENT_TITLE", "INVOICE")
+        invoice_document_subtitle = getattr(settings, "INVOICE_DOCUMENT_SUBTITLE", "")
+        invoice_show_draft_watermark = getattr(
+            settings,
+            "INVOICE_SHOW_DRAFT_WATERMARK",
+            False,
+        )
+        invoice_draft_watermark_text = getattr(
+            settings,
+            "INVOICE_DRAFT_WATERMARK_TEXT",
+            "DRAFT",
+        )
+
         seller_name = getattr(settings, "INVOICE_SELLER_NAME", "Lion Parts")
         seller_identification_code = getattr(
             settings,
@@ -778,19 +791,41 @@ class OrderAdmin(admin.ModelAdmin):
                 )
 
         seller_html = "\n".join(seller_lines)
+        subtitle_html = (
+            f'<div class="subtitle">{escape(invoice_document_subtitle)}</div>'
+            if invoice_document_subtitle
+            else ""
+        )
+        watermark_html = (
+            f'<div class="watermark">{escape(invoice_draft_watermark_text)}</div>'
+            if invoice_show_draft_watermark
+            else ""
+        )
 
         html = f"""
 <!doctype html>
 <html lang="ka">
 <head>
   <meta charset="utf-8">
-  <title>Invoice {escape(order.order_number)}</title>
+  <title>{escape(invoice_document_title)} {escape(order.order_number)}</title>
   <style>
     body {{
       font-family: Arial, sans-serif;
       margin: 32px;
       color: #111;
       font-size: 14px;
+    }}
+    .watermark {{
+      position: fixed;
+      top: 42%;
+      left: 12%;
+      transform: rotate(-28deg);
+      font-size: 96px;
+      font-weight: 700;
+      color: rgba(0, 0, 0, 0.08);
+      z-index: -1;
+      letter-spacing: 8px;
+      pointer-events: none;
     }}
     .top {{
       display: flex;
@@ -807,6 +842,12 @@ class OrderAdmin(admin.ModelAdmin):
     h2 {{
       margin: 24px 0 8px;
       font-size: 16px;
+    }}
+    .subtitle {{
+      margin-top: 4px;
+      color: #555;
+      font-size: 13px;
+      max-width: 360px;
     }}
     .muted {{
       color: #555;
@@ -855,13 +896,16 @@ class OrderAdmin(admin.ModelAdmin):
   </style>
 </head>
 <body>
+  {watermark_html}
+
   <div class="actions">
     <button onclick="window.print()">Print / Save as PDF</button>
   </div>
 
   <div class="top">
     <div>
-      <h1>INVOICE</h1>
+      <h1>{escape(invoice_document_title)}</h1>
+      {subtitle_html}
       <div><strong>Order:</strong> {escape(order.order_number)}</div>
       <div><strong>Date:</strong> {escape(created_at)}</div>
       <div><strong>Status:</strong> {escape(order.status)}</div>

@@ -61,6 +61,10 @@ class AdminInvoicePrintViewTests(TestCase):
         admin_model = OrderAdmin(Order, AdminSite())
 
         with self.settings(
+            INVOICE_DOCUMENT_TITLE="PROFORMA INVOICE",
+            INVOICE_DOCUMENT_SUBTITLE="Demo seller data.",
+            INVOICE_SHOW_DRAFT_WATERMARK=True,
+            INVOICE_DRAFT_WATERMARK_TEXT="DEMO",
             INVOICE_SELLER_NAME="Test Seller LLC",
             INVOICE_SELLER_IDENTIFICATION_CODE="123456789",
             INVOICE_SELLER_ADDRESS="Test Seller Address",
@@ -74,7 +78,9 @@ class AdminInvoicePrintViewTests(TestCase):
         content = response.content.decode("utf-8")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("INVOICE", content)
+        self.assertIn("PROFORMA INVOICE", content)
+        self.assertIn("Demo seller data.", content)
+        self.assertIn("DEMO", content)
         self.assertIn("LP-PRINT-0001", content)
         self.assertIn("Print Customer", content)
         self.assertIn("PRINTVIN123", content)
