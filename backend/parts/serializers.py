@@ -11,6 +11,7 @@ class PartQuoteRequestSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "session_id",
+            "request_type",
             "part_number",
             "vin",
             "customer_name",

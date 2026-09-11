@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
 
@@ -11,7 +11,8 @@ import {
 } from "../api/client";
 import type { PartsFeedItem, PartSearchResponse } from "../api/client";
 import { addCartItem, buildCartItemId, getSessionId } from "../api/cart";
-import { getProfile } from "../api/profile";
+import { getProfile, type CustomerProfile } from "../api/profile";
+import PhoneVerificationForm from "../components/PhoneVerificationForm";
 type HealthStatus = {
   status: string;
   service: string;
@@ -42,8 +43,9 @@ function SearchPage() {
     useState(false);
   const [quoteRequestMessage, setQuoteRequestMessage] = useState("");
   const [quoteRequestError, setQuoteRequestError] = useState("");
+  const [profile, setProfile] = useState<CustomerProfile | null>(null);
   const [canRequestQuote, setCanRequestQuote] = useState(false);
-    const [canEnterWeight, setCanEnterWeight] = useState(false);
+  const [canEnterWeight, setCanEnterWeight] = useState(false);
   const [manualWeightsByCartItemId, setManualWeightsByCartItemId] = useState<
     Record<string, string>
   >({});
@@ -53,9 +55,9 @@ function SearchPage() {
   const [weightErrorsByCartItemId, setWeightErrorsByCartItemId] = useState<
     Record<string, string>
   >({});
-  const [requestingQuoteItemIds, setRequestingQuoteItemIds] = useState<
-    string[]
-  >([]);
+  const [weightRequestStatusByItemId, setWeightRequestStatusByItemId] =
+    useState<Record<string, "sending" | "processing" | "error">>({});
+  const requestedWeightQuoteIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     getHealthStatus()
@@ -70,22 +72,26 @@ function SearchPage() {
   }, []);
 
 
-    useEffect(() => {
+  useEffect(() => {
     getProfile()
-      .then((profile) => {
-        if (!profile) {
+      .then((loadedProfile) => {
+        setProfile(loadedProfile);
+
+        if (!loadedProfile) {
           setCanRequestQuote(false);
           setCanEnterWeight(false);
           return;
         }
 
-        setCanRequestQuote(profile.can_request_quote);
-        setCanEnterWeight(profile.can_enter_weight);
-        setQuoteRequestName(profile.customer_name);
-        setQuoteRequestPhone(profile.customer_phone);
+        setCanRequestQuote(loadedProfile.can_request_quote);
+        setCanEnterWeight(loadedProfile.can_enter_weight);
+        setQuoteRequestName(loadedProfile.customer_name);
+        setQuoteRequestPhone(loadedProfile.customer_phone);
       })
       .catch(() => {
+        setProfile(null);
         setCanRequestQuote(false);
+        setCanEnterWeight(false);
       });
   }, []);
 
@@ -114,6 +120,18 @@ function SearchPage() {
 
     return () => window.clearTimeout(timeoutId);
   }, []);
+
+  useEffect(() => {
+    if (
+      !quote ||
+      !profile?.is_phone_verified ||
+      profile.can_enter_weight
+    ) {
+      return;
+    }
+
+    void ensureWeightPriceRequests(quote, profile);
+  }, [quote, profile]);
 
   async function handleFeedSearch(item: PartsFeedItem) {
     const cleanPartNumber = item.part_number.trim();
@@ -275,49 +293,69 @@ function SearchPage() {
     }
   }
 
-  async function handleWeightQuoteRequest(
-    item: PartSearchResponse["results"][number],
-    cartItemId: string
+  async function ensureWeightPriceRequests(
+    quoteData: PartSearchResponse,
+    verifiedProfile: CustomerProfile
   ) {
-    if (!quote || !canRequestQuote || !quoteRequestPhone.trim()) {
-      setQuoteRequestError(
-        "ოპერატორთან მოთხოვნის გასაგზავნად საჭიროა დადასტურებული ანგარიში."
-      );
-      return;
-    }
+    const missingWeightItems = quoteData.results.filter(
+      (item) => item.requires_weight_input === true
+    );
 
-    setRequestingQuoteItemIds((ids) => [...ids, cartItemId]);
-    setQuoteRequestError("");
-    setQuoteRequestMessage("");
+    let createdAnyRequest = false;
 
-    try {
-      const request = await createPartQuoteRequest({
-        session_id: getSessionId(),
-        part_number: quote.part_number,
-        vin: quote.vin || undefined,
-        customer_name: quoteRequestName.trim(),
-        customer_phone: quoteRequestPhone.trim(),
-        comment: "საჭიროა ნაწილის წონის გადამოწმება და საბოლოო ფასის მომზადება.",
-        quote_id: quote.quote_id,
+    for (const item of missingWeightItems) {
+      const cartItemId = buildCartItemId({
+        quote_id: quoteData.quote_id,
         part_option_id: item.part_option_id,
-        name: item.name,
-        condition: item.condition,
-        brand: item.brand,
-        availability: item.availability,
-        eta_days: item.eta_days,
+        part_number: quoteData.part_number,
       });
 
-      setQuoteRequestMessage(
-        `მოთხოვნა #${request.id} მიღებულია. სტატუსს „ჩემი ნაწილები“-ში ნახავთ.`
-      );
+      if (requestedWeightQuoteIds.current.has(cartItemId)) {
+        continue;
+      }
+
+      requestedWeightQuoteIds.current.add(cartItemId);
+      setWeightRequestStatusByItemId((statuses) => ({
+        ...statuses,
+        [cartItemId]: "sending",
+      }));
+
+      try {
+        await createPartQuoteRequest({
+          session_id: getSessionId(),
+          request_type: "weight_price",
+          part_number: quoteData.part_number,
+          vin: quoteData.vin || undefined,
+          customer_name: verifiedProfile.customer_name,
+          customer_phone: verifiedProfile.customer_phone,
+          comment:
+            "საჭიროა ნაწილის წონის გადამოწმება და საბოლოო ფასის მომზადება.",
+          quote_id: quoteData.quote_id,
+          part_option_id: item.part_option_id,
+          name: item.name,
+          condition: item.condition,
+          brand: item.brand,
+          availability: item.availability,
+          eta_days: item.eta_days,
+        });
+
+        createdAnyRequest = true;
+        setWeightRequestStatusByItemId((statuses) => ({
+          ...statuses,
+          [cartItemId]: "processing",
+        }));
+      } catch (error) {
+        console.error("Automatic weight quote request failed", error);
+        requestedWeightQuoteIds.current.delete(cartItemId);
+        setWeightRequestStatusByItemId((statuses) => ({
+          ...statuses,
+          [cartItemId]: "error",
+        }));
+      }
+    }
+
+    if (createdAnyRequest) {
       await loadFeed();
-    } catch (error) {
-      console.error("Weight quote request failed", error);
-      setQuoteRequestError("წონის გადამოწმების მოთხოვნა ვერ გაიგზავნა.");
-    } finally {
-      setRequestingQuoteItemIds((ids) =>
-        ids.filter((id) => id !== cartItemId)
-      );
     }
   }
 
@@ -607,6 +645,31 @@ function SearchPage() {
             </div>
           </div>
 
+          {quote.results.some(
+            (item) => item.requires_weight_input === true
+          ) && !profile?.is_phone_verified && (
+            <div className="action-required-card weight-verification-card">
+              <strong>ფასის მოსამზადებლად საჭიროა ტელეფონის დადასტურება</strong>
+              <span>
+                ამ გვერდიდან გასვლა საჭირო არ არის. ნომრის დადასტურების შემდეგ
+                წონის გადამოწმების მოთხოვნა ავტომატურად გაეგზავნება ოპერატორს.
+              </span>
+
+              <PhoneVerificationForm
+                initialProfile={profile}
+                onVerified={(verifiedProfile) => {
+                  setProfile(verifiedProfile);
+                  setCanRequestQuote(verifiedProfile.can_request_quote);
+                  setCanEnterWeight(verifiedProfile.can_enter_weight);
+                  setQuoteRequestName(verifiedProfile.customer_name);
+                  setQuoteRequestPhone(verifiedProfile.customer_phone);
+                  setFeedRequiresVerification(false);
+                  void ensureWeightPriceRequests(quote, verifiedProfile);
+                }}
+              />
+            </div>
+          )}
+
           {quote.results.map((item) => {
             const cartItemId = buildCartItemId({
               quote_id: quote.quote_id,
@@ -622,8 +685,8 @@ function SearchPage() {
             const weightError = weightErrorsByCartItemId[cartItemId];
             const isCalculatingWeight =
               calculatingWeightItemIds.includes(cartItemId);            
-            const isRequestingWeightQuote =
-              requestingQuoteItemIds.includes(cartItemId);
+            const weightRequestStatus =
+              weightRequestStatusByItemId[cartItemId];
             const lineTotalGel = hasFinalPrice
               ? Number(item.final_price_gel) * quantity
               : 0;
@@ -644,13 +707,38 @@ function SearchPage() {
                   {needsWeight && (
                     <div className="weight-entry-box">
                       <strong>საჭიროა წონა</strong>
-                      <p className="muted">
-                        API-მ ფასი დააბრუნა, მაგრამ წონა არ დაბრუნდა. თუ
-                        წონის შეყვანის უფლება ჩართული გაქვს, ჩაწერე წონა
-                        კილოგრამებში და ფასი თავიდან დაითვლება.
-                      </p>
 
-                      {canEnterWeight ? (
+                      {!profile?.is_phone_verified ? (
+                        <p className="muted">
+                          API-დან წონის ინფორმაცია არ მოვიდა. ფასის მოსამზადებლად
+                          დაადასტურეთ ტელეფონი ამავე გვერდზე.
+                        </p>
+                      ) : weightRequestStatus === "error" ? (
+                        <p className="form-error">
+                          მოთხოვნის ავტომატურად გაგზავნა ვერ მოხერხდა. გაიმეორეთ
+                          ძიება.
+                        </p>
+                      ) : !canEnterWeight || weightRequestStatus ? (
+                        <div className="weight-preparing-status">
+                          <span className="feed-status feed-status--processing">
+                            {weightRequestStatus === "sending"
+                              ? "მოთხოვნა იგზავნება"
+                              : "ფასი მზადდება"}
+                          </span>
+                          <p className="muted">
+                            წონის ინფორმაცია არ არის. ოპერატორი გადაამოწმებს,
+                            რის შემდეგაც ფასი Parts Feed-ში განახლდება და
+                            შეტყობინებასაც მიიღებთ.
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="muted">
+                          API-დან წონის ინფორმაცია არ მოვიდა. შეგიძლიათ შეიყვანოთ
+                          სავარაუდო წონა კილოგრამებში და ფასი თავიდან დაითვლება.
+                        </p>
+                      )}
+
+                      {profile?.is_phone_verified && canEnterWeight ? (
                         <div className="weight-entry-form">
                           <input
                             type="number"
@@ -680,26 +768,7 @@ function SearchPage() {
                               : "ფასის დათვლა"}
                           </button>
                         </div>
-                      ) : (
-                        <p className="form-error">
-                          ამ ანგარიშზე წონის შეყვანა ჩართული არ არის.
-                        </p>
-                      )}
-
-                      {canRequestQuote && (
-                        <button
-                          className="button-secondary weight-request-button"
-                          type="button"
-                          onClick={() =>
-                            handleWeightQuoteRequest(item, cartItemId)
-                          }
-                          disabled={isRequestingWeightQuote}
-                        >
-                          {isRequestingWeightQuote
-                            ? "იგზავნება..."
-                            : "ოპერატორს გადაამოწმებინე"}
-                        </button>
-                      )}
+                      ) : null}
 
                       {weightError && (
                         <p className="form-error">{weightError}</p>

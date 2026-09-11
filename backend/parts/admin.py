@@ -1,9 +1,15 @@
+from decimal import Decimal, InvalidOperation
+
 from django.conf import settings
 from django.contrib import admin, messages
 from django.utils import timezone
 from django.utils.html import format_html
 
+from accounts.customer_sessions import get_customer_for_session
+from accounts.models import Customer
+
 from .models import CarrierService, PartQuoteRequest, PartSearchLog
+from .providers import PartsProviderError, calculate_part_price_provider
 
 @admin.register(CarrierService)
 class CarrierServiceAdmin(admin.ModelAdmin):
@@ -65,6 +71,7 @@ class PartSearchLogAdmin(admin.ModelAdmin):
 class PartQuoteRequestAdmin(admin.ModelAdmin):
     list_display = (
         "id",
+        "request_type",
         "part_number",
         "customer_phone",
         "customer_name",
@@ -75,7 +82,7 @@ class PartQuoteRequestAdmin(admin.ModelAdmin):
         "customer_link",
         "created_at",
     )
-    list_filter = ("status", "price_ready_at", "created_at")
+    list_filter = ("request_type", "status", "price_ready_at", "created_at")
     search_fields = (
         "part_number",
         "vin",
@@ -97,6 +104,7 @@ class PartQuoteRequestAdmin(admin.ModelAdmin):
         ("მოთხოვნა", {
             "fields": (
                 "part_number",
+                "request_type",
                 "vin",
                 "customer_name",
                 "customer_phone",
@@ -115,6 +123,10 @@ class PartQuoteRequestAdmin(admin.ModelAdmin):
             ),
         }),
         ("ოპერატორის მიერ მომზადებული ფასი", {
+            "description": (
+                "წონის ფასის მოთხოვნაზე შეავსეთ მხოლოდ დაზუსტებული წონა — "
+                "საბოლოო ფასს სისტემა action-ის გაშვებისას ავტომატურად დათვლის."
+            ),
             "fields": (
                 "prepared_weight_kg",
                 "final_price_gel",
@@ -135,6 +147,14 @@ class PartQuoteRequestAdmin(admin.ModelAdmin):
         }),
     )
 
+    def get_readonly_fields(self, request, obj=None):
+        readonly_fields = list(super().get_readonly_fields(request, obj))
+
+        if obj and obj.request_type == PartQuoteRequest.REQUEST_TYPE_WEIGHT_PRICE:
+            readonly_fields.append("final_price_gel")
+
+        return readonly_fields
+
     @admin.display(description="Customer magic link")
     def customer_link(self, obj):
         if not obj or not obj.is_price_ready:
@@ -148,16 +168,71 @@ class PartQuoteRequestAdmin(admin.ModelAdmin):
     @admin.action(description="მომხმარებელს: ფასი მზადაა — magic link-ის შექმნა")
     def mark_price_ready(self, request, queryset):
         prepared_count = 0
-        skipped_count = 0
+        missing_data_ids = []
+        calculation_failed_ids = []
 
         for quote_request in queryset:
             if (
-                quote_request.final_price_gel is None
-                or quote_request.final_price_gel <= 0
-                or quote_request.prepared_weight_kg is None
+                quote_request.prepared_weight_kg is None
                 or quote_request.prepared_weight_kg <= 0
             ):
-                skipped_count += 1
+                missing_data_ids.append(quote_request.id)
+                continue
+
+            if quote_request.request_type == PartQuoteRequest.REQUEST_TYPE_WEIGHT_PRICE:
+                customer = get_customer_for_session(quote_request.session_id)
+
+                if customer is None:
+                    customer = Customer.objects.filter(
+                        phone=quote_request.customer_phone,
+                    ).first()
+
+                if customer is None:
+                    calculation_failed_ids.append(quote_request.id)
+                    continue
+
+                try:
+                    option = calculate_part_price_provider(
+                        part_number=quote_request.part_number,
+                        part_option_id=quote_request.part_option_id,
+                        weight_kg=quote_request.prepared_weight_kg,
+                        customer=customer,
+                    )
+                except PartsProviderError:
+                    calculation_failed_ids.append(quote_request.id)
+                    continue
+
+                try:
+                    final_price_gel = Decimal(str(option.get("final_price_gel")))
+                except (InvalidOperation, TypeError):
+                    final_price_gel = None
+
+                if (
+                    final_price_gel is None
+                    or not final_price_gel.is_finite()
+                    or final_price_gel <= 0
+                ):
+                    calculation_failed_ids.append(quote_request.id)
+                    continue
+
+                quote_request.final_price_gel = final_price_gel
+                quote_request.currency = option.get("currency") or "GEL"
+                quote_request.name = option.get("name") or quote_request.name
+                quote_request.condition = (
+                    option.get("condition") or quote_request.condition
+                )
+                quote_request.brand = option.get("brand") or quote_request.brand
+                quote_request.availability = (
+                    option.get("availability") or quote_request.availability
+                )
+                quote_request.eta_days = (
+                    option.get("eta_days") or quote_request.eta_days
+                )
+            elif (
+                quote_request.final_price_gel is None
+                or quote_request.final_price_gel <= 0
+            ):
+                missing_data_ids.append(quote_request.id)
                 continue
 
             quote_request.status = PartQuoteRequest.STATUS_RESOLVED
@@ -179,12 +254,24 @@ class PartQuoteRequestAdmin(admin.ModelAdmin):
                 level=messages.SUCCESS,
             )
 
-        if skipped_count:
+        if missing_data_ids:
             self.message_user(
                 request,
                 (
-                    f"{skipped_count} მოთხოვნა გამოტოვებულია — ჯერ შეავსეთ "
-                    "წონა და საბოლოო ფასი."
+                    f"{len(missing_data_ids)} მოთხოვნა გამოტოვებულია "
+                    f"(ID: {', '.join(map(str, missing_data_ids))}) — "
+                    "წონის მოთხოვნაზე შეავსეთ წონა; სხვა მოთხოვნაზე — წონა და ფასი."
                 ),
                 level=messages.WARNING,
+            )
+
+        if calculation_failed_ids:
+            self.message_user(
+                request,
+                (
+                    f"{len(calculation_failed_ids)} მოთხოვნაზე ფასი ვერ დაითვალა "
+                    f"(ID: {', '.join(map(str, calculation_failed_ids))}). "
+                    "შეამოწმეთ მომხმარებელი, ნაწილის შეთავაზება და provider-ის კავშირი."
+                ),
+                level=messages.ERROR,
             )

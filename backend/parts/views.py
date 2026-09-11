@@ -258,22 +258,48 @@ def create_quote_request(request):
 
     customer = get_customer_for_session(session_id)
 
-    if not customer or not customer.has_quote_request_permission():
-        return Response(
-            {"detail": "quote request is not enabled for this customer"},
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
     serializer = PartQuoteRequestSerializer(data=request.data)
 
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    request_type = serializer.validated_data.get(
+        "request_type",
+        PartQuoteRequest.REQUEST_TYPE_MANUAL_SEARCH,
+    )
+
+    if request_type == PartQuoteRequest.REQUEST_TYPE_WEIGHT_PRICE:
+        if not customer or not customer.is_phone_verified:
+            return Response(
+                {"detail": "phone verification is required"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        missing_offer_fields = [
+            field
+            for field in ("quote_id", "part_option_id")
+            if not serializer.validated_data.get(field)
+        ]
+        if missing_offer_fields:
+            return Response(
+                {
+                    field: ["This field is required for a weight price request."]
+                    for field in missing_offer_fields
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+    elif not customer or not customer.has_quote_request_permission():
+        return Response(
+            {"detail": "quote request is not enabled for this customer"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     existing_request = PartQuoteRequest.objects.filter(
         customer_phone=customer.phone,
         part_number__iexact=serializer.validated_data["part_number"],
         vin__iexact=serializer.validated_data.get("vin", ""),
         part_option_id=serializer.validated_data.get("part_option_id", ""),
+        request_type=request_type,
         status__in=[
             PartQuoteRequest.STATUS_NEW,
             PartQuoteRequest.STATUS_CONTACTED,

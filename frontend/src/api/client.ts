@@ -41,6 +41,7 @@ export type PartSearchResponse = {
 
 export type PartQuoteRequestPayload = {
   session_id: string;
+  request_type?: "manual_search" | "weight_price";
   part_number: string;
   vin?: string;
   customer_name?: string;
