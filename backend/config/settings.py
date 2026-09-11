@@ -214,3 +214,19 @@ ENABLE_DEMO_ORDER_ENDPOINTS = config(
 )
 
 FRONTEND_BASE_URL = config("FRONTEND_BASE_URL", default="http://2.28.40.250:5173")
+
+
+# Invoice seller settings
+INVOICE_SELLER_NAME = config("INVOICE_SELLER_NAME", default="Lion Parts")
+INVOICE_SELLER_IDENTIFICATION_CODE = config(
+    "INVOICE_SELLER_IDENTIFICATION_CODE",
+    default="",
+)
+INVOICE_SELLER_ADDRESS = config("INVOICE_SELLER_ADDRESS", default="Tbilisi, Georgia")
+INVOICE_SELLER_PHONE = config("INVOICE_SELLER_PHONE", default="")
+INVOICE_SELLER_EMAIL = config("INVOICE_SELLER_EMAIL", default="")
+INVOICE_SELLER_BANK_DETAILS = config("INVOICE_SELLER_BANK_DETAILS", default="")
+INVOICE_FOOTER_TEXT = config(
+    "INVOICE_FOOTER_TEXT",
+    default="This invoice was generated from Lion Parts admin order data.",
+)
