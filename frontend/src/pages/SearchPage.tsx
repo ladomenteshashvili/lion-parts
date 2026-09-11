@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import { Link } from "react-router-dom";
 
 import {
   calculatePartPrice,
@@ -52,6 +53,9 @@ function SearchPage() {
   const [weightErrorsByCartItemId, setWeightErrorsByCartItemId] = useState<
     Record<string, string>
   >({});
+  const [requestingQuoteItemIds, setRequestingQuoteItemIds] = useState<
+    string[]
+  >([]);
 
   useEffect(() => {
     getHealthStatus()
@@ -134,7 +138,6 @@ function SearchPage() {
 
       setQuote(data);
       await loadFeed();
-      await loadFeed();
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
       console.error("Feed search failed", error);
@@ -174,6 +177,7 @@ function SearchPage() {
       });
 
       setQuote(data);
+      await loadFeed();
     } catch {
       setQuote(null);
       setSearchError("ძიება ვერ შესრულდა. სცადე თავიდან.");
@@ -262,11 +266,99 @@ function SearchPage() {
         `მოთხოვნა მიღებულია. Request #${request.id}. ოპერატორი გადაამოწმებს და დაგიკავშირდებათ.`
       );
       setQuoteRequestComment("");
+      await loadFeed();
     } catch (error) {
       console.error("Quote request failed", error);
       setQuoteRequestError("მოთხოვნის გაგზავნა ვერ მოხერხდა");
     } finally {
       setIsQuoteRequestSubmitting(false);
+    }
+  }
+
+  async function handleWeightQuoteRequest(
+    item: PartSearchResponse["results"][number],
+    cartItemId: string
+  ) {
+    if (!quote || !canRequestQuote || !quoteRequestPhone.trim()) {
+      setQuoteRequestError(
+        "ოპერატორთან მოთხოვნის გასაგზავნად საჭიროა დადასტურებული ანგარიში."
+      );
+      return;
+    }
+
+    setRequestingQuoteItemIds((ids) => [...ids, cartItemId]);
+    setQuoteRequestError("");
+    setQuoteRequestMessage("");
+
+    try {
+      const request = await createPartQuoteRequest({
+        session_id: getSessionId(),
+        part_number: quote.part_number,
+        vin: quote.vin || undefined,
+        customer_name: quoteRequestName.trim(),
+        customer_phone: quoteRequestPhone.trim(),
+        comment: "საჭიროა ნაწილის წონის გადამოწმება და საბოლოო ფასის მომზადება.",
+        quote_id: quote.quote_id,
+        part_option_id: item.part_option_id,
+        name: item.name,
+        condition: item.condition,
+        brand: item.brand,
+        availability: item.availability,
+        eta_days: item.eta_days,
+      });
+
+      setQuoteRequestMessage(
+        `მოთხოვნა #${request.id} მიღებულია. სტატუსს „ჩემი ნაწილები“-ში ნახავთ.`
+      );
+      await loadFeed();
+    } catch (error) {
+      console.error("Weight quote request failed", error);
+      setQuoteRequestError("წონის გადამოწმების მოთხოვნა ვერ გაიგზავნა.");
+    } finally {
+      setRequestingQuoteItemIds((ids) =>
+        ids.filter((id) => id !== cartItemId)
+      );
+    }
+  }
+
+  async function handleFeedAddToCart(item: PartsFeedItem) {
+    if (item.feed_status !== "price_ready" || item.top_result_price_gel === null) {
+      return;
+    }
+
+    const quoteId = item.quote_id || `REQUEST-${item.quote_request_id}`;
+    const partOptionId = item.part_option_id || `REQUEST-${item.quote_request_id}`;
+    const cartItemId = buildCartItemId({
+      quote_id: quoteId,
+      part_option_id: partOptionId,
+      part_number: item.part_number,
+    });
+
+    try {
+      await addCartItem({
+        cart_item_id: cartItemId,
+        quote_id: quoteId,
+        part_option_id: partOptionId,
+        part_number: item.part_number,
+        name: item.top_result_name || item.part_number,
+        condition: item.condition,
+        brand: item.brand,
+        availability: item.availability || "ფასი მზადაა",
+        eta_days: item.eta_days,
+        weight_kg: item.weight_kg,
+        final_price_gel: Number(item.top_result_price_gel),
+        currency: "GEL",
+        note: item.operator_message,
+        customer_notice: "წონა და ფასი გადამოწმებულია ოპერატორის მიერ.",
+        weight_source: "operator",
+        quantity: 1,
+      });
+      setAddedCartItemIds((ids) => [...ids, cartItemId]);
+      setCartMessage("მომზადებული ნაწილი დაემატა კალათაში");
+      window.dispatchEvent(new Event("lion-parts-cart-updated"));
+    } catch (error) {
+      console.error("Prepared quote add to cart failed", error);
+      setSearchError("კალათაში დამატება ვერ მოხერხდა");
     }
   }
 
@@ -397,9 +489,9 @@ function SearchPage() {
           <div className="quote__header">
             <div>
               <p className="eyebrow">ჩემი ნაწილები</p>
-              <h2>ბოლო ძიებები</h2>
+              <h2>Parts Feed</h2>
               <p className="muted">
-                აქ გამოჩნდება დადასტურებულ ტელეფონის ნომერზე მოძებნილი ნაწილები.
+                აქ ჩანს მოძებნილი ნაწილები და ოპერატორთან გაგზავნილი მოთხოვნების სტატუსი.
               </p>
             </div>
           </div>
@@ -411,34 +503,93 @@ function SearchPage() {
               ბოლო ძიებების სანახავად დაადასტურე ტელეფონის ნომერი პროფილში.
             </p>
           ) : (
-            feedItems.map((item) => (
-              <article className="part-option" key={item.id}>
-                <div>
-                  <h3>{item.part_number}</h3>
-                  <p className="muted">
-                    {item.top_result_name || "ძიების შედეგი"}
-                    {item.vin ? ` · VIN: ${item.vin}` : ""}
-                  </p>
-                  <p className="muted">
-                    {new Date(item.created_at).toLocaleString("ka-GE")} ·{" "}
-                    {item.found_count} შეთავაზება
-                    {item.quote_id ? ` · Quote: ${item.quote_id}` : ""}
-                  </p>
-                </div>
+            feedItems.map((item) => {
+              const preparedCartItemId = buildCartItemId({
+                quote_id: item.quote_id || `REQUEST-${item.quote_request_id}`,
+                part_option_id:
+                  item.part_option_id || `REQUEST-${item.quote_request_id}`,
+                part_number: item.part_number,
+              });
+              const isPreparedItemInCart =
+                addedCartItemIds.includes(preparedCartItemId);
 
-                <div className="part-option__side">
-                  {item.top_result_price_gel !== null && (
-                    <strong>
-                      {Number(item.top_result_price_gel).toLocaleString("ka-GE")} ₾
-                    </strong>
-                  )}
+              return (
+                <article className="part-option" key={item.id}>
+                  <div>
+                    <div className="feed-title-row">
+                      <h3>{item.part_number}</h3>
+                      {item.feed_status === "processing" && (
+                        <span className="feed-status feed-status--processing">
+                          ფასი მუშავდება
+                        </span>
+                      )}
+                      {item.feed_status === "price_ready" && (
+                        <span className="feed-status feed-status--ready">
+                          ფასი მზადაა
+                        </span>
+                      )}
+                      {item.feed_status === "cancelled" && (
+                        <span className="feed-status feed-status--cancelled">
+                          მოთხოვნა გაუქმებულია
+                        </span>
+                      )}
+                    </div>
+                    <p className="muted">
+                      {item.top_result_name || "ძიების შედეგი"}
+                      {item.vin ? ` · VIN: ${item.vin}` : ""}
+                    </p>
+                    <p className="muted">
+                      {new Date(item.created_at).toLocaleString("ka-GE")}
+                      {item.feed_status === "search_result"
+                        ? ` · ${item.found_count} შეთავაზება`
+                        : ` · Request #${item.quote_request_id}`}
+                    </p>
+                    {item.operator_message && <p>{item.operator_message}</p>}
+                  </div>
 
-                  <button type="button" onClick={() => handleFeedSearch(item)}>
-                    თავიდან ძებნა
-                  </button>
-                </div>
-              </article>
-            ))
+                  <div className="part-option__side">
+                    {item.top_result_price_gel !== null && (
+                      <strong>
+                        {Number(item.top_result_price_gel).toLocaleString("ka-GE")} ₾
+                      </strong>
+                    )}
+                    {item.feed_status === "price_ready" && item.weight_kg && (
+                      <span className="muted">წონა: {Number(item.weight_kg)} კგ</span>
+                    )}
+
+                    {item.feed_status === "price_ready" &&
+                      item.notification_token && (
+                        <Link
+                          className="button-link button-link--secondary"
+                          to={`/q/${item.notification_token}`}
+                        >
+                          შეთავაზების გახსნა
+                        </Link>
+                      )}
+
+                    {item.feed_status === "price_ready" &&
+                      !isPreparedItemInCart && (
+                        <button
+                          type="button"
+                          onClick={() => handleFeedAddToCart(item)}
+                        >
+                          კალათაში დამატება
+                        </button>
+                      )}
+
+                    {isPreparedItemInCart && (
+                      <Link className="button-link" to="/cart">კალათაშია</Link>
+                    )}
+
+                    {item.feed_status === "search_result" && (
+                      <button type="button" onClick={() => handleFeedSearch(item)}>
+                        თავიდან ძებნა
+                      </button>
+                    )}
+                  </div>
+                </article>
+              );
+            })
           )}
         </div>
       )}
@@ -471,6 +622,8 @@ function SearchPage() {
             const weightError = weightErrorsByCartItemId[cartItemId];
             const isCalculatingWeight =
               calculatingWeightItemIds.includes(cartItemId);            
+            const isRequestingWeightQuote =
+              requestingQuoteItemIds.includes(cartItemId);
             const lineTotalGel = hasFinalPrice
               ? Number(item.final_price_gel) * quantity
               : 0;
@@ -531,6 +684,21 @@ function SearchPage() {
                         <p className="form-error">
                           ამ ანგარიშზე წონის შეყვანა ჩართული არ არის.
                         </p>
+                      )}
+
+                      {canRequestQuote && (
+                        <button
+                          className="button-secondary weight-request-button"
+                          type="button"
+                          onClick={() =>
+                            handleWeightQuoteRequest(item, cartItemId)
+                          }
+                          disabled={isRequestingWeightQuote}
+                        >
+                          {isRequestingWeightQuote
+                            ? "იგზავნება..."
+                            : "ოპერატორს გადაამოწმებინე"}
+                        </button>
                       )}
 
                       {weightError && (

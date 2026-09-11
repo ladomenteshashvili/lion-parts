@@ -1,5 +1,7 @@
 from decimal import Decimal, InvalidOperation
 
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -12,8 +14,8 @@ from .providers import (
     calculate_part_price_provider,
     search_parts_provider,
 )
-from .models import PartSearchLog
-from .serializers import PartQuoteRequestSerializer
+from .models import PartQuoteRequest, PartSearchLog
+from .serializers import PartQuoteRequestSerializer, PublicPreparedQuoteSerializer
 
 
 def _get_customer_by_session_id(session_id: str) -> Customer | None:
@@ -71,7 +73,50 @@ def _build_feed_item(log: PartSearchLog) -> dict:
         "found_count": log.found_count,
         "top_result_name": first_result.get("name", ""),
         "top_result_price_gel": first_result.get("final_price_gel"),
+        "feed_status": "search_result",
+        "quote_request_id": None,
+        "notification_token": None,
+        "part_option_id": first_result.get("part_option_id", ""),
+        "condition": first_result.get("condition", ""),
+        "brand": first_result.get("brand", ""),
+        "availability": first_result.get("availability", ""),
+        "eta_days": first_result.get("eta_days"),
+        "weight_kg": first_result.get("weight_kg"),
+        "operator_message": "",
         "created_at": log.created_at,
+    }
+
+
+def _build_quote_request_feed_item(quote_request: PartQuoteRequest) -> dict:
+    if quote_request.is_price_ready:
+        feed_status = "price_ready"
+    elif quote_request.status == PartQuoteRequest.STATUS_CANCELLED:
+        feed_status = "cancelled"
+    else:
+        feed_status = "processing"
+
+    return {
+        "id": f"quote-request-{quote_request.id}",
+        "part_number": quote_request.part_number,
+        "vin": quote_request.vin,
+        "provider": "operator",
+        "quote_id": quote_request.quote_id or f"REQUEST-{quote_request.id}",
+        "found_count": 1 if quote_request.is_price_ready else 0,
+        "top_result_name": quote_request.name,
+        "top_result_price_gel": quote_request.final_price_gel,
+        "feed_status": feed_status,
+        "quote_request_id": quote_request.id,
+        "notification_token": (
+            quote_request.notification_token if quote_request.is_price_ready else None
+        ),
+        "part_option_id": quote_request.part_option_id or f"REQUEST-{quote_request.id}",
+        "condition": quote_request.condition,
+        "brand": quote_request.brand,
+        "availability": quote_request.availability,
+        "eta_days": quote_request.eta_days,
+        "weight_kg": quote_request.prepared_weight_kg,
+        "operator_message": quote_request.operator_message,
+        "created_at": quote_request.price_ready_at or quote_request.created_at,
     }
 
 
@@ -95,22 +140,37 @@ def get_parts_feed(request):
             }
         )
 
-    logs = PartSearchLog.objects.filter(
+    logs = list(PartSearchLog.objects.filter(
         customer_phone=customer.phone,
         status=PartSearchLog.STATUS_SUCCESS,
-    ).order_by("-created_at", "-id")[:50]
+    ).order_by("-created_at", "-id")[:50])
+
+    quote_requests = list(PartQuoteRequest.objects.filter(
+        customer_phone=customer.phone,
+    ).order_by("-updated_at", "-id")[:50])
+
+    feed_entries = [
+        (log.created_at, _build_feed_item(log)) for log in logs
+    ] + [
+        (
+            quote_request.price_ready_at or quote_request.created_at,
+            _build_quote_request_feed_item(quote_request),
+        )
+        for quote_request in quote_requests
+    ]
+    feed_entries.sort(key=lambda entry: entry[0], reverse=True)
 
     seen = set()
     results = []
 
-    for log in logs:
-        dedupe_key = (log.part_number.upper(), log.vin.upper())
+    for _created_at, item in feed_entries:
+        dedupe_key = (item["part_number"].upper(), item["vin"].upper())
 
         if dedupe_key in seen:
             continue
 
         seen.add(dedupe_key)
-        results.append(_build_feed_item(log))
+        results.append(item)
 
         if len(results) >= 10:
             break
@@ -209,9 +269,61 @@ def create_quote_request(request):
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    quote_request = serializer.save()
+    existing_request = PartQuoteRequest.objects.filter(
+        customer_phone=customer.phone,
+        part_number__iexact=serializer.validated_data["part_number"],
+        vin__iexact=serializer.validated_data.get("vin", ""),
+        part_option_id=serializer.validated_data.get("part_option_id", ""),
+        status__in=[
+            PartQuoteRequest.STATUS_NEW,
+            PartQuoteRequest.STATUS_CONTACTED,
+        ],
+    ).first()
+
+    if existing_request:
+        return Response(
+            PartQuoteRequestSerializer(existing_request).data,
+            status=status.HTTP_200_OK,
+        )
+
+    quote_request = serializer.save(
+        customer_phone=customer.phone,
+        customer_name=(
+            serializer.validated_data.get("customer_name") or customer.name
+        ),
+    )
 
     return Response(
         PartQuoteRequestSerializer(quote_request).data,
         status=status.HTTP_201_CREATED,
     )
+
+
+@api_view(["GET"])
+def get_prepared_quote(request, token):
+    quote_request = get_object_or_404(
+        PartQuoteRequest,
+        notification_token=token,
+        price_ready_at__isnull=False,
+        final_price_gel__isnull=False,
+    )
+    return Response(PublicPreparedQuoteSerializer(quote_request).data)
+
+
+@api_view(["POST"])
+def acknowledge_prepared_quote(request, token):
+    quote_request = get_object_or_404(
+        PartQuoteRequest,
+        notification_token=token,
+        price_ready_at__isnull=False,
+        final_price_gel__isnull=False,
+    )
+
+    if quote_request.notification_acknowledged_at is None:
+        quote_request.notification_acknowledged_at = timezone.now()
+        quote_request.save(update_fields=[
+            "notification_acknowledged_at",
+            "updated_at",
+        ])
+
+    return Response(PublicPreparedQuoteSerializer(quote_request).data)

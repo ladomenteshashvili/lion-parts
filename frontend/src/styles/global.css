@@ -893,6 +893,66 @@ textarea {
   opacity: 0.8;
 }
 
+.feed-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.feed-title-row h3 {
+  margin: 0;
+}
+
+.feed-status {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.feed-status--processing {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+.feed-status--ready,
+.availability--ready {
+  color: #047857;
+  background: #d1fae5;
+}
+
+.feed-status--cancelled {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.button-link--secondary {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+.weight-request-button {
+  margin-top: 10px;
+}
+
+.prepared-quote-page {
+  display: grid;
+  gap: 18px;
+}
+
+.prepared-quote-page h1,
+.prepared-quote-card h2 {
+  margin-bottom: 0;
+}
+
+.prepared-quote-card {
+  margin-top: 4px;
+}
+
 .weight-entry-box {
   margin-top: 14px;
   border: 1px dashed #cbd5e1;
