@@ -4,6 +4,7 @@ from django.conf import settings
 from django.contrib import admin, messages
 from django.db import transaction
 from django.utils import timezone
+from django.utils.html import format_html
 
 from .models import Order, OrderCustomerNotification, OrderItem, OrderItemEvent, OrderSupportMessage, Payment
 from .views import confirm_order_payment, get_or_create_order_payment, recalculate_order_total
@@ -619,6 +620,7 @@ class OrderAdmin(admin.ModelAdmin):
         "courier_delivery_action_required",
         "courier_delivery_confirmed_at",
         "courier_delivery_rejected_at",
+        "latest_customer_notification_link",
         "created_at",
         "updated_at",
     )
@@ -650,6 +652,24 @@ class OrderAdmin(admin.ModelAdmin):
             sender_type=OrderSupportMessage.SENDER_CUSTOMER,
             is_read_by_operator=False,
         ).count()
+
+    @admin.display(description="Latest customer magic link")
+    def latest_customer_notification_link(self, obj):
+        notification = obj.customer_notifications.filter(
+            visible_to_customer=True,
+        ).order_by("-created_at").first()
+
+        if not notification:
+            return "—"
+
+        frontend_base_url = getattr(settings, "FRONTEND_BASE_URL", "").rstrip("/")
+
+        if not frontend_base_url:
+            return str(notification.token)
+
+        url = f"{frontend_base_url}/n/{notification.token}"
+        return format_html('<a href="{}" target="_blank">{}</a>', url, url)
+
 
     @admin.display(description="Payment")
     def payment_status(self, obj):
@@ -714,17 +734,29 @@ class OrderAdmin(admin.ModelAdmin):
                 ]
             )
 
-            OrderSupportMessage.objects.create(
+            notification_message = (
+                f"{message} თანხა: "
+                f"{order.proposed_courier_delivery_fee_gel} ₾."
+            )
+
+            support_message = OrderSupportMessage.objects.create(
                 order=order,
                 sender_type=OrderSupportMessage.SENDER_SYSTEM,
                 sender_name=request.user.get_username() or "Operator",
-                message=(
-                    f"{message} თანხა: "
-                    f"{order.proposed_courier_delivery_fee_gel} ₾."
-                ),
+                message=notification_message,
                 visible_to_customer=True,
                 is_read_by_customer=False,
                 is_read_by_operator=True,
+            )
+
+            OrderCustomerNotification.objects.create(
+                order=order,
+                support_message=support_message,
+                notification_type=OrderCustomerNotification.TYPE_ACTION_REQUIRED,
+                title="კურიერის ფასის დადასტურება",
+                message=notification_message,
+                visible_to_customer=True,
+                is_read_by_customer=False,
             )
 
             updated_count += 1
