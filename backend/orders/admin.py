@@ -576,6 +576,9 @@ class OrderAdmin(admin.ModelAdmin):
         "customer_phone_snapshot",
         "billing_type",
         "legal_entity_company_official_name",
+        "courier_delivery_requested",
+        "courier_delivery_fee_gel",
+        "courier_delivery_action_required",
         "status",
         "payment_status",
         "action_required_items",
@@ -612,11 +615,15 @@ class OrderAdmin(admin.ModelAdmin):
         "legal_entity_contact_last_name",
         "legal_entity_email",
         "legal_entity_mobile_phone",
+        "courier_delivery_fee_gel",
+        "courier_delivery_action_required",
+        "courier_delivery_confirmed_at",
+        "courier_delivery_rejected_at",
         "created_at",
         "updated_at",
     )
     inlines = [PaymentInline, OrderItemInline, OrderSupportMessageInline]
-    actions = ["mark_selected_orders_paid"]
+    actions = ["mark_selected_orders_paid", "request_courier_fee_confirmation"]
 
 
     @admin.display(description="Current customer", ordering="customer__name")
@@ -671,6 +678,74 @@ class OrderAdmin(admin.ModelAdmin):
             instance.save()
 
         formset.save_m2m()
+
+    @admin.action(description="კურიერის ფასის customer-თან დასადასტურებლად გაგზავნა")
+    def request_courier_fee_confirmation(self, request, queryset):
+        updated_count = 0
+        skipped_count = 0
+
+        for order in queryset:
+            if not order.courier_delivery_requested:
+                skipped_count += 1
+                continue
+
+            if order.proposed_courier_delivery_fee_gel is None:
+                skipped_count += 1
+                continue
+
+            if order.status == Order.STATUS_CANCELLED:
+                skipped_count += 1
+                continue
+
+            message = (
+                order.courier_delivery_action_message.strip()
+                or "კურიერით მიწოდების ღირებულება დასადასტურებელია."
+            )
+
+            order.courier_delivery_action_required = True
+            order.courier_delivery_action_message = message
+            order.status = Order.STATUS_ACTION_REQUIRED
+            order.save(
+                update_fields=[
+                    "courier_delivery_action_required",
+                    "courier_delivery_action_message",
+                    "status",
+                    "updated_at",
+                ]
+            )
+
+            OrderSupportMessage.objects.create(
+                order=order,
+                sender_type=OrderSupportMessage.SENDER_SYSTEM,
+                sender_name=request.user.get_username() or "Operator",
+                message=(
+                    f"{message} თანხა: "
+                    f"{order.proposed_courier_delivery_fee_gel} ₾."
+                ),
+                visible_to_customer=True,
+                is_read_by_customer=False,
+                is_read_by_operator=True,
+            )
+
+            updated_count += 1
+
+        if updated_count:
+            self.message_user(
+                request,
+                f"{updated_count} შეკვეთაზე კურიერის ფასი გაიგზავნა customer-თან დასადასტურებლად.",
+                messages.SUCCESS,
+            )
+
+        if skipped_count:
+            self.message_user(
+                request,
+                (
+                    f"{skipped_count} შეკვეთა გამოტოვებულია — საჭიროა "
+                    "courier requested და proposed courier fee."
+                ),
+                messages.WARNING,
+            )
+
 
     @admin.action(description="თანხა მიღებულია — შეკვეთის დადასტურება")
     def mark_selected_orders_paid(self, request, queryset):

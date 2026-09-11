@@ -10,6 +10,8 @@ from .views import (
     demo_confirm_payment,
     demo_request_item_change,
     resolve_item_action,
+    resolve_courier_delivery_fee,
+    decline_courier_delivery_fee,
     demo_update_item_status,
     get_customer_notification,
     get_order_detail,
@@ -49,6 +51,16 @@ urlpatterns = [
         "<str:order_number>/support/acknowledge/",
         acknowledge_order_support_messages,
         name="orders-support-acknowledge",
+    ),
+    path(
+        "<str:order_number>/resolve-courier-fee/",
+        resolve_courier_delivery_fee,
+        name="orders-resolve-courier-fee",
+    ),
+    path(
+        "<str:order_number>/decline-courier-fee/",
+        decline_courier_delivery_fee,
+        name="orders-decline-courier-fee",
     ),
     path("<str:order_number>/", get_order_detail, name="orders-detail"),
     path(

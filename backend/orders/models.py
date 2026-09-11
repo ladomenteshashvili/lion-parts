@@ -79,6 +79,24 @@ class Order(models.Model):
     note = models.TextField(blank=True)
 
     courier_delivery_requested = models.BooleanField(default=False, db_index=True)
+    courier_delivery_fee_gel = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+    )
+    proposed_courier_delivery_fee_gel = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+    courier_delivery_action_required = models.BooleanField(
+        default=False,
+        db_index=True,
+    )
+    courier_delivery_action_message = models.TextField(blank=True)
+    courier_delivery_confirmed_at = models.DateTimeField(null=True, blank=True)
+    courier_delivery_rejected_at = models.DateTimeField(null=True, blank=True)
 
     payment_type = models.CharField(
         max_length=20,

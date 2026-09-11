@@ -99,8 +99,21 @@ def recalculate_order_total(order):
         for item in active_items
     )
 
+    courier_fee = order.courier_delivery_fee_gel or Decimal("0.00")
+    total_gel += courier_fee
+
     order.total_gel = total_gel
     order.save(update_fields=["total_gel", "updated_at"])
+
+    try:
+        payment = order.payment
+    except Payment.DoesNotExist:
+        payment = None
+
+    if payment and payment.status == Payment.STATUS_PENDING:
+        payment.amount_gel = order.total_gel
+        payment.save(update_fields=["amount_gel", "updated_at"])
+
     return order
 
 
@@ -136,6 +149,21 @@ def is_notice_only_weight_action(item):
         and item.proposed_final_price_gel is None
         and item.proposed_eta_days is None
     )
+
+
+def build_courier_delivery_snapshot(order):
+    return {
+        "courier_delivery_requested": order.courier_delivery_requested,
+        "courier_delivery_fee_gel": str(order.courier_delivery_fee_gel),
+        "proposed_courier_delivery_fee_gel": (
+            str(order.proposed_courier_delivery_fee_gel)
+            if order.proposed_courier_delivery_fee_gel is not None
+            else None
+        ),
+        "courier_delivery_action_required": order.courier_delivery_action_required,
+        "courier_delivery_action_message": order.courier_delivery_action_message,
+        "total_gel": str(order.total_gel),
+    }
 
 
 def build_item_action_snapshot(item):
@@ -790,6 +818,158 @@ def acknowledge_order_item_action(request, item_id):
         Order.objects.select_related("payment", "legal_entity_profile")
         .prefetch_related("items__events", "support_messages")
         .get(id=order.id)
+    )
+
+    serializer = OrderSerializer(updated_order)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+def resolve_courier_delivery_fee(request, order_number):
+    session_id = request.data.get("session_id", "").strip()
+
+    if not session_id:
+        return Response(
+            {"detail": "session_id is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        with transaction.atomic():
+            order = Order.objects.select_for_update().get(
+                build_customer_order_access_filter(session_id),
+                order_number=order_number,
+            )
+
+            if not order.courier_delivery_action_required:
+                return Response(
+                    {"detail": "courier delivery action is not required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if order.proposed_courier_delivery_fee_gel is None:
+                return Response(
+                    {"detail": "proposed courier delivery fee is missing"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            old_value = build_courier_delivery_snapshot(order)
+
+            order.courier_delivery_fee_gel = order.proposed_courier_delivery_fee_gel
+            order.proposed_courier_delivery_fee_gel = None
+            order.courier_delivery_action_required = False
+            order.courier_delivery_action_message = ""
+            order.courier_delivery_confirmed_at = timezone.now()
+            order.courier_delivery_rejected_at = None
+            order.save(
+                update_fields=[
+                    "courier_delivery_fee_gel",
+                    "proposed_courier_delivery_fee_gel",
+                    "courier_delivery_action_required",
+                    "courier_delivery_action_message",
+                    "courier_delivery_confirmed_at",
+                    "courier_delivery_rejected_at",
+                    "updated_at",
+                ]
+            )
+
+            recalculate_order_total(order)
+            sync_order_status_after_customer_item_change(order)
+
+            OrderSupportMessage.objects.create(
+                order=order,
+                sender_type=OrderSupportMessage.SENDER_SYSTEM,
+                sender_name="System",
+                message=(
+                    "მომხმარებელმა კურიერით მიწოდების ღირებულება დაადასტურა. "
+                    f"დადასტურებული თანხა: {order.courier_delivery_fee_gel} ₾."
+                ),
+                visible_to_customer=True,
+                is_read_by_customer=True,
+                is_read_by_operator=False,
+            )
+
+    except Order.DoesNotExist:
+        return Response(
+            {"detail": "order not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    updated_order = (
+        Order.objects.select_related("payment", "legal_entity_profile")
+        .prefetch_related("items__events", "support_messages")
+        .get(order_number=order_number)
+    )
+
+    serializer = OrderSerializer(updated_order)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+def decline_courier_delivery_fee(request, order_number):
+    session_id = request.data.get("session_id", "").strip()
+
+    if not session_id:
+        return Response(
+            {"detail": "session_id is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        with transaction.atomic():
+            order = Order.objects.select_for_update().get(
+                build_customer_order_access_filter(session_id),
+                order_number=order_number,
+            )
+
+            if not order.courier_delivery_action_required:
+                return Response(
+                    {"detail": "courier delivery action is not required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            proposed_fee = order.proposed_courier_delivery_fee_gel
+            old_value = build_courier_delivery_snapshot(order)
+
+            order.proposed_courier_delivery_fee_gel = None
+            order.courier_delivery_action_required = False
+            order.courier_delivery_action_message = ""
+            order.courier_delivery_rejected_at = timezone.now()
+            order.save(
+                update_fields=[
+                    "proposed_courier_delivery_fee_gel",
+                    "courier_delivery_action_required",
+                    "courier_delivery_action_message",
+                    "courier_delivery_rejected_at",
+                    "updated_at",
+                ]
+            )
+
+            sync_order_status_after_customer_item_change(order)
+
+            OrderSupportMessage.objects.create(
+                order=order,
+                sender_type=OrderSupportMessage.SENDER_SYSTEM,
+                sender_name="System",
+                message=(
+                    "მომხმარებელმა კურიერით მიწოდების ღირებულება არ დაადასტურა. "
+                    f"შემოთავაზებული თანხა იყო: {proposed_fee or 0} ₾."
+                ),
+                visible_to_customer=True,
+                is_read_by_customer=True,
+                is_read_by_operator=False,
+            )
+
+    except Order.DoesNotExist:
+        return Response(
+            {"detail": "order not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    updated_order = (
+        Order.objects.select_related("payment", "legal_entity_profile")
+        .prefetch_related("items__events", "support_messages")
+        .get(order_number=order_number)
     )
 
     serializer = OrderSerializer(updated_order)
