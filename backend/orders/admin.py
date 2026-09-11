@@ -1,8 +1,10 @@
 from datetime import timedelta
+import csv
 
 from django.conf import settings
 from django.contrib import admin, messages
 from django.db import transaction
+from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.html import format_html
 
@@ -625,7 +627,11 @@ class OrderAdmin(admin.ModelAdmin):
         "updated_at",
     )
     inlines = [PaymentInline, OrderItemInline, OrderSupportMessageInline]
-    actions = ["mark_selected_orders_paid", "request_courier_fee_confirmation"]
+    actions = [
+        "mark_selected_orders_paid",
+        "request_courier_fee_confirmation",
+        "export_selected_orders_invoice_csv",
+    ]
 
 
     @admin.display(description="Current customer", ordering="customer__name")
@@ -777,6 +783,118 @@ class OrderAdmin(admin.ModelAdmin):
                 ),
                 messages.WARNING,
             )
+
+
+    @admin.action(description="Invoice CSV export")
+    def export_selected_orders_invoice_csv(self, request, queryset):
+        response = HttpResponse(content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = 'attachment; filename="orders_invoice_export.csv"'
+        response.write("\ufeff")
+
+        writer = csv.writer(response)
+        writer.writerow([
+            "Order number",
+            "Buyer type",
+            "Buyer name",
+            "Buyer identification code",
+            "Buyer contact person",
+            "Buyer phone",
+            "Buyer email",
+            "VIN",
+            "Line type",
+            "Part number",
+            "Description",
+            "Quantity",
+            "Unit price GEL",
+            "Line total GEL",
+            "Courier fee GEL",
+            "Order total GEL",
+            "Payment status",
+            "Order status",
+            "Created at",
+        ])
+
+        orders = (
+            queryset
+            .select_related("payment", "legal_entity_profile", "customer")
+            .prefetch_related("items")
+            .order_by("created_at", "id")
+        )
+
+        for order in orders:
+            if order.billing_type == Order.BILLING_LEGAL_ENTITY:
+                buyer_type = "Legal entity"
+                buyer_name = order.legal_entity_company_official_name
+                buyer_identification_code = order.legal_entity_company_identification_code
+                buyer_contact_person = (
+                    f"{order.legal_entity_contact_first_name} "
+                    f"{order.legal_entity_contact_last_name}"
+                ).strip()
+                buyer_phone = order.legal_entity_mobile_phone
+                buyer_email = order.legal_entity_email
+            else:
+                buyer_type = "Personal"
+                buyer_name = order.current_customer_name
+                buyer_identification_code = ""
+                buyer_contact_person = order.current_customer_name
+                buyer_phone = order.current_customer_phone
+                buyer_email = ""
+
+            try:
+                payment_status = order.payment.status
+            except Payment.DoesNotExist:
+                payment_status = "missing"
+
+            for item in order.items.all():
+                unit_price = item.final_price_gel
+                line_total = item.final_price_gel * item.quantity
+
+                writer.writerow([
+                    order.order_number,
+                    buyer_type,
+                    buyer_name,
+                    buyer_identification_code,
+                    buyer_contact_person,
+                    buyer_phone,
+                    buyer_email,
+                    order.vin,
+                    "Part",
+                    item.part_number,
+                    item.name,
+                    item.quantity,
+                    unit_price,
+                    line_total,
+                    "",
+                    order.total_gel,
+                    payment_status,
+                    order.status,
+                    order.created_at.isoformat(),
+                ])
+
+            if order.courier_delivery_fee_gel and order.courier_delivery_fee_gel > 0:
+                writer.writerow([
+                    order.order_number,
+                    buyer_type,
+                    buyer_name,
+                    buyer_identification_code,
+                    buyer_contact_person,
+                    buyer_phone,
+                    buyer_email,
+                    order.vin,
+                    "Courier",
+                    "",
+                    "Courier delivery",
+                    1,
+                    order.courier_delivery_fee_gel,
+                    order.courier_delivery_fee_gel,
+                    order.courier_delivery_fee_gel,
+                    order.total_gel,
+                    payment_status,
+                    order.status,
+                    order.created_at.isoformat(),
+                ])
+
+        return response
 
 
     @admin.action(description="თანხა მიღებულია — შეკვეთის დადასტურება")
