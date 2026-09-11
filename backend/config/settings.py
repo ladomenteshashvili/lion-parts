@@ -252,3 +252,15 @@ INVOICE_PAYMENT_DUE_TEXT = config(
     "INVOICE_PAYMENT_DUE_TEXT",
     default="Payment due upon receipt.",
 )
+
+
+# Invoice amount display settings
+INVOICE_AMOUNT_NOTE = config(
+    "INVOICE_AMOUNT_NOTE",
+    default="All amounts are in GEL and include VAT unless otherwise noted.",
+)
+INVOICE_SHOW_PAYMENT_BADGE = config(
+    "INVOICE_SHOW_PAYMENT_BADGE",
+    default=True,
+    cast=bool,
+)
