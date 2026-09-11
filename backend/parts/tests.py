@@ -599,6 +599,81 @@ class PartQuoteRequestApiTests(TestCase):
         self.assertEqual(quote_request.name, "NO-WEIGHT-3")
         self.assertTrue(quote_request.is_price_ready)
 
+    @override_settings(PARTS_PROVIDER="amt")
+    @patch("parts.admin.calculate_part_price_provider")
+    def test_admin_action_calculates_weight_quote_price(self, calculate_price):
+        customer = Customer.objects.get(session_id=self.session_id)
+        quote_request = PartQuoteRequest.objects.create(
+            session_id=self.session_id,
+            request_type=PartQuoteRequest.REQUEST_TYPE_WEIGHT_PRICE,
+            part_number="51118070648",
+            customer_name=customer.name,
+            customer_phone=customer.phone,
+            quote_id="AMT-51118070648",
+            part_option_id="AMT-1-51118070648",
+            prepared_weight_kg=Decimal("4.20"),
+            final_price_gel=Decimal("999.00"),
+        )
+        calculate_price.return_value = {
+            "name": "Front bumper cover",
+            "condition": "New",
+            "brand": "BMW",
+            "availability": "Price returned",
+            "eta_days": 14,
+            "final_price_gel": Decimal("810.25"),
+            "currency": "GEL",
+        }
+        model_admin = PartQuoteRequestAdmin(PartQuoteRequest, AdminSite())
+        model_admin.message_user = lambda *args, **kwargs: None
+
+        model_admin.mark_price_ready(
+            None,
+            PartQuoteRequest.objects.filter(pk=quote_request.pk),
+        )
+
+        quote_request.refresh_from_db()
+        calculate_price.assert_called_once_with(
+            part_number="51118070648",
+            part_option_id="AMT-1-51118070648",
+            weight_kg=Decimal("4.20"),
+            customer=customer,
+        )
+        self.assertEqual(quote_request.final_price_gel, Decimal("810.25"))
+        self.assertEqual(quote_request.name, "Front bumper cover")
+        self.assertEqual(quote_request.eta_days, 14)
+        self.assertEqual(quote_request.status, PartQuoteRequest.STATUS_RESOLVED)
+        self.assertIsNotNone(quote_request.price_ready_at)
+
+    @override_settings(PARTS_PROVIDER="amt")
+    @patch("parts.admin.calculate_part_price_provider")
+    def test_admin_action_requires_only_weight_for_weight_quote(
+        self,
+        calculate_price,
+    ):
+        customer = Customer.objects.get(session_id=self.session_id)
+        quote_request = PartQuoteRequest.objects.create(
+            session_id=self.session_id,
+            request_type=PartQuoteRequest.REQUEST_TYPE_WEIGHT_PRICE,
+            part_number="51118070648",
+            customer_name=customer.name,
+            customer_phone=customer.phone,
+            quote_id="AMT-51118070648",
+            part_option_id="AMT-1-51118070648",
+        )
+        model_admin = PartQuoteRequestAdmin(PartQuoteRequest, AdminSite())
+        model_admin.message_user = lambda *args, **kwargs: None
+
+        model_admin.mark_price_ready(
+            None,
+            PartQuoteRequest.objects.filter(pk=quote_request.pk),
+        )
+
+        quote_request.refresh_from_db()
+        calculate_price.assert_not_called()
+        self.assertIsNone(quote_request.final_price_gel)
+        self.assertIsNone(quote_request.price_ready_at)
+        self.assertEqual(quote_request.status, PartQuoteRequest.STATUS_NEW)
+
     def test_verified_regular_customer_can_create_weight_price_request(self):
         customer = Customer.objects.get(session_id=self.session_id)
         customer.can_request_quote = False
