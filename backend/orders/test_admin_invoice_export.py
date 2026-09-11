@@ -68,6 +68,8 @@ class AdminInvoiceExportTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("orders_invoice_export.csv", response["Content-Disposition"])
+        self.assertIn(f"INV-{order.created_at.year}-{order.id:06d}", content)
+        self.assertIn("Invoice number", content)
         self.assertIn("LP-INVOICE-0001", content)
         self.assertIn("Invoice Customer", content)
         self.assertIn("TESTVIN123", content)

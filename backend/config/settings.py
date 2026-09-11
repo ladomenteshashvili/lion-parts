@@ -244,3 +244,11 @@ INVOICE_DRAFT_WATERMARK_TEXT = config(
     "INVOICE_DRAFT_WATERMARK_TEXT",
     default="DRAFT",
 )
+
+
+# Invoice number and payment display settings
+INVOICE_NUMBER_PREFIX = config("INVOICE_NUMBER_PREFIX", default="INV")
+INVOICE_PAYMENT_DUE_TEXT = config(
+    "INVOICE_PAYMENT_DUE_TEXT",
+    default="Payment due upon receipt.",
+)
