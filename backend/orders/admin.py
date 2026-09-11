@@ -5,8 +5,10 @@ from django.conf import settings
 from django.contrib import admin, messages
 from django.db import transaction
 from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
+from django.urls import path
 from django.utils import timezone
-from django.utils.html import format_html
+from django.utils.html import escape, format_html
 
 from .models import Order, OrderCustomerNotification, OrderItem, OrderItemEvent, OrderSupportMessage, Payment
 from .views import confirm_order_payment, get_or_create_order_payment, recalculate_order_total
@@ -587,6 +589,7 @@ class OrderAdmin(admin.ModelAdmin):
         "action_required_items",
         "unread_customer_messages",
         "total_gel",
+        "invoice_print_link",
         "created_at",
     )
     list_select_related = ("customer", "legal_entity_profile")
@@ -623,6 +626,7 @@ class OrderAdmin(admin.ModelAdmin):
         "courier_delivery_confirmed_at",
         "courier_delivery_rejected_at",
         "latest_customer_notification_link",
+        "invoice_print_link",
         "created_at",
         "updated_at",
     )
@@ -658,6 +662,232 @@ class OrderAdmin(admin.ModelAdmin):
             sender_type=OrderSupportMessage.SENDER_CUSTOMER,
             is_read_by_operator=False,
         ).count()
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "<int:order_id>/invoice/",
+                self.admin_site.admin_view(self.admin_invoice_print_view),
+                name="orders_order_invoice",
+            ),
+        ]
+        return custom_urls + urls
+
+    @admin.display(description="Invoice")
+    def invoice_print_link(self, obj):
+        url = f"./{obj.id}/invoice/"
+        return format_html('<a href="{}" target="_blank">Print invoice</a>', url)
+
+    def admin_invoice_print_view(self, request, order_id):
+        order = get_object_or_404(
+            self.get_queryset(request)
+            .select_related("payment", "customer", "legal_entity_profile")
+            .prefetch_related("items"),
+            pk=order_id,
+        )
+
+        if order.billing_type == Order.BILLING_LEGAL_ENTITY:
+            buyer_type = "იურიდიული პირი"
+            buyer_name = order.legal_entity_company_official_name
+            buyer_code = order.legal_entity_company_identification_code
+            buyer_address = order.legal_entity_legal_address
+            buyer_contact = (
+                f"{order.legal_entity_contact_first_name} "
+                f"{order.legal_entity_contact_last_name}"
+            ).strip()
+            buyer_phone = order.legal_entity_mobile_phone
+            buyer_email = order.legal_entity_email
+        else:
+            buyer_type = "ფიზიკური პირი"
+            buyer_name = order.current_customer_name
+            buyer_code = ""
+            buyer_address = ""
+            buyer_contact = order.current_customer_name
+            buyer_phone = order.current_customer_phone
+            buyer_email = ""
+
+        try:
+            payment_status = order.payment.status
+        except Payment.DoesNotExist:
+            payment_status = "missing"
+
+        created_at = timezone.localtime(order.created_at).strftime("%Y-%m-%d %H:%M")
+
+        rows = []
+        row_number = 1
+
+        for item in order.items.all():
+            line_total = item.final_price_gel * item.quantity
+            rows.append(
+                f"""
+                <tr>
+                  <td>{row_number}</td>
+                  <td>{escape(item.part_number)}</td>
+                  <td>{escape(item.name)}</td>
+                  <td class="right">{item.quantity}</td>
+                  <td class="right">{item.final_price_gel}</td>
+                  <td class="right">{line_total}</td>
+                </tr>
+                """
+            )
+            row_number += 1
+
+        if order.courier_delivery_fee_gel and order.courier_delivery_fee_gel > 0:
+            rows.append(
+                f"""
+                <tr>
+                  <td>{row_number}</td>
+                  <td></td>
+                  <td>{escape("კურიერით მიწოდება")}</td>
+                  <td class="right">1</td>
+                  <td class="right">{order.courier_delivery_fee_gel}</td>
+                  <td class="right">{order.courier_delivery_fee_gel}</td>
+                </tr>
+                """
+            )
+
+        html = f"""
+<!doctype html>
+<html lang="ka">
+<head>
+  <meta charset="utf-8">
+  <title>Invoice {escape(order.order_number)}</title>
+  <style>
+    body {{
+      font-family: Arial, sans-serif;
+      margin: 32px;
+      color: #111;
+      font-size: 14px;
+    }}
+    .top {{
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      border-bottom: 2px solid #111;
+      padding-bottom: 16px;
+      margin-bottom: 24px;
+    }}
+    h1 {{
+      margin: 0 0 8px;
+      font-size: 28px;
+    }}
+    h2 {{
+      margin: 24px 0 8px;
+      font-size: 16px;
+    }}
+    .muted {{
+      color: #555;
+    }}
+    .box {{
+      border: 1px solid #ddd;
+      padding: 14px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+    }}
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 16px;
+    }}
+    th, td {{
+      border: 1px solid #ddd;
+      padding: 9px;
+      vertical-align: top;
+    }}
+    th {{
+      background: #f3f3f3;
+      text-align: left;
+    }}
+    .right {{
+      text-align: right;
+      white-space: nowrap;
+    }}
+    .total {{
+      margin-top: 18px;
+      text-align: right;
+      font-size: 20px;
+      font-weight: bold;
+    }}
+    .actions {{
+      margin-bottom: 20px;
+    }}
+    @media print {{
+      .actions {{
+        display: none;
+      }}
+      body {{
+        margin: 18mm;
+      }}
+    }}
+  </style>
+</head>
+<body>
+  <div class="actions">
+    <button onclick="window.print()">Print / Save as PDF</button>
+  </div>
+
+  <div class="top">
+    <div>
+      <h1>INVOICE</h1>
+      <div><strong>Order:</strong> {escape(order.order_number)}</div>
+      <div><strong>Date:</strong> {escape(created_at)}</div>
+      <div><strong>Status:</strong> {escape(order.status)}</div>
+      <div><strong>Payment:</strong> {escape(payment_status)}</div>
+    </div>
+    <div>
+      <strong>Seller</strong><br>
+      Lion Parts<br>
+      Tbilisi, Georgia
+    </div>
+  </div>
+
+  <div class="box">
+    <h2>Buyer</h2>
+    <div><strong>Type:</strong> {escape(buyer_type)}</div>
+    <div><strong>Name:</strong> {escape(buyer_name or "—")}</div>
+    <div><strong>ID Code:</strong> {escape(buyer_code or "—")}</div>
+    <div><strong>Contact:</strong> {escape(buyer_contact or "—")}</div>
+    <div><strong>Phone:</strong> {escape(buyer_phone or "—")}</div>
+    <div><strong>Email:</strong> {escape(buyer_email or "—")}</div>
+    <div><strong>Address:</strong> {escape(buyer_address or "—")}</div>
+  </div>
+
+  <div class="box">
+    <h2>Order info</h2>
+    <div><strong>VIN:</strong> {escape(order.vin or "—")}</div>
+    <div><strong>Note:</strong> {escape(order.note or "—")}</div>
+    <div><strong>Courier requested:</strong> {"Yes" if order.courier_delivery_requested else "No"}</div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Part number</th>
+        <th>Description</th>
+        <th class="right">Qty</th>
+        <th class="right">Unit GEL</th>
+        <th class="right">Line GEL</th>
+      </tr>
+    </thead>
+    <tbody>
+      {"".join(rows)}
+    </tbody>
+  </table>
+
+  <div class="total">
+    Total: {order.total_gel} GEL
+  </div>
+
+  <p class="muted">
+    This invoice was generated from Lion Parts admin order data.
+  </p>
+</body>
+</html>
+"""
+        return HttpResponse(html)
+
 
     @admin.display(description="Latest customer magic link")
     def latest_customer_notification_link(self, obj):
