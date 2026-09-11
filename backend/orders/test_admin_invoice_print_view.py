@@ -65,6 +65,8 @@ class AdminInvoicePrintViewTests(TestCase):
             INVOICE_DOCUMENT_SUBTITLE="Demo seller data.",
             INVOICE_SHOW_DRAFT_WATERMARK=True,
             INVOICE_DRAFT_WATERMARK_TEXT="DEMO",
+            INVOICE_NUMBER_PREFIX="TESTINV",
+            INVOICE_PAYMENT_DUE_TEXT="Test payment due text.",
             INVOICE_SELLER_NAME="Test Seller LLC",
             INVOICE_SELLER_IDENTIFICATION_CODE="123456789",
             INVOICE_SELLER_ADDRESS="Test Seller Address",
@@ -81,6 +83,11 @@ class AdminInvoicePrintViewTests(TestCase):
         self.assertIn("PROFORMA INVOICE", content)
         self.assertIn("Demo seller data.", content)
         self.assertIn("DEMO", content)
+        self.assertIn(f"TESTINV-{order.created_at.year}-{order.id:06d}", content)
+        self.assertIn("Issue date", content)
+        self.assertIn("Payment due", content)
+        self.assertIn("Test payment due text.", content)
+        self.assertIn("Paid at", content)
         self.assertIn("LP-PRINT-0001", content)
         self.assertIn("Print Customer", content)
         self.assertIn("PRINTVIN123", content)

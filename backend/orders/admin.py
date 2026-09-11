@@ -145,6 +145,18 @@ class SupportMessageTaskFilter(admin.SimpleListFilter):
 
 
 
+def build_invoice_number(order):
+    prefix = getattr(settings, "INVOICE_NUMBER_PREFIX", "INV")
+    year = timezone.localtime(order.created_at).year
+    return f"{prefix}-{year}-{order.id:06d}"
+
+
+def format_admin_money(value):
+    if value is None:
+        return "0.00"
+    return f"{value:.2f}"
+
+
 def mark_order_paid_manually(order):
     with transaction.atomic():
         locked_order = Order.objects.select_for_update().get(pk=order.pk)
@@ -708,11 +720,25 @@ class OrderAdmin(admin.ModelAdmin):
             buyer_email = ""
 
         try:
-            payment_status = order.payment.status
+            payment = order.payment
+            payment_status = payment.status
+            paid_at = (
+                timezone.localtime(payment.paid_at).strftime("%Y-%m-%d %H:%M")
+                if payment.paid_at
+                else ""
+            )
         except Payment.DoesNotExist:
             payment_status = "missing"
+            paid_at = ""
 
+        invoice_number = build_invoice_number(order)
+        issue_date = timezone.localtime(order.created_at).strftime("%Y-%m-%d")
         created_at = timezone.localtime(order.created_at).strftime("%Y-%m-%d %H:%M")
+        payment_due_text = getattr(
+            settings,
+            "INVOICE_PAYMENT_DUE_TEXT",
+            "Payment due upon receipt.",
+        )
 
         rows = []
         row_number = 1
@@ -726,8 +752,8 @@ class OrderAdmin(admin.ModelAdmin):
                   <td>{escape(item.part_number)}</td>
                   <td>{escape(item.name)}</td>
                   <td class="right">{item.quantity}</td>
-                  <td class="right">{item.final_price_gel}</td>
-                  <td class="right">{line_total}</td>
+                  <td class="right">{format_admin_money(item.final_price_gel)}</td>
+                  <td class="right">{format_admin_money(line_total)}</td>
                 </tr>
                 """
             )
@@ -741,8 +767,8 @@ class OrderAdmin(admin.ModelAdmin):
                   <td></td>
                   <td>{escape("კურიერით მიწოდება")}</td>
                   <td class="right">1</td>
-                  <td class="right">{order.courier_delivery_fee_gel}</td>
-                  <td class="right">{order.courier_delivery_fee_gel}</td>
+                  <td class="right">{format_admin_money(order.courier_delivery_fee_gel)}</td>
+                  <td class="right">{format_admin_money(order.courier_delivery_fee_gel)}</td>
                 </tr>
                 """
             )
@@ -807,7 +833,7 @@ class OrderAdmin(admin.ModelAdmin):
 <html lang="ka">
 <head>
   <meta charset="utf-8">
-  <title>{escape(invoice_document_title)} {escape(order.order_number)}</title>
+  <title>{escape(invoice_document_title)} {escape(invoice_number)}</title>
   <style>
     body {{
       font-family: Arial, sans-serif;
@@ -906,10 +932,14 @@ class OrderAdmin(admin.ModelAdmin):
     <div>
       <h1>{escape(invoice_document_title)}</h1>
       {subtitle_html}
+      <div><strong>Invoice number:</strong> {escape(invoice_number)}</div>
+      <div><strong>Issue date:</strong> {escape(issue_date)}</div>
       <div><strong>Order:</strong> {escape(order.order_number)}</div>
-      <div><strong>Date:</strong> {escape(created_at)}</div>
+      <div><strong>Created:</strong> {escape(created_at)}</div>
       <div><strong>Status:</strong> {escape(order.status)}</div>
       <div><strong>Payment:</strong> {escape(payment_status)}</div>
+      <div><strong>Paid at:</strong> {escape(paid_at or "—")}</div>
+      <div><strong>Payment due:</strong> {escape(payment_due_text)}</div>
     </div>
     <div>
       <strong>Seller</strong><br>
@@ -952,7 +982,7 @@ class OrderAdmin(admin.ModelAdmin):
   </table>
 
   <div class="total">
-    Total: {order.total_gel} GEL
+    Total: {format_admin_money(order.total_gel)} GEL
   </div>
 
   <p class="muted">
@@ -1098,6 +1128,7 @@ class OrderAdmin(admin.ModelAdmin):
 
         writer = csv.writer(response)
         writer.writerow([
+            "Invoice number",
             "Order number",
             "Buyer type",
             "Buyer name",
@@ -1155,6 +1186,7 @@ class OrderAdmin(admin.ModelAdmin):
                 line_total = item.final_price_gel * item.quantity
 
                 writer.writerow([
+                    build_invoice_number(order),
                     order.order_number,
                     buyer_type,
                     buyer_name,
@@ -1178,6 +1210,7 @@ class OrderAdmin(admin.ModelAdmin):
 
             if order.courier_delivery_fee_gel and order.courier_delivery_fee_gel > 0:
                 writer.writerow([
+                    build_invoice_number(order),
                     order.order_number,
                     buyer_type,
                     buyer_name,
