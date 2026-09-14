@@ -486,8 +486,7 @@ function SearchPage() {
       <p className="eyebrow">ნაწილების ძიება</p>
       <h1>მოძებნე ნაწილი part number-ით</h1>
       <p className="muted">
-        შეიყვანე OEM part number. სურვილის შემთხვევაში დაამატე VIN, რომ
-        ოპერატორმა თავსებადობა გადაამოწმოს.
+        შეიყვანე OEM part number.
       </p>
 
       <div className="status-box">
@@ -505,12 +504,6 @@ function SearchPage() {
           value={partNumber}
           onChange={(event) => setPartNumber(event.target.value)}
           placeholder="მაგ: 51118070648"
-        />
-
-        <input
-          value={vin}
-          onChange={(event) => setVin(event.target.value)}
-          placeholder="VIN — არასავალდებულო"
         />
 
         <button type="submit" disabled={isSearching}>
