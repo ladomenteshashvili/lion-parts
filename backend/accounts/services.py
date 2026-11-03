@@ -6,6 +6,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.tokens import default_token_generator
+from django.contrib.sessions.models import Session
 from django.core import signing
 from django.db import IntegrityError, transaction
 from django.utils import timezone
@@ -17,7 +18,7 @@ from api.errors import ApiError
 from api.mail import frontend_link, send_templated_email
 
 from . import otp
-from .models import Customer, LegalEntityProfile
+from .models import Customer, LegalEntityProfile, PhoneVerificationCode
 
 
 def customer_language(customer=None, fallback=None):
@@ -246,4 +247,50 @@ def confirm_phone_change(request, customer, code):
         from .serializers import taken
         raise serializers.ValidationError({"phone": [taken("phone").detail[0]]}) from None
     request.session.pop(PENDING_PHONE_KEY, None)
+    return customer
+
+
+# Account deletion (G§7.15): anonymize in one transaction; orders keep their billing snapshot.
+
+CLOSED_ORDER_STATUSES = ("completed", "cancelled")
+
+
+def anonymize_customer(customer):
+    """Shared by DELETE /api/profile/ and the admin action (LP-BE-1102). Raises account_has_open_orders."""
+    from orders.models import Order
+    from parts.models import PartQuoteRequest, PartSearchLog
+
+    with transaction.atomic():
+        customer = Customer.objects.select_for_update().select_related("user").get(pk=customer.pk)
+        if Order.objects.filter(customer=customer).exclude(status__in=CLOSED_ORDER_STATUSES).exists():
+            raise ApiError("account_has_open_orders", status=409)
+        user, phone, now = customer.user, customer.phone, timezone.now()
+
+        PhoneVerificationCode.objects.filter(customer=customer).delete()
+        if phone:
+            PhoneVerificationCode.objects.filter(phone=phone).delete()
+            # shortcut: legacy search logs and quote requests are keyed by phone. LP-BE-404/406 switch to the
+            # customer FK + hidden_at; LP-BE-501/901 add deleting the cart and notifications here.
+            PartSearchLog.objects.filter(customer_phone=phone).update(customer_phone="", customer_name="")
+            PartQuoteRequest.objects.filter(
+                customer_phone=phone, status__in=[PartQuoteRequest.STATUS_NEW, PartQuoteRequest.STATUS_CONTACTED],
+            ).delete()
+
+        # shortcut: scans every session (fine at this scale); add a user->session index if sessions grow large.
+        for session in Session.objects.all():
+            if session.get_decoded().get("_auth_user_id") == str(user.pk):
+                session.delete()
+
+        LegalEntityProfile.objects.filter(customer=customer).delete()
+        customer.first_name = customer.last_name = "Deleted"
+        customer.personal_id = customer.phone = None
+        customer.marketing_opt_in = False
+        customer.anonymized_at = now
+        customer.save()
+
+        user.username = user.email = f"deleted-{user.pk}@invalid"
+        user.first_name = user.last_name = ""
+        user.set_unusable_password()
+        user.is_active = False
+        user.save()
     return customer

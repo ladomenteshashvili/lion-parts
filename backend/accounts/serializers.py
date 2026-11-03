@@ -248,3 +248,7 @@ class PhoneChangeSerializer(serializers.Serializer):
         if phone_is_taken(value):
             raise taken("phone")
         return value
+
+
+class DeleteAccountSerializer(serializers.Serializer):
+    current_password = serializers.CharField(max_length=128, trim_whitespace=False)

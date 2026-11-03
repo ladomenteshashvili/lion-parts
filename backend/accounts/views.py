@@ -17,7 +17,7 @@ from api.throttles import (
 
 from . import otp, services
 from .serializers import (
-    CodeSerializer, CustomerSerializer, EmailChangeSerializer, LoginSerializer, PasswordChangeSerializer, PasswordResetConfirmSerializer,
+    CodeSerializer, CustomerSerializer, DeleteAccountSerializer, EmailChangeSerializer, LoginSerializer, PasswordChangeSerializer, PasswordResetConfirmSerializer,
     PasswordResetSerializer, PhoneChangeSerializer, ProfileUpdateSerializer, RegisterSerializer, TokenSerializer, check_password_rules,
 )
 
@@ -147,9 +147,17 @@ def password_reset_confirm(request):
     return Response({"detail": str(PASSWORD_CHANGED)})
 
 
-@api_view(["GET", "PATCH"])
+@api_view(["GET", "PATCH", "DELETE"])
 def profile(request):
     customer = request.user.customer
+    if request.method == "DELETE":
+        serializer = DeleteAccountSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        if not request.user.check_password(serializer.validated_data["current_password"]):
+            raise ApiError("invalid_credentials")
+        services.anonymize_customer(customer)
+        logout(request)
+        return Response(status=204)
     if request.method == "PATCH":
         serializer = ProfileUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
