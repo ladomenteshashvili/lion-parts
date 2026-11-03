@@ -304,3 +304,25 @@ class ParallelRefundTests(TransactionTestCase):
             t.join()
         self.assertEqual(sum(Refund.objects.values_list("amount", flat=True)), D("390.00"))
         self.assertEqual(Order.objects.get(pk=order.pk).amount_paid, D("0.00"))
+
+
+class UnpaidItemCancelTests(TestCase):
+    """M4 audit fix 1: cancelling an item before the first payment never leaves an out-of-date amount due."""
+
+    def test_amount_due_now_follows_the_new_total_and_old_payments_expire(self):
+        order = make_order(make_customer(), payment_option="split_70_30",
+                           items=(("A", D("300"), 1), ("B", D("100"), 1)))  # 780 + 260 = 1040
+        Order.objects.filter(pk=order.pk).update(amount_due_now=D("728.00"), split_upfront_percent=D("70"))
+        invoice = create_payment(Order.objects.get(pk=order.pk), "invoice")
+        set_item_status(order.items.get(part_number="A").pk, "cancelled", reason="Not available")
+        order.refresh_from_db()
+        self.assertEqual((order.total, order.amount_due_now, order.status), (D("260.00"), D("182.00"),
+                                                                              "payment_pending"))
+        self.assertEqual(Payment.objects.get(pk=invoice.pk).status, "expired")
+        retry = create_payment(order, "invoice")
+        self.assertEqual(retry.amount, D("182.00"))
+
+    def test_full_payment_terms_use_the_new_total(self):
+        order = make_order(make_customer(), items=(("A", D("300"), 1), ("B", D("100"), 1)))
+        set_item_status(order.items.get(part_number="A").pk, "cancelled", reason="x")
+        self.assertEqual(Order.objects.get(pk=order.pk).amount_due_now, D("260.00"))

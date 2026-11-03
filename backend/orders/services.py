@@ -377,11 +377,17 @@ OPERATOR_STATUSES = (OrderItem.STATUS_CHECKING, OrderItem.STATUS_PURCHASED, Orde
 PAID_STATUSES_ONLY = (OrderItem.STATUS_READY_FOR_PICKUP, OrderItem.STATUS_COMPLETED)
 
 
-def _lock_for_operator(item_id):
-    """(order, item) row-locked, order first (the lock order used everywhere)."""
+def _lock_for_operator(item_id, with_open_payments=False):
+    """(order, item[, open payments]) row-locked: open payments, then the order, then the item (the lock
+    order mark_payment and cancel_order use)."""
+    from payments.models import Payment
+
     order_id = OrderItem.objects.values_list("order_id", flat=True).get(pk=item_id)
+    payments = list(Payment.objects.select_for_update().filter(order_id=order_id, status__in=Payment.OPEN_STATUSES)) \
+        if with_open_payments else []
     order = Order.objects.select_for_update().get(pk=order_id)
-    return order, OrderItem.objects.select_for_update().get(pk=item_id)
+    item = OrderItem.objects.select_for_update().get(pk=item_id)
+    return (order, item, payments) if with_open_payments else (order, item)
 
 
 def _positive(field, value):
@@ -452,8 +458,10 @@ def set_item_status(item_id, status, *, actor_name="", reason="", bypass_balance
     """Operator status change (G§7.8). Balance guard: no ready_for_pickup/completed while balance_due > 0
     (only demo endpoints bypass it). `purchased` stamps purchased_at. Cancelling needs a reason and may
     happen at any stage (D19); the money is recalculated (overpaid -> refund_pending). A pending customer
-    action is closed. -> True when changed, False when the item already had that status."""
-    order, item = _lock_for_operator(item_id)
+    action is closed. On an order still waiting for its first payment, a cancelled item also re-sets
+    amount_due_now for the new total and expires the open payments (their amounts are out of date; the
+    customer starts a new payment). -> True when changed, False when the item already had that status."""
+    order, item, open_payments = _lock_for_operator(item_id, with_open_payments=True)
     reason = reason.strip()
     if status not in OPERATOR_STATUSES:
         raise OperatorError("item_status", _("This status can't be set here."))
@@ -479,6 +487,19 @@ def set_item_status(item_id, status, *, actor_name="", reason="", bypass_balance
                       new={"item_status": status, **({"reason": reason} if reason else {})},
                       actor=OrderItemEvent.ACTOR_OPERATOR, actor_name=actor_name, visible=True)
     recalculate_order(order)
+    if status == OrderItem.STATUS_CANCELLED and order.status == Order.STATUS_PAYMENT_PENDING:
+        _reset_amount_due_now(order, open_payments)
     sync_order_status(order)
     # LP-BE-903: notify(order.customer, "status_update", order=order, item=item)
     return True
+
+
+def _reset_amount_due_now(order, open_payments):
+    """Nothing is paid yet: what is due now follows the new total with the terms frozen at checkout."""
+    from payments.services import mark_payment
+
+    order.amount_due_now = round2(order.total * order.split_upfront_percent / 100) \
+        if order.payment_option == "split_70_30" and order.split_upfront_percent else order.total
+    order.save(update_fields=["amount_due_now", "updated_at"])
+    for payment in open_payments:
+        mark_payment(payment, "expired", payload={"expired_by": "order_total_changed"})
