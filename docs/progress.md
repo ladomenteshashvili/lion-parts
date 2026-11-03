@@ -30,7 +30,7 @@ backlog; planned with that milestone (master plan G1). Evidence = commit(s) + th
 | LP-BE-301 | LPK-85 / — | Pricing app & models | 3 | M2 | 201, 1302 | done |  | pricing/tests/test_models.py: seed (GEL/USD VAT 18, pickup point, Tbilisi districts), singleton refuses a second row, discount normalize/validation, /api/meta/ en/ru names, active-only currencies/points, latest rate |
 | LP-BE-302 | LPK-85 / — | NBG exchange rate client & job | 3 | M2 | 301 | todo |  |  |
 | LP-BE-303 | LPK-85 / — | Price engine & snapshots | 5 | M2 | 302, 304 | todo |  |  |
-| LP-BE-304 | LPK-85 / — | Discount engine | 3 | M2 | 301 | todo |  |  |
+| LP-BE-304 | LPK-85 / — | Discount engine | 3 | M2 | 301 | done |  | pricing/tests/test_discounts.py: 5% customer vs 10% part -> 10%, fixed 50 GEL at 2.5 -> 20.00 USD, tie -> lower id, guests get no customer/tariff rules, inactive/expired/future ignored, cap, rounding |
 | LP-BE-401 | LPK-86 / — | Parts model changes & part images | 3 | M2 | 201, 301 | todo |  |  |
 | LP-BE-402 | LPK-86 / — | Offer builder (AMT + demo) on the price engine | 5 | M2 | 303, 401 | todo |  |  |
 | LP-BE-403 | LPK-86 / — | Search endpoint | 3 | M2 | 402, 104 | todo |  |  |
