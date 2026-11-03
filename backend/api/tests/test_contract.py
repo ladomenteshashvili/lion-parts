@@ -61,6 +61,7 @@ class ContractTestCase(TestCase):
             "payment_option": "split_70_30", "payment_method": method, "terms_accepted": True}, format="json").json()
 
 
+@override_settings(SMS_DEMO_MODE=True, ENABLE_DEMO_ENDPOINTS=True, SENDER_GE_ENABLED=False)  # demo OTP codes as on staging
 class PublicAndAuthContractTests(ContractTestCase):
     def test_meta_health_csrf_me(self):
         meta = APIClient().get("/api/meta/").json()

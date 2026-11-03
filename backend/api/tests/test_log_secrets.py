@@ -53,6 +53,7 @@ class LogSecretsTests(TestCase):
         for secret in secrets:
             self.assertNotIn(str(secret), logged)
 
+    @override_settings(SMS_DEMO_MODE=True, ENABLE_DEMO_ENDPOINTS=True, SENDER_GE_ENABLED=False)
     def test_registration_code_and_password(self):
         client = APIClient()
         code = client.post("/api/auth/register/", PHYSICAL, format="json").json()["demo_code"]
