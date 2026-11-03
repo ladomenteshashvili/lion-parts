@@ -49,7 +49,7 @@ backlog; planned with that milestone (master plan G1). Evidence = commit(s) + th
 | LP-BE-603 | LPK-88 / — | Create order (checkout) | 8 | M3 | 602, 701 | todo |  |  |
 | LP-BE-604 | LPK-88 / — | Invoice HTML update | 3 | M3 | 601 | done |  | orders/test_invoice.py: GEL frozen amounts unchanged after a later rate change, USD invoice with $ + legal buyer, ?lang=en/ru labels and seller texts, unknown lang -> request language, delivery comment escaped, owner-only (404/401), browser Accept header |
 | LP-BE-701 | LPK-89 / — | Payment model, provider contract, FakeProvider | 3 | M3 | 601 | done |  | payments/tests.py: get_provider -> FakeProvider, unknown PAYMENT_PROVIDER stops startup (ImproperlyConfigured), fake start URL, amount_paid counts only paid payments |
-| LP-BE-702 | LPK-89 / — | `mark_payment` service | 5 | M3 | 701 | todo |  |  |
+| LP-BE-702 | LPK-89 / — | `mark_payment` service | 5 | M3 | 701 | done |  | payments/test_mark_payment.py: initial 70% paid -> processing + balance 30%, paid twice counted once (one event set), paid never downgraded, paid -> refunded lowers amount_paid, refunded final, refund only from paid, failed keeps payment_pending, balance payment + confirmed_by, unknown status refused |
 | LP-BE-703 | LPK-89 / — | Start payments & order payment endpoints | 5 | M3 | 702 | todo |  |  |
 | LP-BE-704 | LPK-89 / — | Provider callback endpoint | 2 | M3 | 702 | todo |  |  |
 | LP-BE-705 | LPK-89 / — | Invoice payments & manual confirmation | 3 | M3 | 702, 604 | todo |  |  |

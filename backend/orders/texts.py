@@ -15,6 +15,8 @@ EVENT_TEXTS = {
         "The price is calculated with the estimated weight you entered. The final weight is set when the part "
         "arrives at the US warehouse. If it differs, the final amount may change: you may pay extra or get a refund."
     ),
+    "order_item_added": _("The part was added to the order."),
+    "payment_confirmed": _("Payment confirmed."),
     "attention_courier_fee": _("Please confirm the delivery fee."),
     "attention_balance_due": _("Remaining amount: {amount}."),
     "attention_ready_for_pickup": _("Your parts are ready for pickup."),
