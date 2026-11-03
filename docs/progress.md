@@ -53,7 +53,7 @@ backlog; planned with that milestone (master plan G1). Evidence = commit(s) + th
 | LP-BE-703 | LPK-89 / — | Start payments & order payment endpoints | 5 | M3 | 702 | done |  | payments/test_endpoints.py: balance payment for exactly balance_due in the order currency, retry while waiting -> initial for amount_due_now, payment_in_progress (+payment, 30 min), nothing_to_pay (paid / cancelled), start() never inside a transaction, owner-only GET/POST (404/401), invalid method |
 | LP-BE-704 | LPK-89 / — | Provider callback endpoint | 2 | M3 | 702 | done |  | payments/views.py callback (csrf-exempt, provider match, invalid_callback 400) + demo-only fake complete (owner, pending, 404/409); payments/test_callbacks.py |
 | LP-BE-705 | LPK-89 / — | Invoice payments & manual confirmation | 3 | M3 | 702, 604 | done |  | payments/admin.py (read-only Payment admin; Payment received / Mark refunded) + order admin payment inline, Payment received, Create balance invoice (request_payment guards); actions need payments.change_payment; payments/test_admin.py |
-| LP-BE-706 | LPK-89 / — | Payment reconciliation job | 3 | M3 | 703 | todo |  |  |
+| LP-BE-706 | LPK-89 / — | Payment reconciliation job | 3 | M3 | 703 | done |  | payments/management/commands/reconcile_payments.py (2 min check, 30 min -> unknown + warning, per-payment errors caught, idempotent); payments/test_reconcile.py |
 | LP-BE-801 | LPK-90 / — | Order serializers (list & detail) | 5 | M4 | 601, 702, 1304 | todo |  |  |
 | LP-BE-802 | LPK-90 / — | Orders list: groups, counts, priority | 3 | M4 | 801 | todo |  |  |
 | LP-BE-803 | LPK-90 / — | Customer decision endpoint | 5 | M4 | 801 | todo |  |  |
