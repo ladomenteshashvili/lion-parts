@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 from django.conf import settings
-from django.test import SimpleTestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import path
 from django.utils import translation
 from rest_framework import serializers
@@ -61,7 +61,7 @@ def non_english_languages():
     return [code for code, _ in settings.LANGUAGES if code != "en"]
 
 
-class LanguageResolutionTests(SimpleTestCase):
+class LanguageResolutionTests(TestCase):
     def get_meta(self, accept_language=None):
         headers = {"accept-language": accept_language} if accept_language else {}
         return self.client.get("/api/meta/", headers=headers)

@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "corsheaders",
 
     "api",
+    "pricing",
     "parts",
     "cart",
     "orders.apps.OrdersConfig",

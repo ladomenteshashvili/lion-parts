@@ -6,6 +6,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
+from pricing.services import meta_pricing
+
 from .errors import MESSAGES
 
 OTP_LENGTH = 6  # SMS codes are f"{secrets.randbelow(10**6):06d}" (G§5.7)
@@ -30,11 +32,7 @@ def meta(request):
             for code, _ in settings.LANGUAGES
         ],
         "default_language": settings.LANGUAGE_CODE,
-        # Filled from the pricing app (LP-BE-301); empty until then.
-        "currencies": [],
-        "usd_rate": None,
-        "pickup_points": [],
-        "delivery": {"country": "GE", "cities": [], "districts": []},
+        **meta_pricing(),
         "otp_length": OTP_LENGTH,
         "otp_resend_seconds": settings.PHONE_VERIFICATION_RESEND_SECONDS,
         "password_rules": {"min_length": _password_min_length(),

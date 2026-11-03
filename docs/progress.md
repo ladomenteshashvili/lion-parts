@@ -27,7 +27,7 @@ backlog; planned with that milestone (master plan G1). Evidence = commit(s) + th
 | LP-BE-211 | LPK-84 / — | Email change | 3 | M1 | 207 | done | 2a024dd | accounts/test_email_change.py: login only with old email until confirm, then only new; notice to old address; taken/incorrect/invalid; 409 email_taken at confirm; 48h/tampered; stale links die; verify link dies after change |
 | LP-BE-212 | LPK-84 / — | Phone change | 3 | M1 | 203 | done | b196058 | accounts/test_phone_change.py: changes only after the correct code, taken (before send and at verify), invalid_phone, SMS in preferred language, pending phone single use |
 | LP-BE-213 | LPK-84 / — | Account deletion (anonymize) + retention command | 5 | M1 | 210 (open-orders check becomes real after LP-BE-601) | done | f100f2c | accounts/test_delete_account.py: wrong password / open order change nothing, anonymized fields, company+OTP deleted, all sessions removed, login fails, orders keep snapshot, purge only touches anonymized customers' orders >5y, idempotent. Re-test open-orders after LP-BE-601 (plan G3) |
-| LP-BE-301 | LPK-85 / — | Pricing app & models | 3 | M2 | 201, 1302 | todo |  |  |
+| LP-BE-301 | LPK-85 / — | Pricing app & models | 3 | M2 | 201, 1302 | done |  | pricing/tests/test_models.py: seed (GEL/USD VAT 18, pickup point, Tbilisi districts), singleton refuses a second row, discount normalize/validation, /api/meta/ en/ru names, active-only currencies/points, latest rate |
 | LP-BE-302 | LPK-85 / — | NBG exchange rate client & job | 3 | M2 | 301 | todo |  |  |
 | LP-BE-303 | LPK-85 / — | Price engine & snapshots | 5 | M2 | 302, 304 | todo |  |  |
 | LP-BE-304 | LPK-85 / — | Discount engine | 3 | M2 | 301 | todo |  |  |

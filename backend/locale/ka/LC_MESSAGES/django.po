@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 11:26+0000\n"
+"POT-Creation-Date: 2026-11-03 12:37+0000\n"
 "Language: ka\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -14,7 +14,7 @@ msgstr ""
 msgid "Make another tariff the default first."
 msgstr "ჯერ სხვა ტარიფი მონიშნეთ ნაგულისხმევად."
 
-#: accounts/otp.py:18
+#: accounts/otp.py:19
 #, python-brace-format
 msgid "Lion Parts code: {code}"
 msgstr "Lion Parts-ის კოდი: {code}"
@@ -43,7 +43,7 @@ msgstr "რეგისტრაციისთვის საჭიროა �
 msgid "Choose one of the supported languages."
 msgstr "აირჩიეთ ერთ-ერთი მხარდაჭერილი ენა."
 
-#: accounts/serializers.py:219
+#: accounts/serializers.py:219 accounts/serializers.py:240
 msgid "The current password is incorrect."
 msgstr "მიმდინარე პაროლი არასწორია."
 
@@ -382,14 +382,30 @@ msgstr "გთხოვთ, დაადასტუროთ ელფოსტ
 msgid "The link is valid for 48 hours. If you didn't create a Lion Parts account, ignore this email."
 msgstr "ბმული მოქმედებს 48 საათის განმავლობაში. თუ Lion Parts-ის ანგარიში არ შეგიქმნიათ, უგულებელყავით ეს წერილი."
 
-#: config/settings.py:123
+#: config/settings.py:124
 msgid "Georgian"
 msgstr "ქართული"
 
-#: config/settings.py:123
+#: config/settings.py:124
 msgid "English"
 msgstr "ინგლისური"
 
-#: config/settings.py:123
+#: config/settings.py:124
 msgid "Russian"
 msgstr "რუსული"
+
+#: pricing/models.py:39
+msgid "Site settings already exist; edit the existing row."
+msgstr "საიტის პარამეტრები უკვე არსებობს; შეცვალეთ არსებული ჩანაწერი."
+
+#: pricing/models.py:107
+msgid "The value can't be negative."
+msgstr "მნიშვნელობა არ შეიძლება იყოს უარყოფითი."
+
+#: pricing/models.py:109
+msgid "A percentage can't exceed 100."
+msgstr "პროცენტი არ შეიძლება აღემატებოდეს 100-ს."
+
+#: pricing/models.py:111
+msgid "The end must be after the start."
+msgstr "დასრულება უნდა იყოს დაწყების შემდეგ."
