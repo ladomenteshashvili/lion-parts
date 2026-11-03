@@ -157,6 +157,8 @@ REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "EXCEPTION_HANDLER": "api.exceptions.exception_handler",
     "COERCE_DECIMAL_TO_STRING": True,
+    # Proxies in front of gunicorn (nginx = 1). 0 = use REMOTE_ADDR; never trust X-Forwarded-For blindly.
+    "NUM_PROXIES": config("NUM_PROXIES", default=0, cast=int),
     "DEFAULT_THROTTLE_RATES": {
         "otp_send_phone": "5/hour", "otp_send_ip": "20/hour", "otp_verify": "10/min",
         "login_ip": "10/min", "login_email": "5/min", "password_reset": "5/hour",
