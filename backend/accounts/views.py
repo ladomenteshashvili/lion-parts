@@ -17,7 +17,7 @@ from api.throttles import (
 
 from . import otp, services
 from .serializers import (
-    CodeSerializer, CustomerSerializer, LoginSerializer, PasswordChangeSerializer, PasswordResetConfirmSerializer,
+    CodeSerializer, CustomerSerializer, EmailChangeSerializer, LoginSerializer, PasswordChangeSerializer, PasswordResetConfirmSerializer,
     PasswordResetSerializer, ProfileUpdateSerializer, RegisterSerializer, TokenSerializer, check_password_rules,
 )
 
@@ -167,3 +167,22 @@ def profile_password(request):
     request.user.save(update_fields=["password"])
     update_session_auth_hash(request, request.user)  # keep this session; the others end
     return Response({"customer": CustomerSerializer(request.user.customer).data, "csrf_token": get_token(request)})
+
+
+@api_view(["POST"])
+@throttle_classes([EmailSendThrottle])
+def profile_email(request):
+    serializer = EmailChangeSerializer(data=request.data, context={"user": request.user})
+    serializer.is_valid(raise_exception=True)
+    new_email = serializer.validated_data["new_email"]
+    services.request_email_change(request.user.customer, new_email)
+    return Response({"sent_to": new_email, "resend_in": 60})
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def profile_email_confirm(request):
+    serializer = TokenSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    customer = services.confirm_email_change(serializer.validated_data["token"])
+    return Response({"email": customer.user.email})

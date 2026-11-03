@@ -23,7 +23,7 @@ One row per backlog story (76). Status: `done` (committed, tests green), `in pro
 | LP-BE-208 | TBD | Email verification (send & verify) | 3 | M1 | 207, 206 | done |  | accounts/test_email_verification.py: tampered/48h+/pre-email-change/inactive/anonymized -> token_invalid, idempotent, customer only for own session, already_verified 409, email_send throttle |
 | LP-BE-209 | TBD | Password reset (request & confirm) | 3 | M1 | 207 | done |  | accounts/test_password_reset.py: identical body known/unknown, no email for unknown/inactive/anonymized, single-use token, other sessions end, no login, new_password field errors, throttle; legacy reset test replaced |
 | LP-BE-210 | TBD | Profile: read, update, change password | 2 | M1 | 206 | done |  | accounts/test_profile.py: exact Customer keys + tariff/company shapes, PATCH ignores other keys, xx -> invalid, password change keeps this session/ends others; legacy profile (3) + password (2) tests replaced; demo_login (5) removed per G§8.11 (unreachable route asserted in api/tests/test_legacy.py) |
-| LP-BE-211 | TBD | Email change | 3 | M1 | 207 | todo |  |  |
+| LP-BE-211 | TBD | Email change | 3 | M1 | 207 | done |  | accounts/test_email_change.py: login only with old email until confirm, then only new; notice to old address; taken/incorrect/invalid; 409 email_taken at confirm; 48h/tampered; stale links die; verify link dies after change |
 | LP-BE-212 | TBD | Phone change | 3 | M1 | 203 | todo |  |  |
 | LP-BE-213 | TBD | Account deletion (anonymize) + retention command | 5 | M1 | 210 (open-orders check becomes real after LP-BE-601) | todo |  |  |
 | LP-BE-301 | TBD | Pricing app & models | 3 | M2 | 201, 1302 | todo |  |  |

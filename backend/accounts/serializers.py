@@ -223,3 +223,19 @@ class PasswordChangeSerializer(serializers.Serializer):
         user = self.context["user"]
         check_password_rules(value, user.email, user.first_name, user.last_name)
         return value
+
+
+class EmailChangeSerializer(serializers.Serializer):
+    new_email = serializers.EmailField(max_length=150)
+    current_password = serializers.CharField(max_length=128, trim_whitespace=False)
+
+    def validate_new_email(self, value):
+        value = value.strip().lower()
+        if email_is_taken(value):
+            raise taken("email")
+        return value
+
+    def validate_current_password(self, value):
+        if not self.context["user"].check_password(value):
+            raise serializers.ValidationError(_("The current password is incorrect."), code="incorrect")
+        return value

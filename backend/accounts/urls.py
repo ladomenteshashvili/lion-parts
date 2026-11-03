@@ -5,6 +5,8 @@ from . import views
 urlpatterns = [
     path("profile/", views.profile, name="profile"),
     path("profile/password/", views.profile_password, name="profile-password"),
+    path("profile/email/", views.profile_email, name="profile-email"),
+    path("profile/email/confirm/", views.profile_email_confirm, name="profile-email-confirm"),
     path("auth/csrf/", views.csrf, name="auth-csrf"),
     path("auth/me/", views.me, name="auth-me"),
     path("auth/login/", views.login_view, name="auth-login"),

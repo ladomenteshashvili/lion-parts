@@ -174,3 +174,47 @@ def reset_password_user(uid, token):
     if user is None or not can_log_in(user) or not default_token_generator.check_token(user, str(token)):
         raise ApiError("token_invalid")
     return user
+
+
+# Email change (G§5.7): nothing changes until the new address confirms.
+
+EMAIL_CHANGE_SALT = "email-change"
+
+
+def request_email_change(customer, new_email):
+    user = customer.user
+    # "o" (the address being replaced) makes the link die if the email changes some other way first.
+    token = signing.dumps({"u": user.pk, "e": new_email, "o": user.email}, salt=EMAIL_CHANGE_SALT)
+    language = customer_language(customer)
+    link = frontend_link("/profile/email/confirm", language, token=token)
+    send_templated_email(new_email, "email_change_confirm", {"name": customer.first_name, "link": link}, language)
+
+
+def confirm_email_change(token):
+    from .serializers import email_is_taken  # serializers import services
+
+    try:
+        data = signing.loads(str(token or ""), salt=EMAIL_CHANGE_SALT, max_age=EMAIL_TOKEN_MAX_AGE)
+        customer = Customer.objects.select_related("user").get(user__pk=data["u"], user__is_active=True)
+        new_email, old_email = data["e"], data["o"]
+    except (signing.BadSignature, Customer.DoesNotExist, KeyError, TypeError):
+        raise ApiError("token_invalid") from None
+    user = customer.user
+    if customer.anonymized_at or user.email not in (old_email, new_email):
+        raise ApiError("token_invalid")
+    if user.email == new_email:
+        return customer  # already confirmed: harmless repeat
+    try:
+        with transaction.atomic():
+            if email_is_taken(new_email):
+                raise IntegrityError("taken")
+            user.email = user.username = new_email
+            user.save(update_fields=["email", "username"])  # unique username also catches a parallel confirm
+            customer.is_email_verified, customer.email_verified_at = True, timezone.now()
+            customer.save(update_fields=["is_email_verified", "email_verified_at", "updated_at"])
+    except IntegrityError:
+        raise ApiError("email_taken", status=409) from None
+    language = customer_language(customer)
+    send_templated_email(old_email, "email_changed_notice", {"name": customer.first_name, "new_email": new_email},
+                         language)
+    return customer
