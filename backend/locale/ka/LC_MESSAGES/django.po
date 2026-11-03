@@ -3,12 +3,234 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 09:23+0000\n"
+"POT-Creation-Date: 2026-11-03 09:27+0000\n"
 "Language: ka\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: api/drf_messages.py:8
+msgid "This field is required."
+msgstr "ველი სავალდებულოა."
+
+#: api/drf_messages.py:9
+msgid "This field may not be null."
+msgstr "ველი არ შეიძლება იყოს ცარიელი."
+
+#: api/drf_messages.py:10
+msgid "This field may not be blank."
+msgstr "ველი არ შეიძლება იყოს ცარიელი."
+
+#: api/drf_messages.py:11
+msgid "Not a valid string."
+msgstr "არასწორი ტექსტი."
+
+#: api/drf_messages.py:12
+#, python-brace-format
+msgid "Ensure this field has no more than {max_length} characters."
+msgstr "ველი არ უნდა აღემატებოდეს {max_length} სიმბოლოს."
+
+#: api/drf_messages.py:13
+#, python-brace-format
+msgid "Ensure this field has at least {min_length} characters."
+msgstr "ველი უნდა შეიცავდეს მინიმუმ {min_length} სიმბოლოს."
+
+#: api/drf_messages.py:14
+#, python-brace-format
+msgid "\"{input}\" is not a valid choice."
+msgstr "\"{input}\" არ არის დასაშვები მნიშვნელობა."
+
+#: api/drf_messages.py:15
+msgid "Must be a valid boolean."
+msgstr "მნიშვნელობა უნდა იყოს true ან false."
+
+#: api/drf_messages.py:16
+msgid "A valid integer is required."
+msgstr "საჭიროა მთელი რიცხვი."
+
+#: api/drf_messages.py:17
+msgid "A valid number is required."
+msgstr "საჭიროა რიცხვი."
+
+#: api/drf_messages.py:18
+#, python-brace-format
+msgid "Ensure this value is less than or equal to {max_value}."
+msgstr "მნიშვნელობა არ უნდა აღემატებოდეს {max_value}-ს."
+
+#: api/drf_messages.py:19
+#, python-brace-format
+msgid "Ensure this value is greater than or equal to {min_value}."
+msgstr "მნიშვნელობა უნდა იყოს მინიმუმ {min_value}."
+
+#: api/drf_messages.py:20
+#, python-brace-format
+msgid "Ensure that there are no more than {max_digits} digits in total."
+msgstr "რიცხვი არ უნდა შეიცავდეს {max_digits}-ზე მეტ ციფრს."
+
+#: api/drf_messages.py:21
+#, python-brace-format
+msgid "Ensure that there are no more than {max_decimal_places} decimal places."
+msgstr "ათწილადის ნიშნები არ უნდა აღემატებოდეს {max_decimal_places}-ს."
+
+#: api/drf_messages.py:22
+#, python-brace-format
+msgid "Expected a list of items but got type \"{input_type}\"."
+msgstr "მოსალოდნელია სია, მიღებულია \"{input_type}\"."
+
+#: api/drf_messages.py:23
+msgid "This list may not be empty."
+msgstr "სია არ შეიძლება იყოს ცარიელი."
+
+#: api/drf_messages.py:24
+#, python-brace-format
+msgid "Expected a dictionary of items but got type \"{input_type}\"."
+msgstr "მოსალოდნელია ობიექტი, მიღებულია \"{input_type}\"."
+
+#: api/drf_messages.py:25
+#, python-brace-format
+msgid "Invalid data. Expected a dictionary, but got {datatype}."
+msgstr "არასწორი მონაცემები: მოსალოდნელია ობიექტი, მიღებულია {datatype}."
+
+#: api/errors.py:7
+msgid "Please check the highlighted fields."
+msgstr "შეამოწმეთ შევსებული ველები."
+
+#: api/errors.py:8
+msgid "Incorrect email or password."
+msgstr "ელფოსტა ან პაროლი არასწორია."
+
+#: api/errors.py:9
+msgid "The code is incorrect."
+msgstr "კოდი არასწორია."
+
+#: api/errors.py:10
+msgid "The code has expired. Request a new one."
+msgstr "კოდის ვადა ამოიწურა. მოითხოვეთ ახალი კოდი."
+
+#: api/errors.py:11
+msgid "Too many attempts. You can request a new code later."
+msgstr "მცდელობების ლიმიტი ამოიწურა. ახალი კოდის მოთხოვნა შესაძლებელი იქნება მოგვიანებით."
+
+#: api/errors.py:12
+msgid "Your registration session has expired. Please fill in the form again."
+msgstr "რეგისტრაციის დრო ამოიწურა. გთხოვთ, თავიდან შეავსოთ ფორმა."
+
+#: api/errors.py:13
+msgid "This link is no longer valid."
+msgstr "ბმული აღარ მოქმედებს."
+
+#: api/errors.py:14
+msgid "Invalid callback."
+msgstr "არასწორი callback."
+
+#: api/errors.py:15
+msgid "Please sign in."
+msgstr "გთხოვთ, შეხვიდეთ ანგარიშში."
+
+#: api/errors.py:16
+msgid "Security check failed. Please refresh the page."
+msgstr "უსაფრთხოების შემოწმება ვერ მოხერხდა. განაახლეთ გვერდი."
+
+#: api/errors.py:17
+msgid "Phone and email must be verified before payment."
+msgstr "გადახდამდე საჭიროა ტელეფონისა და ელფოსტის დადასტურება."
+
+#: api/errors.py:18
+msgid "Phone verification is required."
+msgstr "საჭიროა ტელეფონის დადასტურება."
+
+#: api/errors.py:19
+msgid "Weight entry is not available for your account."
+msgstr "წონის მითითება თქვენს ანგარიშზე არ არის ხელმისაწვდომი."
+
+#: api/errors.py:20
+msgid "Price requests are not available for your account."
+msgstr "ფასის მოთხოვნა თქვენს ანგარიშზე არ არის ხელმისაწვდომი."
+
+#: api/errors.py:21
+msgid "This action is not allowed."
+msgstr "მოქმედება არ არის ნებადართული."
+
+#: api/errors.py:22
+msgid "Not found."
+msgstr "ვერ მოიძებნა."
+
+#: api/errors.py:23
+msgid "This email is already linked to another account."
+msgstr "ეს ელფოსტა უკვე დაკავშირებულია სხვა ანგარიშთან."
+
+#: api/errors.py:24
+msgid "Email is already verified."
+msgstr "ელფოსტა უკვე დადასტურებულია."
+
+#: api/errors.py:25
+msgid "You can't request a new code yet."
+msgstr "კოდის ხელახლა გაგზავნა ჯერ შეუძლებელია."
+
+#: api/errors.py:26
+msgid "The price has expired. Refresh to get the current price."
+msgstr "ფასის ვადა ამოიწურა. განაახლეთ, რომ მიიღოთ აქტუალური ფასი."
+
+#: api/errors.py:27
+msgid "The price for this part is still being checked."
+msgstr "ამ ნაწილის ფასი ჯერ მოწმდება."
+
+#: api/errors.py:28
+msgid "Your cart is empty."
+msgstr "კალათა ცარიელია."
+
+#: api/errors.py:29
+msgid "Checkout is blocked: an item in your cart has an expired price or is unavailable."
+msgstr "Checkout დაბლოკილია: კალათაში არის ნაწილი, რომლის ფასის ვადა ამოიწურა ან მიუწვდომელია."
+
+#: api/errors.py:30
+msgid "No action is required anymore."
+msgstr "მოქმედება აღარ არის საჭირო."
+
+#: api/errors.py:31
+msgid "The order can no longer be cancelled: a part has already been purchased."
+msgstr "შეკვეთის გაუქმება აღარ არის შესაძლებელი — ნაწილი უკვე შეძენილია."
+
+#: api/errors.py:32
+msgid "There is nothing to pay."
+msgstr "გადასახდელი თანხა არ არის."
+
+#: api/errors.py:33
+msgid "A payment is already in progress."
+msgstr "გადახდა უკვე მიმდინარეობს."
+
+#: api/errors.py:34
+msgid "You can delete your account once your active orders are completed."
+msgstr "აქტიური შეკვეთების შემთხვევაში წაშლა შესაძლებელია მათი დასრულების შემდეგ."
+
+#: api/errors.py:35
+msgid "Too many attempts. Please try again later."
+msgstr "ძალიან ბევრი მცდელობა. სცადეთ მოგვიანებით."
+
+#: api/errors.py:36 api/errors.py:37
+msgid "The service is temporarily unavailable. Please try again in a few minutes."
+msgstr "სერვისი დროებით მიუწვდომელია. სცადეთ ხელახლა რამდენიმე წუთში."
+
+#: api/errors.py:38
+msgid "The SMS could not be sent. Please try again."
+msgstr "SMS ვერ გაიგზავნა. სცადეთ ხელახლა."
+
+#: api/errors.py:39
+msgid "The payment page could not be opened. You were not charged — please try again."
+msgstr "გადახდის გვერდის გახსნა ვერ მოხერხდა. თანხა არ ჩამოგეჭრათ — სცადეთ ხელახლა."
+
+#: api/errors.py:41
+msgid "Something went wrong. Please try again later."
+msgstr "დაფიქსირდა შეცდომა. სცადეთ მოგვიანებით."
+
+#: api/exceptions.py:19
+msgid "Method not allowed."
+msgstr "მეთოდი დაუშვებელია."
+
+#: api/exceptions.py:20
+msgid "Malformed request."
+msgstr "არასწორი მოთხოვნა."
 
 #: config/settings.py:121
 msgid "Georgian"

@@ -12,11 +12,15 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
+from api.drf_messages import DRF_MESSAGES
+from api.errors import MESSAGES
+from api.exceptions import DEFAULT_MESSAGES
+
 BACKEND_DIR = Path(settings.BASE_DIR)
 
 # Every dict of gettext_lazy msgids the backend renders. Each story registers its own here
 # (MESSAGES, DEFAULT_MESSAGES, EVENT_TEXTS, DEFAULT_TITLES ...); the completeness test covers them all.
-TRANSLATED_REGISTRIES = []
+TRANSLATED_REGISTRIES = [MESSAGES, DEFAULT_MESSAGES, DRF_MESSAGES]
 # Codes deliberately left untranslated (provider-facing, never shown to users; G§9 "—").
 UNTRANSLATED_CODES = set()
 

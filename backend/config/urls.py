@@ -31,3 +31,7 @@ urlpatterns = [
 
 # static() returns no patterns unless DEBUG is on; in production nginx serves /media/.
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+# JSON error envelope outside DRF views too (G§4.4).
+handler404 = "api.views.not_found"
+handler500 = "api.views.server_error"

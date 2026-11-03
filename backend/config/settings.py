@@ -138,6 +138,7 @@ SESSION_COOKIE_DOMAIN = config("SESSION_COOKIE_DOMAIN", default="") or None
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_DOMAIN = config("CSRF_COOKIE_DOMAIN", default="") or None
+CSRF_FAILURE_VIEW = "api.views.csrf_failure"   # JSON {"code": "csrf_failed"} (G§4.2)
 CSRF_TRUSTED_ORIGINS = config("CSRF_TRUSTED_ORIGINS", default="http://localhost:5173", cast=Csv())
 CORS_ALLOWED_ORIGINS = config("CORS_ALLOWED_ORIGINS", default="", cast=Csv())
 CORS_ALLOW_CREDENTIALS = True
@@ -147,11 +148,11 @@ SECURE_HSTS_SECONDS = 0 if DEBUG else 31536000
 
 
 # Django REST framework
-# Auth, permissions, parsers, pagination and the exception handler are added
-# with their modules in LP-BE-102, LP-BE-103 and LP-BE-105.
+# Auth, permissions and parsers are added in LP-BE-103, pagination in LP-BE-105.
 
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
+    "EXCEPTION_HANDLER": "api.exceptions.exception_handler",
     "COERCE_DECIMAL_TO_STRING": True,
     "DEFAULT_THROTTLE_RATES": {
         "otp_send_phone": "5/hour", "otp_send_ip": "20/hour", "otp_verify": "10/min",
