@@ -116,6 +116,15 @@ class CatalogTests(SimpleTestCase):
                 self.assertTrue((catalog / "django.mo").exists(),
                                 f"missing {code} .mo: run `python manage.py compilemessages`")
 
+    def test_catalogs_have_no_fuzzy_or_empty_entries(self):
+        """Fuzzy entries are not compiled, so they silently show English; every msgid needs a msgstr."""
+        for code in non_english_languages():
+            with self.subTest(code=code):
+                po = (BACKEND_DIR / "locale" / code / "LC_MESSAGES" / "django.po").read_text(encoding="utf-8")
+                entries = po.split("\n\n")[1:]  # skip the header entry
+                self.assertEqual([e for e in entries if "#, fuzzy" in e], [])
+                self.assertEqual([e for e in entries if e.rstrip().endswith('msgstr ""')], [])
+
     def test_every_registered_msgid_is_translated(self):
         for code in non_english_languages():
             for registry in TRANSLATED_REGISTRIES:

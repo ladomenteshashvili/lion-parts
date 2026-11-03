@@ -56,10 +56,8 @@ msgid "Use upper- and lower-case letters, a digit and a symbol."
 msgstr "Используйте заглавные и строчные буквы, цифру и символ."
 
 #: api/admin_i18n.py:38
-#, fuzzy
-#| msgid "This field is required."
 msgid "The default-language value is required."
-msgstr "Обязательное поле."
+msgstr "Значение на основном языке обязательно."
 
 #: api/drf_messages.py:8
 msgid "This field is required."

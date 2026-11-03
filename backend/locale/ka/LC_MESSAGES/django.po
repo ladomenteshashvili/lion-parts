@@ -56,10 +56,8 @@ msgid "Use upper- and lower-case letters, a digit and a symbol."
 msgstr "გამოიყენეთ დიდი და პატარა ასოები, ციფრი და სიმბოლო."
 
 #: api/admin_i18n.py:38
-#, fuzzy
-#| msgid "This field is required."
 msgid "The default-language value is required."
-msgstr "ველი სავალდებულოა."
+msgstr "ძირითად ენაზე მნიშვნელობა სავალდებულოა."
 
 #: api/drf_messages.py:8
 msgid "This field is required."
