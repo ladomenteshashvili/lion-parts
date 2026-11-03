@@ -20,6 +20,9 @@ DEFAULT_MESSAGES = {
     "parse_error": _("Malformed request."),
 }
 
+# DRF codes outside the G§9 field-code list, reported as their contract equivalents.
+FIELD_CODE_ALIASES = {"blank": "required", "null": "required", "invalid_choice": "invalid"}
+
 
 def _flatten(details, prefix=""):
     """{"delivery": {"district": [{message, code}]}} -> {"delivery.district": [{code, message}]}"""
@@ -29,7 +32,9 @@ def _flatten(details, prefix=""):
             out.update(_flatten(val, f"{prefix}.{key}" if prefix else str(key)))
     elif isinstance(details, list):
         if all(isinstance(d, dict) and "code" in d and "message" in d for d in details):
-            out[prefix or "non_field_errors"] = [{"code": d["code"], "message": str(d["message"])} for d in details]
+            out[prefix or "non_field_errors"] = [
+                {"code": FIELD_CODE_ALIASES.get(d["code"], d["code"]), "message": str(d["message"])} for d in details
+            ]
         else:  # many=True nested serializers / list fields
             for i, d in enumerate(details):
                 out.update(_flatten(d, f"{prefix}.{i}" if prefix else str(i)))
