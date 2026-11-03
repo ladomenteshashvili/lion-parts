@@ -70,3 +70,31 @@ class AdminTests(TestCase):
         setting = NotificationChannelSetting.objects.get(event_type="status_update")
         page = self.client.get(f"/admin/orders/notificationchannelsetting/{setting.pk}/change/")
         self.assertContains(page, "templates-2-sms_template")  # ka, en, ru
+
+
+class TagRestrictionTests(TestCase):
+    """M5 audit fix 2: only {% if %} logic in staff-edited templates."""
+
+    def test_other_tags_are_refused_in_the_admin_and_never_rendered(self):
+        from django.core import mail
+        from django.template import TemplateSyntaxError
+        from django.test import override_settings
+
+        from orders.admin import NotificationTemplateForm
+        from orders.models import NotificationChannelSetting
+        from orders.notifications import check_template, notify
+
+        for source in ("{% debug %}", "{% include 'admin/base.html' %}", "{% load static %}", "{%- now 'Y' %}"):
+            with self.subTest(source=source):
+                with self.assertRaises(TemplateSyntaxError):
+                    check_template(source)
+                self.assertFalse(NotificationTemplateForm(data={"language": "en", "sms_template": source,
+                                                                "email_subject": "", "email_template": ""}).is_valid())
+        check_template("{% if order %}{{ order.order_number }}{% else %}-{% endif %}")
+        customer = make_customer(preferred_language="en")
+        NotificationChannelSetting.objects.filter(event_type="status_update").update(channel="email")
+        NotificationTemplate.objects.filter(event_type="status_update", language="en").update(
+            email_template="{% debug %}")
+        with override_settings(SENDER_GE_ENABLED=False), self.assertLogs("orders.notifications", "ERROR"):
+            n = notify(customer, "status_update", order=make_order(customer))
+        self.assertEqual((n.deliveries.count(), len(mail.outbox)), (0, 0))

@@ -1,9 +1,10 @@
 """Notifications (G§7.11): templates per language (LP-BE-1305), notify() and delivery (LP-BE-902)."""
 
 import logging
+import re
 
 from django.conf import settings
-from django.template import Context, Template
+from django.template import Context, Template, TemplateSyntaxError
 
 from .models import NotificationTemplate
 from .texts import DEFAULT_TITLES
@@ -51,9 +52,22 @@ def pick_template(event_type, language):
     return templates.get(language) or templates.get(settings.LANGUAGE_CODE)
 
 
+ALLOWED_TAGS = {"if", "elif", "else", "endif"}
+TAG = re.compile(r"{%-?\s*(\w+)")
+
+
+def check_template(source):
+    """Only {% if %} logic: no {% include %}, {% debug %}, {% load %}... (staff-edited templates, D24).
+    Raises TemplateSyntaxError."""
+    used = set(TAG.findall(source or ""))
+    if used - ALLOWED_TAGS:
+        raise TemplateSyntaxError(f"tags not allowed in notification templates: {', '.join(sorted(used - ALLOWED_TAGS))}")
+    return Template(source or "")
+
+
 def render_text(source, context):
     """Plain text (SMS / text email): no HTML escaping; only the restricted context (D24)."""
-    return Template(source).render(Context(context, autoescape=False)).strip()
+    return check_template(source).render(Context(context, autoescape=False)).strip()
 
 
 def template_context(notification, link, title):

@@ -325,12 +325,14 @@ class NotificationTemplateForm(forms.ModelForm):
 
     def clean(self):
         """A template that doesn't compile is refused here, not at sending time."""
-        from django.template import Template, TemplateSyntaxError
+        from django.template import TemplateSyntaxError
+
+        from .notifications import check_template
 
         data = super().clean()
         for field in ("sms_template", "email_subject", "email_template"):
             try:
-                Template(data.get(field) or "")
+                check_template(data.get(field))
             except TemplateSyntaxError as error:
                 self.add_error(field, str(error))
         return data
