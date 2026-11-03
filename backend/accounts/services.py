@@ -3,13 +3,17 @@
 from datetime import datetime, timedelta
 
 from django.conf import settings
-from django.contrib.auth import login
+from django.contrib.auth import get_user_model, login
 from django.contrib.auth.hashers import make_password
+from django.core import signing
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from api.errors import ApiError
+from api.mail import frontend_link, send_templated_email
 
 from . import otp
+from .models import Customer, LegalEntityProfile
 
 
 def customer_language(customer=None, fallback=None):
@@ -70,3 +74,53 @@ def can_log_in(user):
     """Only active, non-anonymized customers use the customer API; staff have no Customer."""
     customer = getattr(user, "customer", None) if user is not None else None
     return bool(user and user.is_active and customer and customer.anonymized_at is None)
+
+
+# Registration step 2 (G§5.7)
+
+def create_customer_from_draft(draft):
+    """Create User + Customer (+ company) from a verified draft. A duplicate that appeared since
+    step 1 (another registration won the race) -> 409 email_taken."""
+    from .serializers import email_is_taken, phone_is_taken  # serializers import services
+
+    now = timezone.now()
+    try:
+        with transaction.atomic():
+            if email_is_taken(draft["email"]) or phone_is_taken(draft["phone"]) or (
+                draft.get("personal_id") and Customer.objects.filter(personal_id=draft["personal_id"]).exists()
+            ) or (
+                draft["account_type"] == Customer.TYPE_LEGAL and LegalEntityProfile.objects.filter(
+                    company_identification_code=draft["company_identification_code"]).exists()
+            ):
+                raise IntegrityError("duplicate")
+            user = get_user_model()(username=draft["email"], email=draft["email"],
+                                    first_name=draft["first_name"], last_name=draft["last_name"])
+            user.password = draft["password"]  # already hashed in step 1
+            user.save()
+            customer = Customer.objects.create(
+                user=user, account_type=draft["account_type"], first_name=draft["first_name"],
+                last_name=draft["last_name"], personal_id=draft.get("personal_id") or None, phone=draft["phone"],
+                is_phone_verified=True, phone_verified_at=now, terms_accepted_at=now,
+                marketing_opt_in=draft["marketing_opt_in"], preferred_language=draft["preferred_language"],
+            )
+            if customer.account_type == Customer.TYPE_LEGAL:
+                LegalEntityProfile.objects.create(
+                    customer=customer, company_official_name=draft["company_official_name"],
+                    company_identification_code=draft["company_identification_code"],
+                )
+    except IntegrityError:
+        raise ApiError("email_taken", status=409) from None
+    return customer
+
+
+# Email verification (G§5.7, LP-BE-208)
+
+EMAIL_VERIFY_SALT = "email-verify"
+
+
+def send_email_verification(customer):
+    user = customer.user
+    token = signing.dumps({"u": user.pk, "e": user.email}, salt=EMAIL_VERIFY_SALT)
+    language = customer_language(customer)
+    link = frontend_link("/verify-email", language, token=token)
+    return send_templated_email(user.email, "verify_email", {"name": customer.first_name, "link": link}, language)

@@ -8,10 +8,13 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from api.errors import ApiError
-from api.throttles import EmailLoginThrottle, LoginIpThrottle, OtpSendIpThrottle, PhoneThrottle, RegisterThrottle
+from api.throttles import (
+    EmailLoginThrottle, LoginIpThrottle, OtpSendIpThrottle, OtpVerifyThrottle, PhoneThrottle, RegisterThrottle,
+)
 
 from . import services
-from .serializers import CustomerSerializer, LoginSerializer, RegisterSerializer
+from . import otp
+from .serializers import CodeSerializer, CustomerSerializer, LoginSerializer, RegisterSerializer
 
 
 @api_view(["POST"])
@@ -32,6 +35,22 @@ def register_resend_code(request):
     draft = services.load_registration_draft(request)
     return Response(services.send_registration_code(request, draft))
 
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([OtpVerifyThrottle])
+def register_verify_phone(request):
+    draft = services.load_registration_draft(request)
+    serializer = CodeSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    otp.verify_code(session_key=request.session.session_key, phone=draft["phone"], purpose="registration",
+                    code=serializer.validated_data["code"])  # a wrong code leaves the draft for a retry
+    customer = services.create_customer_from_draft(draft)
+    services.login_customer(request, customer)
+    request.session.pop(services.DRAFT_KEY, None)
+    sent = services.send_email_verification(customer)
+    return Response({"customer": CustomerSerializer(customer).data, "email_verification_sent": sent,
+                     "csrf_token": get_token(request)}, status=201)
 
 @ensure_csrf_cookie
 @api_view(["GET"])

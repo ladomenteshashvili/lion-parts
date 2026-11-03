@@ -178,3 +178,7 @@ class CustomerSerializer(serializers.ModelSerializer):
 class LoginSerializer(serializers.Serializer):
     email = serializers.CharField(max_length=254)
     password = serializers.CharField(max_length=128, trim_whitespace=False)
+
+
+class CodeSerializer(serializers.Serializer):
+    code = serializers.CharField(max_length=6)
