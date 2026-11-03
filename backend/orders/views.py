@@ -8,7 +8,7 @@ from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.translation import get_language
 from rest_framework import serializers
-from rest_framework.exceptions import NotAuthenticated
+from rest_framework.exceptions import NotAuthenticated, PermissionDenied
 from rest_framework.decorators import api_view, authentication_classes, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -253,8 +253,8 @@ def support_tickets(request):
 
     customer = request.user.customer if can_log_in(request.user) else None
     if request.method == "GET":
-        if customer is None:
-            raise NotAuthenticated()
+        if customer is None:  # staff and other non-customers: 403 like every customer endpoint
+            raise NotAuthenticated() if not request.user.is_authenticated else PermissionDenied()
         paginator = Pagination()
         page = paginator.paginate_queryset(SupportTicket.objects.filter(customer=customer), request)
         return paginator.get_paginated_response([ticket_data(t) for t in page])
