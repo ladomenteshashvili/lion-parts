@@ -238,3 +238,46 @@ def refresh_line(request, line):
         line.availability_status = CartItem.STATUS_PRICE_CHANGED if changed else CartItem.STATUS_OK
     line.save()
     return cart
+
+
+def merge_guest_cart(old_session_key, customer):
+    """G§7.7 merge, in one transaction with both carts locked: move or sum the guest lines (cap 99),
+    reprice every customer line, delete the guest cart, store merge_summary (returned once).
+    Never breaks a login: without a rate the lines keep their prices and are listed as problems."""
+    with transaction.atomic():
+        guest = Cart.objects.select_for_update().filter(session_key=old_session_key, customer__isnull=True).first()
+        if guest is None:
+            return None
+        cart, created = Cart.objects.get_or_create(customer=customer, defaults={"currency": guest.currency})
+        cart = Cart.objects.select_for_update().get(pk=cart.pk)
+        summary = {"merged": True, "added_items": 0, "summed": [], "problems": []}
+        for line in guest.items.all():
+            existing = cart.items.filter(source=line.source, offer_id=line.offer_id).first()
+            if existing:
+                total = min(existing.quantity + line.quantity, MAX_QUANTITY)
+                summary["summed"].append({"part_number": line.part_number, "from": existing.quantity, "to": total})
+                existing.quantity = total
+                existing.save(update_fields=["quantity", "updated_at"])
+            else:
+                line.cart = cart
+                line.save(update_fields=["cart", "updated_at"])
+                summary["added_items"] += 1
+        guest.delete()
+
+        try:
+            rate = get_usd_rate()
+        except ApiError:
+            rate = None
+        for line in cart.items.all():
+            if rate is None:
+                summary["problems"].append({"item_id": line.pk, "code": "rate_unavailable"})
+                continue
+            old_price = line.unit_price
+            line.apply_snapshot(reprice(line, customer=customer, currency=cart.currency, usd_rate=rate))
+            if line.unit_price != old_price:
+                line.previous_unit_price = old_price
+                line.availability_status = CartItem.STATUS_PRICE_CHANGED
+            line.save()
+        cart.merge_summary = summary
+        cart.save(update_fields=["merge_summary", "updated_at"])
+    return cart
