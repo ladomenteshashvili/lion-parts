@@ -2,12 +2,12 @@ from django.conf import settings
 from django.contrib import admin, messages
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
-from django.utils.translation import ngettext
 
-from pricing.rates import RateUnavailable
+from api.errors import ApiError
+from orders.services import OperatorError
 
 from .models import CarrierService, PartImage, PartQuoteRequest, PartSearchLog
-from .services import mark_quote_price_ready
+from .services import mark_quote_ready
 
 
 @admin.register(CarrierService)
@@ -78,28 +78,19 @@ class PartQuoteRequestAdmin(admin.ModelAdmin):
 
     @admin.action(description=_("Price ready: calculate the price and create the customer link"))
     def mark_price_ready(self, request, queryset):
-        ready, missing, failed = 0, [], []
-        for quote_request in queryset.select_related("customer"):
-            weight, price = quote_request.prepared_weight_kg, quote_request.supplier_price_usd
-            if not weight or weight <= 0 or price is None or price <= 0:
-                missing.append(quote_request.id)
-                continue
+        """Per row through parts.services.mark_quote_ready (the fields entered on the request: weight,
+        operator message; the supplier price for requests without a search offer)."""
+        for qr in queryset:
             try:
-                mark_quote_price_ready(quote_request)
-            except RateUnavailable:
-                failed.append(quote_request.id)
-                continue
-            ready += 1
-        if ready:
-            self.message_user(request, ngettext("%(n)d request priced; its customer link is active.",
-                                                "%(n)d requests priced; their customer links are active.",
-                                                ready) % {"n": ready}, messages.SUCCESS)
-        if missing:
-            self.message_user(request, _("Skipped (enter a positive weight and supplier price): %(ids)s")
-                              % {"ids": ", ".join(map(str, missing))}, messages.WARNING)
-        if failed:
-            self.message_user(request, _("Not priced, the exchange rate is unavailable: %(ids)s")
-                              % {"ids": ", ".join(map(str, failed))}, messages.ERROR)
+                mark_quote_ready(qr.pk, qr.prepared_weight_kg, qr.operator_message,
+                                 supplier_price_usd=None if qr.offer_id else qr.supplier_price_usd)
+            except OperatorError as error:
+                self.message_user(request, f"#{qr.pk}: {error.message}", messages.WARNING)
+            except ApiError as error:  # rate unavailable
+                self.message_user(request, f"#{qr.pk}: {error.detail}", messages.ERROR)
+            else:
+                self.message_user(request, _("#%(id)s: priced; the customer link is active.") % {"id": qr.pk},
+                                  messages.SUCCESS)
 
 
 @admin.register(PartImage)
