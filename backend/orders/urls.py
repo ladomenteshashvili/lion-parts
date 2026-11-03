@@ -13,5 +13,7 @@ urlpatterns = [
     path("orders/<str:order_number>/courier-fee/decline/", views.courier_fee_decline, name="courier-fee-decline"),
     path("orders/<str:order_number>/payments/", views.order_payments, name="order-payments"),
     path("orders/<str:order_number>/payments/<int:payment_id>/", views.order_payment, name="order-payment"),
+    path("orders/<str:order_number>/support/messages/", views.support_message, name="order-support-message"),
+    path("orders/<str:order_number>/support/acknowledge/", views.support_acknowledge, name="order-support-ack"),
     path("orders/<str:order_number>/invoice/", views.invoice, name="order-invoice"),
 ]

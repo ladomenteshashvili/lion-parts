@@ -16,7 +16,7 @@ from payments.services import request_payment, start_payment
 
 from . import checkout, services
 from .invoices import invoice_language, render_invoice
-from .models import Order, OrderItem
+from .models import Order, OrderItem, OrderSupportMessage
 from .serializers import order_data, order_queryset, orders_data, payment_data
 
 
@@ -154,3 +154,36 @@ def courier_fee_accept(request, order_number):
 @api_view(["POST"])
 def courier_fee_decline(request, order_number):
     return _order_response(request, services.respond_courier_fee(own_order(request, order_number).pk, accept=False))
+
+
+class SupportMessageSerializer(serializers.Serializer):
+    message = serializers.CharField(max_length=2000)
+    item_id = serializers.IntegerField(required=False, allow_null=True)
+
+
+@api_view(["POST"])
+def support_message(request, order_number):
+    """G§7.16: a customer message on their order, optionally about one of its items. -> 201 Order."""
+    order = own_order(request, order_number)
+    data = SupportMessageSerializer(data=request.data)
+    data.is_valid(raise_exception=True)
+    item = None
+    if data.validated_data.get("item_id") is not None:
+        item = order.items.filter(pk=data.validated_data["item_id"]).first()
+        if item is None:
+            raise serializers.ValidationError({"item_id": [serializers.ErrorDetail(
+                str(serializers.PrimaryKeyRelatedField.default_error_messages["does_not_exist"]).format(
+                    pk_value=data.validated_data["item_id"]), "invalid")]})
+    customer = request.user.customer
+    OrderSupportMessage.objects.create(order=order, item=item, sender_type=OrderSupportMessage.SENDER_CUSTOMER,
+                                       sender_name=f"{customer.first_name} {customer.last_name}",
+                                       message=data.validated_data["message"], is_read_by_customer=True)
+    return _order_response(request, order, status=201)
+
+
+@api_view(["POST"])
+def support_acknowledge(request, order_number):
+    order = own_order(request, order_number)
+    order.support_messages.filter(is_read_by_customer=False).exclude(
+        sender_type=OrderSupportMessage.SENDER_CUSTOMER).update(is_read_by_customer=True)
+    return _order_response(request, order)
