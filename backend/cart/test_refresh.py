@@ -79,6 +79,11 @@ class RefreshTests(TestCase):
     def test_another_carts_line_is_404(self):
         self.assertEqual(APIClient().post(f"/api/cart/items/{self.item_id}/refresh/").status_code, 404)
 
+    def test_refresh_shares_the_search_throttle(self):
+        statuses = [self.refresh().status_code for _ in range(30)]  # setUp used 1 of the 30/min
+        self.assertEqual((statuses[-2], statuses[-1]), (200, 429))
+
+
 
 @override_settings(PARTS_PROVIDER="demo")
 class RefreshKeepsTheCustomerWeightTests(TestCase):

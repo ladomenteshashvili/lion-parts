@@ -85,3 +85,7 @@ class CalculatePriceTests(TestCase):
                 self.assertEqual(codes(self.calc(weight_kg=weight)), {"weight_kg": ["invalid_weight"]})
         self.assertEqual(codes(self.calc(weight_consent=False)), {"weight_consent": ["required"]})
         self.assertEqual(self.calc(weight_kg="500").status_code, 200)
+
+    def test_shares_the_search_throttle(self):
+        statuses = [self.calc().status_code for _ in range(30)]  # setUp used 1 of the 30/min
+        self.assertEqual((statuses[-2], statuses[-1]), (200, 429))

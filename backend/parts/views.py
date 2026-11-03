@@ -82,6 +82,7 @@ def history_seen(request):
 
 
 @api_view(["POST"])
+@throttle_classes([SearchThrottle])  # each call queries the supplier
 def calculate_price(request):
     if not request.user.customer.get_tariff().can_enter_weight:
         raise ApiError("weight_entry_not_allowed", status=403)

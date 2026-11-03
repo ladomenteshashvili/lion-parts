@@ -1,8 +1,10 @@
 """Cart endpoints (G§8.5): guest session or customer (AllowAny), always server-priced."""
 
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+
+from api.throttles import SearchThrottle
 
 from . import services
 from .serializers import AddItemSerializer, CartUpdateSerializer, UpdateItemSerializer, VinSerializer
@@ -52,5 +54,6 @@ def apply_vin(request):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([SearchThrottle])  # each call queries the supplier
 def refresh_item(request, item_id):
     return Response(services.cart_data(request, services.refresh_line(request, services.own_line(request, item_id))))
