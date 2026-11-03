@@ -11,7 +11,7 @@ from accounts.models import Customer, CustomerSession
 from orders.admin import request_order_item_action_from_admin, set_order_item_status_from_admin
 
 
-@override_settings(ENABLE_DEMO_ORDER_ENDPOINTS=True)
+@override_settings(ENABLE_DEMO_ENDPOINTS=True)
 class OrderFlowTests(TestCase):
     def setUp(self):
         self.client = APIClient()

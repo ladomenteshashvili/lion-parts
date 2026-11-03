@@ -1097,7 +1097,7 @@ def acknowledge_order_support_messages(request, order_number):
 
 @api_view(["POST"])
 def verify_payment(request, order_number):
-    if not getattr(settings, "ENABLE_DEMO_ORDER_ENDPOINTS", False):
+    if not settings.ENABLE_DEMO_ENDPOINTS:
         return _demo_order_endpoint_disabled_response()
 
     session_id = request.data.get("session_id", "").strip()
@@ -1170,7 +1170,7 @@ def verify_payment(request, order_number):
 
 @api_view(["POST"])
 def demo_confirm_payment(request, order_number):
-    if not getattr(settings, "ENABLE_DEMO_ORDER_ENDPOINTS", False):
+    if not settings.ENABLE_DEMO_ENDPOINTS:
         return _demo_order_endpoint_disabled_response()
 
     session_id = request.data.get("session_id", "").strip()
@@ -1341,7 +1341,7 @@ def resolve_item_action(request, item_id):
 
 @api_view(["POST"])
 def demo_request_item_change(request, item_id):
-    if not getattr(settings, "ENABLE_DEMO_ORDER_ENDPOINTS", False):
+    if not settings.ENABLE_DEMO_ENDPOINTS:
         return _demo_order_endpoint_disabled_response()
 
     session_id = request.data.get("session_id", "").strip()
@@ -1500,7 +1500,7 @@ def demo_request_item_change(request, item_id):
 
 @api_view(["POST"])
 def demo_update_item_status(request, item_id):
-    if not getattr(settings, "ENABLE_DEMO_ORDER_ENDPOINTS", False):
+    if not settings.ENABLE_DEMO_ENDPOINTS:
         return _demo_order_endpoint_disabled_response()
 
     session_id = request.data.get("session_id", "").strip()

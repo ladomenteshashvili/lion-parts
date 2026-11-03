@@ -229,7 +229,7 @@ class PaymentVerificationRegressionTests(TestCase):
             item_status=OrderItem.ITEM_STATUS_CREATED,
         )
 
-    @override_settings(ENABLE_DEMO_ORDER_ENDPOINTS=True)
+    @override_settings(ENABLE_DEMO_ENDPOINTS=True)
     def test_verify_payment_marks_payment_order_and_items_as_paid(self):
         response = self.client.post(
             f"/api/orders/{self.order.order_number}/verify-payment/",
@@ -270,7 +270,7 @@ class PaymentVerificationRegressionTests(TestCase):
             OrderItem.ITEM_STATUS_PAYMENT_CONFIRMED,
         )
 
-    @override_settings(ENABLE_DEMO_ORDER_ENDPOINTS=True)
+    @override_settings(ENABLE_DEMO_ENDPOINTS=True)
     def test_verify_payment_rejects_wrong_payment_reference(self):
         response = self.client.post(
             f"/api/orders/{self.order.order_number}/verify-payment/",
@@ -295,7 +295,7 @@ class PaymentVerificationRegressionTests(TestCase):
         self.assertEqual(self.order.status, Order.STATUS_PAYMENT_PENDING)
         self.assertEqual(self.item.item_status, OrderItem.ITEM_STATUS_CREATED)
 
-    @override_settings(ENABLE_DEMO_ORDER_ENDPOINTS=False)
+    @override_settings(ENABLE_DEMO_ENDPOINTS=False)
     def test_verify_payment_is_hidden_when_demo_endpoints_are_disabled(self):
         response = self.client.post(
             f"/api/orders/{self.order.order_number}/verify-payment/",

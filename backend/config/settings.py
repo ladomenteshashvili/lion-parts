@@ -8,6 +8,8 @@ https://docs.djangoproject.com/en/6.1/topics/settings/
 
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
+
+Every variable read here is listed in backend/.env.example (G§12).
 """
 
 from pathlib import Path
@@ -38,8 +40,8 @@ INSTALLED_APPS = [
     "rest_framework",
     "corsheaders",
 
-    "api",   
-    "parts", 
+    "api",
+    "parts",
     "cart",
     "orders.apps.OrdersConfig",
     "accounts",
@@ -90,28 +92,27 @@ DATABASES = {
     }
 }
 
+# Shared by gunicorn workers (throttles). Run `python manage.py createcachetable`.
+CACHES = {"default": {"BACKEND": "django.core.cache.backends.db.DatabaseCache", "LOCATION": "cache_table"}}
+
 
 # Password validation
 # https://docs.djangoproject.com/en/6.1/ref/settings/#auth-password-validators
+# accounts.validators.ComplexityValidator is added in LP-BE-202.
 
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 8}},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
+
+PASSWORD_RESET_TIMEOUT = 60 * 60
 
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.1/topics/i18n/
+# LANGUAGES / LocaleMiddleware / LOCALE_PATHS are added in LP-BE-1301.
 
 LANGUAGE_CODE = 'en-us'
 
@@ -122,27 +123,79 @@ USE_I18N = True
 USE_TZ = True
 
 
-# Static files (CSS, JavaScript, Images)
+# Sessions, CSRF, CORS, HTTPS (G§3.2, G§5.2)
+
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 30
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = config("SESSION_COOKIE_SAMESITE", default="Lax")
+# `or None`: a blank env value must mean "unset", not domain "" (breaks CSRF referer checks).
+SESSION_COOKIE_DOMAIN = config("SESSION_COOKIE_DOMAIN", default="") or None
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_DOMAIN = config("CSRF_COOKIE_DOMAIN", default="") or None
+CSRF_TRUSTED_ORIGINS = config("CSRF_TRUSTED_ORIGINS", default="http://localhost:5173", cast=Csv())
+CORS_ALLOWED_ORIGINS = config("CORS_ALLOWED_ORIGINS", default="", cast=Csv())
+CORS_ALLOW_CREDENTIALS = True
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=not DEBUG, cast=bool)
+SECURE_HSTS_SECONDS = 0 if DEBUG else 31536000
+
+
+# Django REST framework
+# Auth, permissions, parsers, pagination and the exception handler are added
+# with their modules in LP-BE-102, LP-BE-103 and LP-BE-105.
+
+REST_FRAMEWORK = {
+    "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
+    "COERCE_DECIMAL_TO_STRING": True,
+    "DEFAULT_THROTTLE_RATES": {
+        "otp_send_phone": "5/hour", "otp_send_ip": "20/hour", "otp_verify": "10/min",
+        "login_ip": "10/min", "login_email": "5/min", "password_reset": "5/hour",
+        "email_send": "5/hour", "register": "10/hour", "search": "30/min", "support_guest": "5/hour",
+    },
+}
+
+
+# Static & media files
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
+MEDIA_URL = "/media/"
+MEDIA_ROOT = config("MEDIA_ROOT", default="") or str(BASE_DIR / "media")
+
 
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
+# Django 6.1 forbids the deprecated EMAIL_* settings next to MAILERS, so the
+# G§12 env names are read into local (lowercase, non-setting) variables.
 
-MAILERS = {
-    'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
-    },
-}
+email_backend = config("EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend")
+email_options = {}
+if email_backend == "django.core.mail.backends.smtp.EmailBackend":
+    email_options = {
+        "host": config("EMAIL_HOST", default=""),
+        "port": config("EMAIL_PORT", default=587, cast=int),
+        "username": config("EMAIL_HOST_USER", default=""),
+        "password": config("EMAIL_HOST_PASSWORD", default=""),
+        "use_tls": config("EMAIL_USE_TLS", default=True, cast=bool),
+    }
+MAILERS = {"default": {"BACKEND": email_backend, "OPTIONS": email_options}}
+DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="Lion Parts <no-reply@lionparts.ge>")
 
 
-CORS_ALLOWED_ORIGINS = config(
-    "CORS_ALLOWED_ORIGINS",
-    default="http://2.28.40.250:5173,http://localhost:5173,http://127.0.0.1:5173",
-    cast=Csv(),
+# Platform switches (G§5.2, G§12)
+
+FRONTEND_BASE_URL = config("FRONTEND_BASE_URL", default="http://localhost:5173")
+# Never True in production.
+ENABLE_DEMO_ENDPOINTS = config("ENABLE_DEMO_ENDPOINTS", default=False, cast=bool)
+SMS_DEMO_MODE = config("SMS_DEMO_MODE", default=False, cast=bool)   # demo_code if this and (DEBUG or ENABLE_DEMO_ENDPOINTS)
+PAYMENT_PROVIDER = config("PAYMENT_PROVIDER", default="fake")       # "fake" | "flitt"
+ADMIN_URL_PATH = config("ADMIN_URL_PATH", default="admin/")
+NBG_RATES_URL = config(
+    "NBG_RATES_URL",
+    default="https://nbg.gov.ge/gw/api/ct/monetarypolicy/currencies/en/json/?currencies=USD",
 )
 
 
@@ -155,17 +208,16 @@ AMT_ENDPOINT = config(
 )
 AMT_API_LOGIN = config("AMT_API_LOGIN", default="")
 AMT_API_PASSWORD = config("AMT_API_PASSWORD", default="")
-AMT_VERIFY_SSL = config("AMT_VERIFY_SSL", default=False, cast=bool)
+AMT_VERIFY_SSL = config("AMT_VERIFY_SSL", default=True, cast=bool)
 AMT_TIMEOUT_SECONDS = config("AMT_TIMEOUT_SECONDS", default=15, cast=int)
 
-# Exchange rate provider
+# Exchange rate provider (replaced by NBG in LP-BE-302)
 KURSI_PUBLIC_CURRENCIES_URL = config(
     "KURSI_PUBLIC_CURRENCIES_URL",
     default="https://api-core.kursi.ge/api/public/currencies",
 )
 
-# Temporary pricing defaults.
-# Later these will move to database models.
+# Temporary pricing defaults (moved to the pricing app in LP-BE-302/303).
 DEFAULT_SHIPPING_USD_PER_KG = config(
     "DEFAULT_SHIPPING_USD_PER_KG",
     default="8.00",
@@ -204,16 +256,6 @@ PHONE_VERIFICATION_MAX_ATTEMPTS = config(
     default=5,
     cast=int,
 )
-
-# Demo/order testing endpoints
-# Keep False in production. Tests can enable it with override_settings.
-ENABLE_DEMO_ORDER_ENDPOINTS = config(
-    "ENABLE_DEMO_ORDER_ENDPOINTS",
-    default=False,
-    cast=bool,
-)
-
-FRONTEND_BASE_URL = config("FRONTEND_BASE_URL", default="http://2.28.40.250:5173")
 
 
 # Invoice seller settings
