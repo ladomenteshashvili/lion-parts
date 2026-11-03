@@ -15,7 +15,8 @@ from rest_framework.test import APIClient
 
 from accounts.testing import make_customer
 from cart.models import CartItem
-from orders.models import Order, Payment
+from orders.models import Order, OrderItem
+from orders.testing import make_order
 from parts.models import PartSearchLog
 from pricing.models import ExchangeRate, SiteSettings
 from pricing.rates import RateUnavailable
@@ -100,15 +101,11 @@ class RateChangeTests(TestCase):
         self.assertEqual((response.status_code, response.json()["items"][0]["unit_price"]),
                          (200, f"{self.line.unit_price_usd:.2f}"))
 
-    def test_orders_and_payments_are_never_touched(self):
-        order = Order.objects.create(order_number="LP-2026-00001", session_id="s", customer_name="Nino",
-                                     customer_phone="555123456", payment_type=Order.PAYMENT_FULL,
-                                     status=Order.STATUS_PAYMENT_PENDING, total_gel=D("427.08"))
-        payment = Payment.objects.create(order=order, payment_reference="PAY-1", provider=Payment.PROVIDER_DEMO,
-                                         amount_gel=D("427.08"))
-        before = (Order.objects.values().get(), Payment.objects.values().get())
+    def test_orders_are_never_touched(self):
+        order = make_order(make_customer(), items=(("PART-1", D("164.26"), 1),))
+        before = (Order.objects.values().get(), list(OrderItem.objects.values()))
         with nbg(3.1):
             call_command("fetch_nbg_rates", stdout=StringIO())
         self.client.get("/api/cart/")
-        self.assertEqual((Order.objects.values().get(), Payment.objects.values().get()), before)
-        self.assertEqual(payment.amount_gel, D("427.08"))
+        self.assertEqual((Order.objects.values().get(), list(OrderItem.objects.values())), before)
+        self.assertEqual((order.total, order.exchange_rate), (D("427.08"), D("2.6000")))

@@ -23,9 +23,8 @@ def legacy_paths():
 class LegacyEndpointsDisabledTests(SimpleTestCase):
     def test_no_legacy_route_resolves(self):
         paths = list(legacy_paths())
-        # 37 legacy routes minus those served again under the new contract: /api/parts/search/,
-        # calculate-price/, quote-requests/ (LP-BE-402) and /api/cart/, items/, items/<id>/ (LP-BE-501)
-        self.assertGreaterEqual(len(paths), 31)
+        # Legacy routes whose paths the new contract does not serve again (accounts, parts, orders).
+        self.assertGreaterEqual(len(paths), 25)
         for url in paths:
             with self.subTest(url=url), self.assertRaises(Resolver404):
                 resolve(url)

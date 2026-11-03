@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 14:07+0000\n"
+"POT-Creation-Date: 2026-11-03 14:37+0000\n"
 "Language: ka\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -402,9 +402,29 @@ msgstr "ინგლისური"
 msgid "Russian"
 msgstr "რუსული"
 
-#: orders/texts.py:8
+#: orders/texts.py:15
 msgid "The price is calculated with the estimated weight you entered. The final weight is set when the part arrives at the US warehouse. If it differs, the final amount may change: you may pay extra or get a refund."
 msgstr "ფასი დათვლილია თქვენს მიერ შეყვანილი სავარაუდო წონით. საბოლოო წონა დადგინდება აშშ-ის საწყობში მიღების შემდეგ. თუ რეალური წონა განსხვავებული იქნება, საბოლოო თანხა შეიძლება დაკორექტირდეს — შესაძლოა დაემატოს ან დაბრუნდეს თანხა."
+
+#: orders/texts.py:18
+msgid "Please confirm the delivery fee."
+msgstr "დაადასტურეთ მიტანის ღირებულება."
+
+#: orders/texts.py:19
+#, python-brace-format
+msgid "Remaining amount: {amount}."
+msgstr "დარჩენილი თანხა: {amount}."
+
+#: orders/texts.py:20
+msgid "Your parts are ready for pickup."
+msgstr "ნაწილები მზადაა გასატანად."
+
+#: orders/texts.py:48
+#, python-brace-format
+msgid "{n} item needs your confirmation."
+msgid_plural "{n} items need your confirmation."
+msgstr[0] "{n} ნაწილზე საჭიროა თქვენი დადასტურება."
+msgstr[1] "{n} ნაწილზე საჭიროა თქვენი დადასტურება."
 
 #: parts/admin.py:55
 msgid "Request"

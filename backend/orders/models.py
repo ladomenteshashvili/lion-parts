@@ -1,497 +1,188 @@
-import uuid
+"""Orders (G§6.5). Money is frozen at checkout (G§7.17 / D16): the order keeps its currency and the
+exchange rate used; every item keeps its canonical USD snapshot and its amounts in the order
+currency. Exchange-rate changes never touch an order."""
 
+from django.core.exceptions import ValidationError
 from django.db import models
+
+MONEY = {"max_digits": 12, "decimal_places": 2}
 
 
 class Order(models.Model):
     STATUS_PAYMENT_PENDING = "payment_pending"
-    STATUS_PAID = "paid"
     STATUS_PROCESSING = "processing"
     STATUS_ACTION_REQUIRED = "action_required"
     STATUS_COMPLETED = "completed"
     STATUS_CANCELLED = "cancelled"
+    STATUSES = [(s, s) for s in (STATUS_PAYMENT_PENDING, STATUS_PROCESSING, STATUS_ACTION_REQUIRED,
+                                 STATUS_COMPLETED, STATUS_CANCELLED)]
+    OPEN_STATUSES = (STATUS_PAYMENT_PENDING, STATUS_PROCESSING, STATUS_ACTION_REQUIRED)
+    FROZEN_FIELDS = ("currency", "exchange_rate")
 
-    STATUS_CHOICES = [
-        (STATUS_PAYMENT_PENDING, "Payment pending"),
-        (STATUS_PAID, "Paid"),
-        (STATUS_PROCESSING, "Processing"),
-        (STATUS_ACTION_REQUIRED, "Action required"),
-        (STATUS_COMPLETED, "Completed"),
-        (STATUS_CANCELLED, "Cancelled"),
-    ]
-
-    PAYMENT_FULL = "full"
-
-    PAYMENT_CHOICES = [
-        (PAYMENT_FULL, "100% payment"),
-    ]
-
-    BILLING_PERSONAL = "personal"
-    BILLING_LEGAL_ENTITY = "legal_entity"
-
-    BILLING_CHOICES = [
-        (BILLING_PERSONAL, "Personal"),
-        (BILLING_LEGAL_ENTITY, "Legal entity"),
-    ]
-
-    order_number = models.CharField(max_length=40, unique=True, db_index=True)
-    session_id = models.CharField(max_length=120, db_index=True)
-    customer = models.ForeignKey(
-        "accounts.Customer",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="orders",
-    )
-
-    customer_name = models.CharField(max_length=120)
-    customer_phone = models.CharField(max_length=40)
-
-    billing_type = models.CharField(
-        max_length=30,
-        choices=BILLING_CHOICES,
-        default=BILLING_PERSONAL,
-        db_index=True,
-    )
-    legal_entity_profile = models.ForeignKey(
-        "accounts.LegalEntityProfile",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="orders",
-    )
-    legal_entity_company_identification_code = models.CharField(
-        max_length=80,
-        blank=True,
-    )
-    legal_entity_company_official_name = models.CharField(
-        max_length=255,
-        blank=True,
-    )
-    legal_entity_legal_address = models.TextField(blank=True)
-    legal_entity_contact_first_name = models.CharField(max_length=120, blank=True)
-    legal_entity_contact_last_name = models.CharField(max_length=120, blank=True)
-    legal_entity_email = models.EmailField(blank=True)
-    legal_entity_mobile_phone = models.CharField(max_length=40, blank=True)
-
-    vin = models.CharField(max_length=40, blank=True)
-
-    note = models.TextField(blank=True)
-
-    courier_delivery_requested = models.BooleanField(default=False, db_index=True)
-    courier_delivery_fee_gel = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        default=0,
-    )
-    proposed_courier_delivery_fee_gel = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        null=True,
-        blank=True,
-    )
-    courier_delivery_action_required = models.BooleanField(
-        default=False,
-        db_index=True,
-    )
-    courier_delivery_action_message = models.TextField(blank=True)
-    courier_delivery_confirmed_at = models.DateTimeField(null=True, blank=True)
-    courier_delivery_rejected_at = models.DateTimeField(null=True, blank=True)
-
-    payment_type = models.CharField(
-        max_length=20,
-        choices=PAYMENT_CHOICES,
-        default=PAYMENT_FULL,
-    )
-
-    status = models.CharField(
-        max_length=40,
-        choices=STATUS_CHOICES,
-        default=STATUS_PAYMENT_PENDING,
-        db_index=True,
-    )
-
-    total_gel = models.DecimalField(max_digits=12, decimal_places=2)
-
+    order_number = models.CharField(max_length=20, unique=True, null=True, blank=True)  # LP-{year}-{pk:05d}
+    customer = models.ForeignKey("accounts.Customer", on_delete=models.PROTECT, related_name="orders")
+    status = models.CharField(max_length=20, choices=STATUSES, default=STATUS_PAYMENT_PENDING, db_index=True)
+    currency = models.CharField(max_length=3)
+    exchange_rate = models.DecimalField(max_digits=10, decimal_places=4)  # GEL per USD used; 1 for USD
+    billing_snapshot = models.JSONField()  # G§7.12
+    delivery_method = models.CharField(max_length=10, choices=[("pickup", "Pickup"), ("delivery", "Delivery")])
+    pickup_point = models.ForeignKey("pricing.PickupPoint", on_delete=models.PROTECT, null=True, blank=True)
+    delivery_city = models.CharField(max_length=60, blank=True)
+    delivery_district = models.CharField(max_length=60, blank=True)
+    delivery_address = models.CharField(max_length=255, blank=True)
+    delivery_comment = models.TextField(blank=True)
+    courier_fee = models.DecimalField(default=0, **MONEY)  # confirmed, order currency
+    proposed_courier_fee_gel = models.DecimalField(null=True, blank=True, **MONEY)
+    courier_fee_action_required = models.BooleanField(default=False)
+    courier_fee_message = models.TextField(blank=True)
+    courier_fee_confirmed_at = models.DateTimeField(null=True, blank=True)
+    courier_fee_declined_at = models.DateTimeField(null=True, blank=True)
+    payment_method = models.CharField(max_length=10, choices=[("card", "Card"), ("invoice", "Invoice")])
+    payment_option = models.CharField(max_length=20, choices=[("full", "Full"), ("split_70_30", "70/30")])
+    items_total = models.DecimalField(default=0, **MONEY)
+    discount_total = models.DecimalField(default=0, **MONEY)
+    total = models.DecimalField(default=0, **MONEY)
+    amount_due_now = models.DecimalField(default=0, **MONEY)
+    amount_paid = models.DecimalField(default=0, **MONEY)
+    balance_due = models.DecimalField(default=0, **MONEY)
+    terms_accepted_at = models.DateTimeField()
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancel_reason = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["-created_at"]
+        ordering = ["-created_at", "-id"]
 
     def __str__(self):
-        return self.order_number
+        return self.order_number or f"Order {self.pk}"
 
-    @property
-    def current_customer_name(self):
-        if self.customer_id and self.customer and self.customer.full_name:
-            return self.customer.full_name
-        return self.customer_name
-
-    @property
-    def current_customer_phone(self):
-        if self.customer_id and self.customer and self.customer.phone:
-            return self.customer.phone
-        return self.customer_phone
-
-
-class Payment(models.Model):
-    STATUS_PENDING = "pending"
-    STATUS_PAID = "paid"
-    STATUS_FAILED = "failed"
-    STATUS_CANCELLED = "cancelled"
-    STATUS_UNKNOWN = "unknown"
-
-    STATUS_CHOICES = [
-        (STATUS_PENDING, "Pending"),
-        (STATUS_PAID, "Paid"),
-        (STATUS_FAILED, "Failed"),
-        (STATUS_CANCELLED, "Cancelled"),
-        (STATUS_UNKNOWN, "Unknown"),
-    ]
-
-    PROVIDER_DEMO = "demo"
-
-    PROVIDER_CHOICES = [
-        (PROVIDER_DEMO, "Demo"),
-    ]
-
-    order = models.OneToOneField(
-        Order,
-        on_delete=models.CASCADE,
-        related_name="payment",
-    )
-
-    payment_reference = models.CharField(
-        max_length=120,
-        unique=True,
-        db_index=True,
-    )
-    external_payment_id = models.CharField(
-        max_length=120,
-        blank=True,
-        db_index=True,
-    )
-
-    provider = models.CharField(
-        max_length=40,
-        choices=PROVIDER_CHOICES,
-        default=PROVIDER_DEMO,
-    )
-
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default=STATUS_PENDING,
-        db_index=True,
-    )
-
-    amount_gel = models.DecimalField(max_digits=12, decimal_places=2)
-    currency = models.CharField(max_length=10, default="GEL")
-
-    provider_payload = models.JSONField(default=dict, blank=True)
-
-    paid_at = models.DateTimeField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ["-created_at"]
-
-    def __str__(self):
-        return f"{self.payment_reference} · {self.status}"
+    def save(self, *args, **kwargs):
+        if self.pk is not None:
+            stored = Order.objects.filter(pk=self.pk).values(*self.FROZEN_FIELDS).first()
+            if stored and any(stored[f] != getattr(self, f) for f in self.FROZEN_FIELDS):
+                raise ValidationError("An order's currency and exchange rate are frozen at checkout.")
+        super().save(*args, **kwargs)
 
 
 class OrderItem(models.Model):
-    ITEM_STATUS_CREATED = "created"
-    ITEM_STATUS_PAYMENT_CONFIRMED = "payment_confirmed"
-    ITEM_STATUS_CHECKING = "checking"
-    ITEM_STATUS_ACTION_REQUIRED = "action_required"
-    ITEM_STATUS_PURCHASED = "purchased"
-    ITEM_STATUS_RECEIVED_USA = "received_usa"
-    ITEM_STATUS_SHIPPED_TO_GEORGIA = "shipped_to_georgia"
-    ITEM_STATUS_RECEIVED_GEORGIA = "received_georgia"
-    ITEM_STATUS_READY_FOR_PICKUP = "ready_for_pickup"
-    ITEM_STATUS_COMPLETED = "completed"
-    ITEM_STATUS_CANCELLED = "cancelled"
+    STATUS_CREATED = "created"
+    STATUS_PAYMENT_CONFIRMED = "payment_confirmed"
+    STATUS_CHECKING = "checking"
+    STATUS_ACTION_REQUIRED = "action_required"
+    STATUS_PURCHASED = "purchased"
+    STATUS_RECEIVED_USA = "received_usa"
+    STATUS_SHIPPED_TO_GEORGIA = "shipped_to_georgia"
+    STATUS_RECEIVED_GEORGIA = "received_georgia"
+    STATUS_READY_FOR_PICKUP = "ready_for_pickup"
+    STATUS_COMPLETED = "completed"
+    STATUS_CANCELLED = "cancelled"
+    STATUSES = [(s, s) for s in (STATUS_CREATED, STATUS_PAYMENT_CONFIRMED, STATUS_CHECKING, STATUS_ACTION_REQUIRED,
+                                 STATUS_PURCHASED, STATUS_RECEIVED_USA, STATUS_SHIPPED_TO_GEORGIA,
+                                 STATUS_RECEIVED_GEORGIA, STATUS_READY_FOR_PICKUP, STATUS_COMPLETED, STATUS_CANCELLED)]
 
-    ITEM_STATUS_CHOICES = [
-        (ITEM_STATUS_CREATED, "Created"),
-        (ITEM_STATUS_PAYMENT_CONFIRMED, "Payment confirmed"),
-        (ITEM_STATUS_CHECKING, "Checking"),
-        (ITEM_STATUS_ACTION_REQUIRED, "Action required"),
-        (ITEM_STATUS_PURCHASED, "Purchased"),
-        (ITEM_STATUS_RECEIVED_USA, "Received in USA"),
-        (ITEM_STATUS_SHIPPED_TO_GEORGIA, "Shipped to Georgia"),
-        (ITEM_STATUS_RECEIVED_GEORGIA, "Received in Georgia"),
-        (ITEM_STATUS_READY_FOR_PICKUP, "Ready for pickup"),
-        (ITEM_STATUS_COMPLETED, "Completed"),
-        (ITEM_STATUS_CANCELLED, "Cancelled"),
-    ]
-
-    ACTION_TYPE_NONE = ""
-    ACTION_TYPE_PRICE_CHANGE = "price_change"
-    ACTION_TYPE_ETA_CHANGE = "eta_change"
-    ACTION_TYPE_WEIGHT_CHANGE = "weight_change"
-    ACTION_TYPE_FITMENT_ISSUE = "fitment_issue"
-    ACTION_TYPE_ALTERNATIVE_REQUIRED = "alternative_required"
-    ACTION_TYPE_OTHER = "other"
-
-    ACTION_TYPE_CHOICES = [
-        (ACTION_TYPE_NONE, "No action"),
-        (ACTION_TYPE_PRICE_CHANGE, "Price change"),
-        (ACTION_TYPE_ETA_CHANGE, "ETA change"),
-        (ACTION_TYPE_WEIGHT_CHANGE, "Weight/dimensions change"),
-        (ACTION_TYPE_FITMENT_ISSUE, "Fitment issue"),
-        (ACTION_TYPE_ALTERNATIVE_REQUIRED, "Alternative required"),
-        (ACTION_TYPE_OTHER, "Other"),
-    ]
-
-    order = models.ForeignKey(
-        Order,
-        on_delete=models.CASCADE,
-        related_name="items",
-    )
-
-    cart_item_id = models.CharField(max_length=255)
-    quote_id = models.CharField(max_length=120)
-    part_option_id = models.CharField(max_length=120)
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="items")
+    source = models.CharField(max_length=20, blank=True)  # search / prepared_quote (from the cart line)
+    offer_id = models.CharField(max_length=120)
+    quote_id = models.CharField(max_length=120, blank=True)
     part_number = models.CharField(max_length=120)
+    name = models.CharField(max_length=255)
+    brand = models.CharField(max_length=120, blank=True)
+    condition = models.CharField(max_length=80, blank=True)
+    quantity = models.PositiveSmallIntegerField()
+    vin = models.CharField(max_length=17, blank=True)
+    weight_kg = models.DecimalField(max_digits=8, decimal_places=2, null=True)
+    weight_source = models.CharField(max_length=20, blank=True)
+    eta_min_days = models.PositiveSmallIntegerField(null=True, blank=True)
+    eta_max_days = models.PositiveSmallIntegerField(null=True, blank=True)
+    expected_arrival_from = models.DateField(null=True, blank=True)
+    expected_arrival_to = models.DateField(null=True, blank=True)
+    # canonical USD snapshot (G§7.2)
+    supplier_price_usd = models.DecimalField(**MONEY)
+    shipping_usd_per_kg = models.DecimalField(max_digits=8, decimal_places=2)
+    markup_percent = models.DecimalField(max_digits=6, decimal_places=2)
+    vat_percent = models.DecimalField(max_digits=5, decimal_places=2)
+    list_price_usd = models.DecimalField(**MONEY)
+    discount_usd = models.DecimalField(**MONEY)
+    unit_price_usd = models.DecimalField(**MONEY)
+    discount = models.ForeignKey("pricing.Discount", on_delete=models.SET_NULL, null=True, blank=True)
+    # frozen amounts in order.currency (converted with order.exchange_rate at checkout)
+    list_unit_price = models.DecimalField(**MONEY)
+    discount_unit_amount = models.DecimalField(**MONEY)
+    unit_price = models.DecimalField(**MONEY)
+    item_status = models.CharField(max_length=30, choices=STATUSES, default=STATUS_CREATED, db_index=True)
+    action_required = models.BooleanField(default=False, db_index=True)
+    action_type = models.CharField(max_length=40, blank=True)  # G§7.9
+    action_message = models.TextField(blank=True)
     proposed_part_number = models.CharField(max_length=120, blank=True)
     proposed_name = models.CharField(max_length=255, blank=True)
-
-    name = models.CharField(max_length=255)
-    condition = models.CharField(max_length=80, blank=True)
-    brand = models.CharField(max_length=120, blank=True)
-    availability = models.CharField(max_length=120, blank=True)
-    eta_days = models.PositiveIntegerField(null=True, blank=True)
-    expected_arrival_date = models.DateField(null=True, blank=True)
-    weight_kg = models.DecimalField(
-        max_digits=8,
-        decimal_places=2,
-        null=True,
-        blank=True,
-    )
-
-    final_price_gel = models.DecimalField(max_digits=12, decimal_places=2)
-    proposed_final_price_gel = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        null=True,
-        blank=True,
-    )
-    currency = models.CharField(max_length=10, default="GEL")
-    note = models.TextField(blank=True)
-    customer_notice = models.TextField(blank=True)
-    weight_source = models.CharField(max_length=30, blank=True)
-    quantity = models.PositiveIntegerField(default=1)
-    proposed_eta_days = models.PositiveIntegerField(null=True, blank=True)
-    proposed_expected_arrival_date = models.DateField(null=True, blank=True)
-    item_status = models.CharField(
-        max_length=40,
-        choices=ITEM_STATUS_CHOICES,
-        default=ITEM_STATUS_CREATED,
-        db_index=True,
-    )
-
-    action_required = models.BooleanField(default=False, db_index=True)
-
-    action_type = models.CharField(
-        max_length=40,
-        choices=ACTION_TYPE_CHOICES,
-        default=ACTION_TYPE_NONE,
-        blank=True,
-    )
-
-    action_message = models.TextField(blank=True)
-
+    proposed_unit_price = models.DecimalField(null=True, blank=True, **MONEY)
+    proposed_eta_min_days = models.PositiveSmallIntegerField(null=True, blank=True)
+    proposed_eta_max_days = models.PositiveSmallIntegerField(null=True, blank=True)
+    proposed_weight_kg = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    purchased_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["created_at"]
+        ordering = ["id"]
 
     def __str__(self):
         return f"{self.part_number} x {self.quantity}"
 
+    @property
+    def line_total(self):
+        return self.unit_price * self.quantity
+
 
 class OrderItemEvent(models.Model):
-    EVENT_TYPE_CREATED = "created"
-    EVENT_TYPE_STATUS_CHANGED = "status_changed"
-    EVENT_TYPE_PRICE_CHANGE_REQUESTED = "price_change_requested"
-    EVENT_TYPE_ETA_CHANGE_REQUESTED = "eta_change_requested"
-    EVENT_TYPE_CHANGE_REQUESTED = "change_requested"
-    EVENT_TYPE_ACTION_RESOLVED = "action_resolved"
-    EVENT_TYPE_NOTE_ADDED = "note_added"
+    """System events store a text code + params (rendered per language); operator text goes to message."""
 
-    EVENT_TYPE_CHOICES = [
-        (EVENT_TYPE_CREATED, "Created"),
-        (EVENT_TYPE_STATUS_CHANGED, "Status changed"),
-        (EVENT_TYPE_PRICE_CHANGE_REQUESTED, "Price change requested"),
-        (EVENT_TYPE_ETA_CHANGE_REQUESTED, "ETA change requested"),
-        (EVENT_TYPE_CHANGE_REQUESTED, "Change requested"),
-        (EVENT_TYPE_ACTION_RESOLVED, "Action resolved"),
-        (EVENT_TYPE_NOTE_ADDED, "Note added"),
-    ]
+    ACTOR_SYSTEM = "system"
+    ACTOR_CUSTOMER = "customer"
+    ACTOR_OPERATOR = "operator"
 
-    ACTOR_TYPE_SYSTEM = "system"
-    ACTOR_TYPE_CUSTOMER = "customer"
-    ACTOR_TYPE_OPERATOR = "operator"
-    ACTOR_TYPE_ADMIN = "admin"
-
-    ACTOR_TYPE_CHOICES = [
-        (ACTOR_TYPE_SYSTEM, "System"),
-        (ACTOR_TYPE_CUSTOMER, "Customer"),
-        (ACTOR_TYPE_OPERATOR, "Operator"),
-        (ACTOR_TYPE_ADMIN, "Admin"),
-    ]
-
-    item = models.ForeignKey(
-        OrderItem,
-        on_delete=models.CASCADE,
-        related_name="events",
-    )
-
-    event_type = models.CharField(
-        max_length=60,
-        choices=EVENT_TYPE_CHOICES,
-        db_index=True,
-    )
-
-    title = models.CharField(max_length=255)
-    message = models.TextField(blank=True)
-
+    item = models.ForeignKey(OrderItem, on_delete=models.CASCADE, related_name="events")
+    event_type = models.CharField(max_length=60, db_index=True)
+    text_code = models.CharField(max_length=60, blank=True)  # orders/texts.py::EVENT_TEXTS
+    text_params = models.JSONField(default=dict, blank=True)
+    message = models.TextField(blank=True)  # operator-written only (not translated)
     old_value = models.JSONField(null=True, blank=True)
     new_value = models.JSONField(null=True, blank=True)
-
-    actor_type = models.CharField(
-        max_length=30,
-        choices=ACTOR_TYPE_CHOICES,
-        default=ACTOR_TYPE_SYSTEM,
-    )
+    actor_type = models.CharField(max_length=30, default=ACTOR_SYSTEM)
     actor_name = models.CharField(max_length=120, blank=True)
-
     visible_to_customer = models.BooleanField(default=False)
-
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ["created_at"]
+        ordering = ["created_at", "id"]
 
     def __str__(self):
         return f"{self.item.part_number} · {self.event_type}"
+
 
 class OrderSupportMessage(models.Model):
     SENDER_CUSTOMER = "customer"
     SENDER_OPERATOR = "operator"
     SENDER_SYSTEM = "system"
 
-    SENDER_CHOICES = [
-        (SENDER_CUSTOMER, "Customer"),
-        (SENDER_OPERATOR, "Operator"),
-        (SENDER_SYSTEM, "System"),
-    ]
-
-    order = models.ForeignKey(
-        Order,
-        on_delete=models.CASCADE,
-        related_name="support_messages",
-    )
-
-    item = models.ForeignKey(
-        OrderItem,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="support_messages",
-    )
-
-    sender_type = models.CharField(
-        max_length=30,
-        choices=SENDER_CHOICES,
-        default=SENDER_OPERATOR,
-        db_index=True,
-    )
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="support_messages")
+    item = models.ForeignKey(OrderItem, on_delete=models.SET_NULL, null=True, blank=True,
+                             related_name="support_messages")
+    sender_type = models.CharField(max_length=30, choices=[(SENDER_CUSTOMER, "Customer"), (SENDER_OPERATOR, "Operator"),
+                                                           (SENDER_SYSTEM, "System")], default=SENDER_OPERATOR,
+                                   db_index=True)
     sender_name = models.CharField(max_length=120, blank=True)
-
-    message = models.TextField()
-
+    message = models.TextField(blank=True)  # human messages as written
+    text_code = models.CharField(max_length=60, blank=True)  # system messages, rendered per language
+    text_params = models.JSONField(default=dict, blank=True)
     visible_to_customer = models.BooleanField(default=True)
     is_read_by_customer = models.BooleanField(default=False)
     is_read_by_operator = models.BooleanField(default=False)
-
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ["created_at"]
+        ordering = ["created_at", "id"]
 
     def __str__(self):
-        return f"{self.order.order_number} · {self.sender_type} · {self.created_at}"
-
-class OrderCustomerNotification(models.Model):
-    TYPE_SUPPORT_REPLY = "support_reply"
-    TYPE_ORDER_UPDATE = "order_update"
-    TYPE_ACTION_REQUIRED = "action_required"
-    TYPE_NOTICE = "notice"
-
-    TYPE_CHOICES = [
-        (TYPE_SUPPORT_REPLY, "Support reply"),
-        (TYPE_ORDER_UPDATE, "Order update"),
-        (TYPE_ACTION_REQUIRED, "Action required"),
-        (TYPE_NOTICE, "Notice"),
-    ]
-
-    token = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True)
-
-    order = models.ForeignKey(
-        Order,
-        on_delete=models.CASCADE,
-        related_name="customer_notifications",
-    )
-
-    item = models.ForeignKey(
-        OrderItem,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="customer_notifications",
-    )
-
-    event = models.ForeignKey(
-        OrderItemEvent,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="customer_notifications",
-    )
-
-    support_message = models.ForeignKey(
-        OrderSupportMessage,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="customer_notifications",
-    )
-
-    notification_type = models.CharField(
-        max_length=40,
-        choices=TYPE_CHOICES,
-        default=TYPE_NOTICE,
-        db_index=True,
-    )
-
-    title = models.CharField(max_length=255)
-    message = models.TextField(blank=True)
-
-    visible_to_customer = models.BooleanField(default=True)
-    is_read_by_customer = models.BooleanField(default=False)
-    acknowledged_at = models.DateTimeField(null=True, blank=True)
-
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["-created_at"]
-
-    def __str__(self):
-        return f"{self.order.order_number} · {self.notification_type} · {self.title}"
-
+        return f"{self.order} · {self.sender_type}"
