@@ -69,14 +69,16 @@ def send_registration_code(request, draft):
 # Login (G§5.7): read the guest session key before login() rotates it, then attach guest data.
 
 def attach_guest_data(old_session_key, customer):
-    """The guest session's data becomes the customer's (G§7.6, G§7.7): search logs and the guest cart
-    (merged). Support tickets follow in LP-BE-1001."""
+    """The guest session's data becomes the customer's (G§7.6, G§7.7, G§7.16): search logs, support tickets
+    and the guest cart (merged)."""
     from cart.services import merge_guest_cart
+    from orders.models import SupportTicket
     from parts.models import PartSearchLog
 
     if not old_session_key:
         return
     PartSearchLog.objects.filter(session_key=old_session_key, customer__isnull=True).update(customer=customer)
+    SupportTicket.objects.filter(session_key=old_session_key, customer__isnull=True).update(customer=customer)
     merge_guest_cart(old_session_key, customer)
 
 
@@ -269,7 +271,7 @@ CLOSED_ORDER_STATUSES = ("completed", "cancelled")
 def anonymize_customer(customer):
     """Shared by DELETE /api/profile/ and the admin action (LP-BE-1102). Raises account_has_open_orders."""
     from cart.models import Cart
-    from orders.models import Order
+    from orders.models import Notification, Order, SupportTicket
     from parts.models import PartQuoteRequest, PartSearchLog
 
     with transaction.atomic():
@@ -284,7 +286,9 @@ def anonymize_customer(customer):
         PartQuoteRequest.objects.filter(customer=customer, status__in=PartQuoteRequest.OPEN_STATUSES).delete()
         PartSearchLog.objects.filter(customer=customer).update(customer=None, hidden_at=now)
         Cart.objects.filter(customer=customer).delete()
-        # LP-BE-901 adds deleting the notifications.
+        # notifications and support tickets hold personal data (messages, contacts): removed with the account
+        Notification.objects.filter(customer=customer).delete()
+        SupportTicket.objects.filter(customer=customer).delete()
 
         # shortcut: scans every session (fine at this scale); add a user->session index if sessions grow large.
         for session in Session.objects.all():

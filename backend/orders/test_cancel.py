@@ -9,7 +9,7 @@ from django.test import TestCase, TransactionTestCase
 from rest_framework.test import APIClient
 
 from accounts.testing import make_customer
-from orders.models import Order, OrderItem, OrderItemEvent
+from orders.models import Notification, Order, OrderItem, OrderItemEvent
 from orders.testing import make_order
 from payments.models import Payment
 from payments.services import create_payment, mark_payment
@@ -111,3 +111,5 @@ class CancelVersusPaymentTests(TransactionTestCase):
         order.refresh_from_db()
         self.assertEqual((order.status, Payment.objects.get(pk=payment.pk).status), ("cancelled", "paid"))
         self.assertEqual(order.amount_paid, order.items.first().unit_price)  # recorded -> refund_pending
+        # the payment notification is not lost to a lock conflict with the cancellation (M5 review)
+        self.assertEqual(Notification.objects.filter(event_type="payment_update", order=order).count(), 1)

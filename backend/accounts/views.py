@@ -86,6 +86,21 @@ def logout_view(request):
     return Response({"csrf_token": get_token(request)})
 
 
+def badges(customer):
+    """G§8.2: counters for the navigation (LP-BE-904)."""
+    from django.db.models import Count, Q
+
+    from orders.models import Notification, Order
+    from parts.history import unseen_ready_quotes
+
+    orders = Order.objects.filter(customer=customer).aggregate(
+        action=Count("pk", filter=Q(status=Order.STATUS_ACTION_REQUIRED)),
+        to_pay=Count("pk", filter=Q(balance_due__gt=0) & ~Q(status=Order.STATUS_CANCELLED)))
+    return {"search_new": unseen_ready_quotes(customer).count(), "orders_action": orders["action"],
+            "orders_to_pay": orders["to_pay"],
+            "notifications_unread": Notification.objects.filter(customer=customer, read_at__isnull=True).count()}
+
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def me(request):
@@ -94,7 +109,7 @@ def me(request):
         "authenticated": customer is not None,
         "customer": CustomerSerializer(customer).data if customer else None,
         "cart_count": cart_count(request),
-        "badges": None,   # filled by notifications (LP-BE-904)
+        "badges": badges(customer) if customer else None,
     })
 
 

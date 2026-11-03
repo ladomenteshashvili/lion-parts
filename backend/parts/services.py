@@ -42,7 +42,10 @@ def mark_quote_price_ready(quote_request):
     quote_request.price_valid_until = price_valid_until(quote_request.price_ready_at)
     quote_request.seen_at = None
     quote_request.save()
-    # LP-BE-1104/903: notify(price_ready) once notifications exist.
+    from orders.notifications import notify_after_commit
+
+    notify_after_commit(quote_request.customer, "price_ready", quote_request=quote_request,
+                        params={"price_ready_at": quote_request.price_ready_at.isoformat()})
     return quote_request
 
 
@@ -61,7 +64,7 @@ def mark_quote_ready(quote_request_id, weight_kg, message="", *, supplier_price_
     if weight_kg is None or weight_kg <= 0:
         raise OperatorError("weight_kg", _("Enter a weight greater than zero."))
     with transaction.atomic():
-        qr = PartQuoteRequest.objects.select_for_update().select_related("customer").get(pk=quote_request_id)
+        qr = PartQuoteRequest.objects.select_for_update(no_key=True, of=("self",)).select_related("customer").get(pk=quote_request_id)
         if qr.status == PartQuoteRequest.STATUS_CANCELLED:
             raise OperatorError("weight_kg", _("The request is cancelled."))
         if supplier_price_usd is None and qr.offer_id:

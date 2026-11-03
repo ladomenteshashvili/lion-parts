@@ -1,6 +1,8 @@
-"""Orders (G§6.5). Money is frozen at checkout (G§7.17 / D16): the order keeps its currency and the
+"""Orders, support tickets and notifications (G§6.5). Money is frozen at checkout (G§7.17 / D16): the order keeps its currency and the
 exchange rate used; every item keeps its canonical USD snapshot and its amounts in the order
 currency. Exchange-rate changes never touch an order."""
+
+import uuid
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -219,3 +221,121 @@ class OrderSupportMessage(models.Model):
 
     def __str__(self):
         return f"{self.order} · {self.sender_type}"
+
+
+EVENT_TYPES = ("price_ready", "action_required", "courier_fee_proposed", "support_reply", "status_update",
+               "payment_update")  # G§7.11
+
+
+class SupportTicket(models.Model):
+    """G§7.16: from a customer or a guest (contact + session)."""
+
+    STATUS_NEW = "new"
+    STATUS_ANSWERED = "answered"
+    STATUS_CLOSED = "closed"
+    CONTEXTS = [("not_found", "Not found"), ("part", "Part"), ("general", "General")]
+
+    customer = models.ForeignKey("accounts.Customer", on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name="support_tickets")
+    session_key = models.CharField(max_length=64, blank=True, db_index=True)
+    contact = models.CharField(max_length=255, blank=True)  # guest email or phone
+    language = models.CharField(max_length=8, default=settings.LANGUAGE_CODE)  # used to answer guests
+    context = models.CharField(max_length=20, choices=CONTEXTS)
+    part_number = models.CharField(max_length=120, blank=True)
+    vin = models.CharField(max_length=17, blank=True)
+    message = models.TextField()
+    status = models.CharField(max_length=10, default=STATUS_NEW, db_index=True, choices=[
+        (STATUS_NEW, "New"), (STATUS_ANSWERED, "Answered"), (STATUS_CLOSED, "Closed")])
+    operator_reply = models.TextField(blank=True)
+    replied_at = models.DateTimeField(null=True, blank=True)
+    replied_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"#{self.pk} · {self.context} · {self.status}"
+
+
+class Notification(models.Model):
+    """G§7.11. Titles are rendered per language from event_type (never stored); `message` is operator text.
+    `token` (uuid4, random) opens the public /n/ link for 30 days (owner decision D23)."""
+
+    customer = models.ForeignKey("accounts.Customer", on_delete=models.CASCADE, null=True, blank=True,
+                                 related_name="notifications")
+    event_type = models.CharField(max_length=40, db_index=True, choices=[(e, e) for e in EVENT_TYPES])
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, null=True, blank=True)
+    item = models.ForeignKey(OrderItem, on_delete=models.SET_NULL, null=True, blank=True)
+    quote_request = models.ForeignKey("parts.PartQuoteRequest", on_delete=models.CASCADE, null=True, blank=True)
+    support_message = models.ForeignKey(OrderSupportMessage, on_delete=models.SET_NULL, null=True, blank=True)
+    support_ticket = models.ForeignKey(SupportTicket, on_delete=models.SET_NULL, null=True, blank=True)
+    text_params = models.JSONField(default=dict, blank=True)
+    message = models.TextField(blank=True)
+    token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    read_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [models.Index(fields=["customer", "read_at"])]
+
+    def __str__(self):
+        return f"{self.event_type} · {self.customer_id or 'guest'}"
+
+
+class NotificationDelivery(models.Model):
+    """One SMS/email attempt (never edited)."""
+
+    STATUS_SENT = "sent"  # a real provider/backend accepted it
+    STATUS_FAILED = "failed"  # an error or no confirmation
+    STATUS_SKIPPED = "skipped"  # the channel is switched off here (no SMS provider, non-delivering email backend)
+
+    notification = models.ForeignKey(Notification, on_delete=models.CASCADE, related_name="deliveries")
+    channel = models.CharField(max_length=10, choices=[("sms", "SMS"), ("email", "Email")])
+    recipient = models.CharField(max_length=255)
+    status = models.CharField(max_length=10, db_index=True, choices=[
+        (STATUS_SENT, "Sent"), (STATUS_FAILED, "Failed"), (STATUS_SKIPPED, "Skipped (channel disabled)")])
+    provider_message_id = models.CharField(max_length=120, blank=True)
+    error = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"{self.channel} · {self.status}"
+
+
+class NotificationChannelSetting(models.Model):
+    CHANNELS = [("sms", "SMS"), ("email", "Email"), ("both", "SMS + email"), ("none", "None")]
+
+    event_type = models.CharField(max_length=40, unique=True, choices=[(e, e) for e in EVENT_TYPES])
+    channel = models.CharField(max_length=10, choices=CHANNELS, default="none")
+
+    class Meta:
+        ordering = ["event_type"]
+
+    def __str__(self):
+        return f"{self.event_type}: {self.channel}"
+
+
+class NotificationTemplate(models.Model):
+    """SMS/email text per event and language (LP-BE-1305); a missing language falls back to the default one.
+    Django template syntax over a restricted context (D24): link, title, order.order_number,
+    notification.quote_request.part_number."""
+
+    event_type = models.ForeignKey(NotificationChannelSetting, on_delete=models.CASCADE, to_field="event_type",
+                                   db_column="event_type", related_name="templates")
+    language = models.CharField(max_length=8, choices=settings.LANGUAGES)
+    sms_template = models.TextField(blank=True)
+    email_subject = models.CharField(max_length=255, blank=True)
+    email_template = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["event_type", "language"]
+        constraints = [models.UniqueConstraint(fields=["event_type", "language"], name="one_template_per_language")]
+
+    def __str__(self):
+        return f"{self.event_type_id} · {self.language}"

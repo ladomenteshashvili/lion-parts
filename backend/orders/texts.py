@@ -52,6 +52,16 @@ EVENT_TEXTS = {
     "order_cancelled": _("Order cancelled."),
 }
 
+# In-app notification titles (G§7.11), rendered in the request language (API) or the customer's (SMS/email)
+DEFAULT_TITLES = {
+    "price_ready": _("Price is ready"),
+    "action_required": _("Your confirmation is needed"),
+    "courier_fee_proposed": _("Delivery fee"),
+    "support_reply": _("Support reply"),
+    "status_update": _("Order status updated"),
+    "payment_update": _("Payment status"),
+}
+
 # Texts with plural forms: (singular, plural) msgids, rendered with ngettext and the count `n`.
 PLURAL_TEXTS = {
     "attention_action_required": ("{n} item needs your confirmation.", "{n} items need your confirmation."),

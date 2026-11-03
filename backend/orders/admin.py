@@ -20,7 +20,9 @@ from payments.services import MANUAL_PROVIDERS, confirm_manual_payment, record_r
 from . import services
 from .admin_actions import OperatePermissionMixin, form_action
 from .invoices import invoice_language, render_invoice
-from .models import CourierFeeProposal, Order, OrderItem, OrderItemEvent, OrderSupportMessage
+from .models import (CourierFeeProposal, Notification, NotificationChannelSetting, NotificationDelivery,
+                     NotificationTemplate, Order,
+                     OrderItem, OrderItemEvent, OrderSupportMessage, SupportTicket)
 
 
 class ReadOnlyAdminMixin:
@@ -236,12 +238,7 @@ class OrderAdmin(OperatePermissionMixin, ReadOnlyAdminMixin, admin.ModelAdmin):
     @admin.action(description=_("Reply to the customer"), permissions=["operate"])
     def reply_to_customer(self, request, queryset):
         def run(order, data):
-            OrderSupportMessage.objects.create(order=order, sender_type=OrderSupportMessage.SENDER_OPERATOR,
-                                               sender_name=actor(request), message=data["message"],
-                                               is_read_by_operator=True)
-            order.support_messages.filter(sender_type=OrderSupportMessage.SENDER_CUSTOMER).update(
-                is_read_by_operator=True)
-            # LP-BE-903: notify(order.customer, "support_reply", support_message=...)
+            services.reply_to_order(order, data["message"], actor(request))
             return _("reply sent")
         return form_action(self, request, queryset, ReplyForm, _("Reply to the customer"), run)
 
@@ -319,3 +316,128 @@ class OrderSupportMessageAdmin(OperatePermissionMixin, ReadOnlyAdminMixin, admin
     @admin.action(description=_("Mark read"), permissions=["operate"])
     def mark_read(self, request, queryset):
         queryset.update(is_read_by_operator=True)
+
+
+class NotificationTemplateForm(forms.ModelForm):
+    class Meta:
+        model = NotificationTemplate
+        fields = ("language", "sms_template", "email_subject", "email_template")
+
+    def clean(self):
+        """A template that doesn't compile is refused here, not at sending time."""
+        from django.template import TemplateSyntaxError
+
+        from .notifications import check_template
+
+        data = super().clean()
+        for field in ("sms_template", "email_subject", "email_template"):
+            try:
+                check_template(data.get(field))
+            except TemplateSyntaxError as error:
+                self.add_error(field, str(error))
+        return data
+
+
+class NotificationTemplateInline(admin.StackedInline):
+    """One row per language (LP-BE-1305); a missing language falls back to the default one."""
+
+    model = NotificationTemplate
+    form = NotificationTemplateForm
+    extra = 0
+
+
+@admin.register(NotificationChannelSetting)
+class NotificationChannelSettingAdmin(admin.ModelAdmin):
+    """One row per event (seeded); the channel and the event's templates are editable."""
+
+    list_display = ("event_type", "channel")
+    list_editable = ("channel",)
+    readonly_fields = ("event_type",)
+    inlines = [NotificationTemplateInline]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(Notification)
+class NotificationAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
+    list_display = ("id", "event_type", "customer", "order", "read_at", "created_at")
+    list_filter = ("event_type",)
+    search_fields = ("order__order_number", "customer__user__email")
+    list_select_related = ("customer", "order")
+    exclude = ("token",)  # the public link token is never shown
+
+
+@admin.register(SupportTicket)
+class SupportTicketAdmin(OperatePermissionMixin, ReadOnlyAdminMixin, admin.ModelAdmin):
+    """G§7.16. Read-only; operators answer through the "send reply" action (LP-BE-1002)."""
+
+    list_display = ("id", "context", "status", "customer", "contact", "language", "created_at", "replied_at")
+    list_filter = ("status", "context", "language")
+    search_fields = ("message", "part_number", "vin", "contact", "customer__user__email", "customer__phone")
+    list_select_related = ("customer",)
+    exclude = ("session_key",)
+    actions = ["send_reply", "close_ticket"]
+
+    @admin.action(description=_("Send reply"), permissions=["operate"])
+    def send_reply(self, request, queryset):
+        from .support import reply_to_ticket
+
+        def run(ticket, data):
+            reply_to_ticket(ticket.pk, data["message"], request.user)
+            return _("reply sent")
+        return form_action(self, request, queryset, ReplyForm, _("Send reply"), run)
+
+    @admin.action(description=_("Close"), permissions=["operate"])
+    def close_ticket(self, request, queryset):
+        done = queryset.exclude(status=SupportTicket.STATUS_CLOSED).update(status=SupportTicket.STATUS_CLOSED)
+        self.message_user(request, ngettext("%(n)d ticket closed.", "%(n)d tickets closed.", done) % {"n": done},
+                          messages.SUCCESS)
+
+
+@admin.register(NotificationDelivery)
+class NotificationDeliveryAdmin(OperatePermissionMixin, ReadOnlyAdminMixin, admin.ModelAdmin):
+    """LP-BE-1105: the delivery log is read-only; "resend" writes a new row and never edits an old one."""
+
+    list_display = ("id", "notification", "channel", "recipient", "status_display", "error", "created_at")
+    list_filter = ("channel", "status", "notification__event_type")
+
+    @admin.display(description=_("Status"), ordering="status")
+    def status_display(self, obj):
+        """sent / failed / skipped (the channel is switched off here: nothing left the server)."""
+        colors = {NotificationDelivery.STATUS_FAILED: "#ba2121", NotificationDelivery.STATUS_SKIPPED: "#a66b00"}
+        if obj.status in colors:
+            return format_html('<strong style="color:{}">{}</strong>', colors[obj.status], obj.get_status_display())
+        return obj.get_status_display()
+    search_fields = ("recipient", "notification__order__order_number")
+    list_select_related = ("notification",)
+    actions = ["resend"]
+
+    @admin.action(description=_("Resend"), permissions=["operate"])
+    def resend(self, request, queryset):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from .notifications import resend
+
+        for delivery in queryset.select_related("notification"):
+            if NotificationDelivery.objects.filter(notification=delivery.notification, channel=delivery.channel,
+                                                   created_at__gte=timezone.now() - timedelta(seconds=60),
+                                                   pk__gt=delivery.pk).exists():
+                self.message_user(request, _("#%(id)s: already resent in the last minute.") % {"id": delivery.pk},
+                                  messages.WARNING)
+                continue
+            new = resend(delivery)
+            status = new[0].status if new else None
+            self.log_change(request, delivery, f"Resent: {status or 'nothing to send'}")
+            if status == NotificationDelivery.STATUS_SENT:
+                self.message_user(request, _("#%(id)s: resent.") % {"id": delivery.pk}, messages.SUCCESS)
+            elif status == NotificationDelivery.STATUS_SKIPPED:
+                self.message_user(request, _("#%(id)s: not sent, the channel is switched off here.")
+                                  % {"id": delivery.pk}, messages.WARNING)
+            else:
+                self.message_user(request, _("#%(id)s: resending failed.") % {"id": delivery.pk}, messages.ERROR)

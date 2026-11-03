@@ -12,6 +12,7 @@ from django.utils.translation import gettext_lazy as _
 from pricing.discounts import round2
 
 from .models import CourierFeeProposal, Order, OrderItem, OrderItemEvent, OrderSupportMessage
+from .notifications import notify_after_commit
 from .texts import render_plural, render_text
 
 PROGRESS = {
@@ -201,7 +202,7 @@ def propose_courier_fee(order_id, fee_gel, message, actor=None):
     accepted ones stay as they are. Raises RateUnavailable (nothing changes) / OperatorError."""
     from pricing.rates import get_usd_rate
 
-    order = Order.objects.select_for_update().get(pk=order_id)
+    order = Order.objects.select_for_update(no_key=True).get(pk=order_id)
     if order.status not in Order.OPEN_STATUSES or order.delivery_method != "delivery":
         raise OperatorError("fee_gel", _("Courier fees can be proposed for open delivery orders only."))
     if fee_gel is None or fee_gel < 0:
@@ -218,7 +219,7 @@ def propose_courier_fee(order_id, fee_gel, message, actor=None):
     order.save(update_fields=["proposed_courier_fee_gel", "courier_fee_message", "courier_fee_action_required",
                               "updated_at"])
     sync_order_status(order)
-    # LP-BE-903: notify(order.customer, "courier_fee_proposed", order=order)
+    notify_after_commit(order.customer, "courier_fee_proposed", order=order, params={"proposal_id": proposal.pk})
     return proposal
 
 
@@ -294,7 +295,6 @@ def decide(customer, item_id, decision, actor_name=""):
                               actor_name=actor_name)
         return order
     sync_order_status(order)
-    # LP-BE-902: notify operators? (not in G§7.11; the admin list shows the decision)
     return order
 
 
@@ -309,14 +309,14 @@ def cancel_order(order_id, reason, *, actor, actor_name="", operator=False):
 
     if operator and not reason.strip():
         raise OperatorError("reason", _("A cancellation reason is required."))
-    open_payments = list(Payment.objects.select_for_update().filter(order_id=order_id,
+    open_payments = list(Payment.objects.select_for_update(no_key=True).filter(order_id=order_id,
                                                                      status__in=Payment.OPEN_STATUSES))
-    order = Order.objects.select_for_update().get(pk=order_id)
+    order = Order.objects.select_for_update(no_key=True).get(pk=order_id)
     allowed = order.status in Order.OPEN_STATUSES if operator else can_cancel(order)
     if not allowed:
         raise ApiError("not_cancellable", status=409)
     item = None
-    for item in _live_items(order).select_for_update():
+    for item in _live_items(order).select_for_update(no_key=True):
         old = item.item_status
         item.item_status = OrderItem.STATUS_CANCELLED
         for field, value in PROPOSED_CLEAR.items():
@@ -355,7 +355,8 @@ def close_cancelled_order(order, open_payments, reason, *, item, actor, actor_na
                            "reason": reason}, actor=actor, actor_name=actor_name)
     order.cancelled_at = timezone.now()  # after the item events: the timeline ends with "cancelled"
     order.save(update_fields=["cancelled_at", "updated_at"])
-    # LP-BE-902: notify(order.customer, "status_update", order=order)
+    if actor == OrderItemEvent.ACTOR_OPERATOR:  # the customer's own cancellation needs no message
+        notify_after_commit(order.customer, "status_update", order=order, params={"order_status": order.status})
 
 
 @transaction.atomic
@@ -367,8 +368,8 @@ def respond_courier_fee(order_id, accept):
     from api.errors import ApiError
     from pricing.models import PickupPoint
 
-    order = Order.objects.select_for_update().get(pk=order_id)
-    proposal = order.courier_fee_proposals.select_for_update().filter(
+    order = Order.objects.select_for_update(no_key=True).get(pk=order_id)
+    proposal = order.courier_fee_proposals.select_for_update(no_key=True).filter(
         status=CourierFeeProposal.STATUS_PENDING).first()
     if proposal is None or not order.courier_fee_action_required or order.status not in Order.OPEN_STATUSES:
         raise ApiError("no_pending_action", status=409)
@@ -406,10 +407,10 @@ def _lock_for_operator(item_id, with_open_payments=False):
     from payments.models import Payment
 
     order_id = OrderItem.objects.values_list("order_id", flat=True).get(pk=item_id)
-    payments = list(Payment.objects.select_for_update().filter(order_id=order_id, status__in=Payment.OPEN_STATUSES)) \
+    payments = list(Payment.objects.select_for_update(no_key=True).filter(order_id=order_id, status__in=Payment.OPEN_STATUSES)) \
         if with_open_payments else []
-    order = Order.objects.select_for_update().get(pk=order_id)
-    item = OrderItem.objects.select_for_update().get(pk=item_id)
+    order = Order.objects.select_for_update(no_key=True).get(pk=order_id)
+    item = OrderItem.objects.select_for_update(no_key=True).get(pk=item_id)
     return (order, item, payments) if with_open_payments else (order, item)
 
 
@@ -467,12 +468,14 @@ def request_item_action(item_id, action_type, message="", *, actor_name="", prop
     params = {"amount": _str(proposed_unit_price) or "0", "currency": order.currency,
               "part_number": item.proposed_part_number, "weight_kg": _str(proposed_weight_kg),
               "eta_min_days": proposed_eta_min_days, "eta_max_days": proposed_eta_max_days}
-    create_item_event(item, "action_requested", text_code=f"action_requested_{action_type}", params=params,
-                      message=item.action_message, old={**before, **_jsonable(old)},
-                      new={"item_status": item.item_status, "action_type": action_type, **_jsonable(new)},
-                      actor=OrderItemEvent.ACTOR_OPERATOR, actor_name=actor_name, visible=True)
+    event = create_item_event(
+        item, "action_requested", text_code=f"action_requested_{action_type}", params=params,
+        message=item.action_message, old={**before, **_jsonable(old)},
+        new={"item_status": item.item_status, "action_type": action_type, **_jsonable(new)},
+        actor=OrderItemEvent.ACTOR_OPERATOR, actor_name=actor_name, visible=True)
     sync_order_status(order)
-    # LP-BE-903: notify(order.customer, "action_required", order=order, item=item)
+    notify_after_commit(order.customer, "action_required", order=order, item=item,
+                        params={"event_id": event.pk})
     return item
 
 
@@ -517,7 +520,7 @@ def set_item_status(item_id, status, *, actor_name="", reason="", bypass_balance
     if status == OrderItem.STATUS_CANCELLED and order.status == Order.STATUS_PAYMENT_PENDING:
         _reset_amount_due_now(order, open_payments)
     sync_order_status(order)
-    # LP-BE-903: notify(order.customer, "status_update", order=order, item=item)
+    notify_after_commit(order.customer, "status_update", order=order, item=item, params={"item_status": status})
     return True
 
 
@@ -530,3 +533,15 @@ def _reset_amount_due_now(order, open_payments):
     order.save(update_fields=["amount_due_now", "updated_at"])
     for payment in open_payments:
         mark_payment(payment, "expired", payload={"expired_by": "order_total_changed"})
+
+
+@transaction.atomic
+def reply_to_order(order, message, sender_name):
+    """Operator message on an order (G§7.16): visible to the customer, customer messages marked read by the
+    operator, then notify(support_reply). -> the message."""
+    reply = OrderSupportMessage.objects.create(order=order, sender_type=OrderSupportMessage.SENDER_OPERATOR,
+                                               sender_name=sender_name, message=message, is_read_by_operator=True)
+    order.support_messages.filter(sender_type=OrderSupportMessage.SENDER_CUSTOMER).update(is_read_by_operator=True)
+    notify_after_commit(order.customer, "support_reply", order=order, support_message=reply,
+                        message=message)
+    return reply

@@ -53,7 +53,18 @@ class SearchThrottle(IpThrottle):
 
 
 class SupportGuestThrottle(IpThrottle):
+    """Guests only (G§8.9): logged-in customers are identified and not limited per IP."""
+
     scope = "support_guest"
+
+    def get_cache_key(self, request, view):
+        return None if request.user and request.user.is_authenticated else super().get_cache_key(request, view)
+
+
+class PublicLinkThrottle(IpThrottle):
+    """Public token links (/api/public/n/, /api/public/q/): slows down token guessing per IP (D23)."""
+
+    scope = "public_link"
 
 
 class PhoneThrottle(SettingsRateThrottle):
@@ -85,3 +96,14 @@ class EmailSendThrottle(SettingsRateThrottle):
 
     def get_cache_key(self, request, view):
         return self.key(request.user.pk if request.user.is_authenticated else None)
+
+
+class SupportCustomerThrottle(SettingsRateThrottle):
+    """Support tickets and order messages per logged-in user (guests: SupportGuestThrottle)."""
+
+    scope = "support_customer"
+
+    def get_cache_key(self, request, view):
+        if request.method != "POST" or not (request.user and request.user.is_authenticated):
+            return None
+        return self.key(str(request.user.pk))

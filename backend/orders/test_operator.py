@@ -13,7 +13,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from accounts.testing import make_customer
-from orders.models import CourierFeeProposal, Order, OrderItem, OrderItemEvent, OrderSupportMessage
+from orders.models import CourierFeeProposal, Notification, Order, OrderItem, OrderItemEvent, OrderSupportMessage
 from orders import services
 from orders.services import (OperatorError, cancel_order, decide, request_item_action, set_item_status)
 from orders.testing import make_order
@@ -451,3 +451,5 @@ class ParallelLastItemTests(TransactionTestCase):
         order.refresh_from_db()
         self.assertEqual((order.status, order.balance_due), ("cancelled", D("-390.00")))
         self.assertEqual(OrderItemEvent.objects.filter(item__order=order, event_type="order_cancelled").count(), 1)
+        # one item cancelled + the order cancelled: both customer notifications exist (none lost to a deadlock)
+        self.assertEqual(Notification.objects.filter(order=order, event_type="status_update").count(), 2)
