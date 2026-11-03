@@ -77,7 +77,7 @@ One row per backlog story (76). Status: `done` (committed, tests green), `in pro
 | LP-BE-1204 | TBD | Staging environment & operations docs | 3 | M6 | 1202 | todo |  |  |
 | LP-BE-1205 | TBD | Frontend handoff package | 1 | M6 | 1203, 1204 | todo |  |  |
 | LP-BE-1301 | LPK-166 | i18n foundation: languages, middleware, catalogs | 3 | M0 | 101 | done | 24ebd86 | PR #58, CI green (PostgreSQL 16) |
-| LP-BE-1302 | TBD | Translated content fields & admin widget | 5 | M1 | 1301 | todo |  |  |
+| LP-BE-1302 | TBD | Translated content fields & admin widget | 5 | M1 | 1301 | done |  | api/tests/test_translated_fields.py (tr fallback, +1 language -> +1 input, default required); cities/districts editor ships with SiteSettings in LP-BE-301/1101 (plan G4) |
 | LP-BE-1303 | TBD | Customer preferred language | 2 | M1 | 201, 1301 | in progress |  | model field (201) + customer_language() (accounts/test_services.py); API ACs land in 205/210 |
 | LP-BE-1304 | TBD | Localized system texts (events, timeline, banners, system messages) | 5 | M3 | 601, 1301 | todo |  |  |
 | LP-BE-1305 | TBD | Notification & SMS templates per language | 3 | M5 | 901, 1303 | todo |  |  |

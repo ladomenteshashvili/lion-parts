@@ -1,5 +1,7 @@
 from django.contrib import admin
 
+from api.admin_i18n import TranslatedFieldsAdminMixin
+
 from .models import Customer, CustomerTariff, LegalEntityProfile, PhoneVerificationCode, TariffMarkup
 
 
@@ -9,7 +11,8 @@ class TariffMarkupInline(admin.TabularInline):
 
 
 @admin.register(CustomerTariff)
-class CustomerTariffAdmin(admin.ModelAdmin):
+class CustomerTariffAdmin(TranslatedFieldsAdminMixin, admin.ModelAdmin):
+    textarea_i18n_fields = ("benefits_text_i18n",)
     list_display = ("name", "is_default", "payment_terms", "split_upfront_percent",
                     "can_enter_weight", "can_request_quote", "updated_at")
     list_filter = ("is_default", "payment_terms", "can_enter_weight", "can_request_quote")

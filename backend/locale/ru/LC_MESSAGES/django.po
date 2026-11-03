@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 11:14+0000\n"
+"POT-Creation-Date: 2026-11-03 11:16+0000\n"
 "Language: ru\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -54,6 +54,12 @@ msgstr "Пароль должен содержать символ."
 #: accounts/validators.py:64
 msgid "Use upper- and lower-case letters, a digit and a symbol."
 msgstr "Используйте заглавные и строчные буквы, цифру и символ."
+
+#: api/admin_i18n.py:38
+#, fuzzy
+#| msgid "This field is required."
+msgid "The default-language value is required."
+msgstr "Обязательное поле."
 
 #: api/drf_messages.py:8
 msgid "This field is required."
