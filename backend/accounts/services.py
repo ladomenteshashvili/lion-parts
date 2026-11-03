@@ -69,7 +69,15 @@ def send_registration_code(request, draft):
 # Login (G§5.7): read the guest session key before login() rotates it, then attach guest data.
 
 def attach_guest_data(old_session_key, customer):
-    """Hook: guest search logs (LP-BE-407), guest cart merge (LP-BE-506), support tickets (LP-BE-1001)."""
+    """The guest session's data becomes the customer's (G§7.6, G§7.7): search logs and the guest cart
+    (merged). Support tickets follow in LP-BE-1001."""
+    from cart.services import merge_guest_cart
+    from parts.models import PartSearchLog
+
+    if not old_session_key:
+        return
+    PartSearchLog.objects.filter(session_key=old_session_key, customer__isnull=True).update(customer=customer)
+    merge_guest_cart(old_session_key, customer)
 
 
 def login_customer(request, customer):
@@ -260,6 +268,7 @@ CLOSED_ORDER_STATUSES = ("completed", "cancelled")
 
 def anonymize_customer(customer):
     """Shared by DELETE /api/profile/ and the admin action (LP-BE-1102). Raises account_has_open_orders."""
+    from cart.models import Cart
     from orders.models import Order
     from parts.models import PartQuoteRequest, PartSearchLog
 
@@ -272,12 +281,10 @@ def anonymize_customer(customer):
         PhoneVerificationCode.objects.filter(customer=customer).delete()
         if phone:
             PhoneVerificationCode.objects.filter(phone=phone).delete()
-            # shortcut: legacy search logs and quote requests are keyed by phone. LP-BE-404/406 switch to the
-            # customer FK + hidden_at; LP-BE-501/901 add deleting the cart and notifications here.
-            PartSearchLog.objects.filter(customer_phone=phone).update(customer_phone="", customer_name="")
-            PartQuoteRequest.objects.filter(
-                customer_phone=phone, status__in=[PartQuoteRequest.STATUS_NEW, PartQuoteRequest.STATUS_CONTACTED],
-            ).delete()
+        PartQuoteRequest.objects.filter(customer=customer, status__in=PartQuoteRequest.OPEN_STATUSES).delete()
+        PartSearchLog.objects.filter(customer=customer).update(customer=None, hidden_at=now)
+        Cart.objects.filter(customer=customer).delete()
+        # LP-BE-901 adds deleting the notifications.
 
         # shortcut: scans every session (fine at this scale); add a user->session index if sessions grow large.
         for session in Session.objects.all():

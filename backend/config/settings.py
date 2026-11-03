@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "corsheaders",
 
     "api",
+    "pricing",
     "parts",
     "cart",
     "orders.apps.OrdersConfig",
@@ -226,23 +227,7 @@ AMT_API_PASSWORD = config("AMT_API_PASSWORD", default="")
 AMT_VERIFY_SSL = config("AMT_VERIFY_SSL", default=True, cast=bool)
 AMT_TIMEOUT_SECONDS = config("AMT_TIMEOUT_SECONDS", default=15, cast=int)
 
-# Exchange rate provider (replaced by NBG in LP-BE-302)
-KURSI_PUBLIC_CURRENCIES_URL = config(
-    "KURSI_PUBLIC_CURRENCIES_URL",
-    default="https://api-core.kursi.ge/api/public/currencies",
-)
 
-# Temporary pricing defaults (moved to the pricing app in LP-BE-302/303).
-DEFAULT_SHIPPING_USD_PER_KG = config(
-    "DEFAULT_SHIPPING_USD_PER_KG",
-    default="8.00",
-)
-DEFAULT_CUSTOMER_MARKUP_PERCENT = config(
-    "DEFAULT_CUSTOMER_MARKUP_PERCENT",
-    default="20.00",
-)
-VAT_MULTIPLIER = config("VAT_MULTIPLIER", default="1.18")
-DEFAULT_ETA_DAYS = config("DEFAULT_ETA_DAYS", default=14, cast=int)
 
 
 # Sender.ge SMS

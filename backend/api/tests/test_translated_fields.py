@@ -64,7 +64,8 @@ class TariffAdminTranslatedFieldTests(TestCase):
             self.assertIn(f'name="{name}"', html)
 
     def test_saving_without_the_default_language_fails(self):
-        data = {"name": "Standard", "is_default": "on", "payment_terms": "full", "split_upfront_percent": "70",
+        data = {"name": "Standard", "is_default": "on", "markup_percent": "20", "payment_terms": "full",
+                "split_upfront_percent": "70",
                 "benefits_text_i18n_0": "", "benefits_text_i18n_1": "Free delivery", "benefits_text_i18n_2": ""}
         form = self.form_class()(data, instance=self.tariff)
         self.assertFalse(form.is_valid())

@@ -5,7 +5,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from cart.models import Cart, CartItem
+from types import SimpleNamespace
 from orders.models import Order, OrderCustomerNotification, OrderItem, OrderItemEvent, OrderSupportMessage, Payment
 from accounts.models import Customer
 from accounts.testing import make_customer
@@ -20,10 +20,8 @@ class OrderFlowTests(TestCase):
         self.client = APIClient()
         self.session_id = "test-session-automated"
         self.customer = make_customer(first_name="Lado", phone="599123456", is_phone_verified=True)
-        self.cart = Cart.objects.create(session_id=self.session_id)
-
-        self.cart_item = CartItem.objects.create(
-            cart=self.cart,
+        # The legacy cart line's values, kept as plain data (LP-BE-501 replaced the cart schema).
+        self.cart_item = SimpleNamespace(
             cart_item_id="Q-DEMO-0001:P-DEMO-001:1565461",
             quote_id="Q-DEMO-0001",
             part_option_id="P-DEMO-001",

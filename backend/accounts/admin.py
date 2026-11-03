@@ -2,23 +2,17 @@ from django.contrib import admin
 
 from api.admin_i18n import TranslatedFieldsAdminMixin
 
-from .models import Customer, CustomerTariff, LegalEntityProfile, PhoneVerificationCode, TariffMarkup
-
-
-class TariffMarkupInline(admin.TabularInline):
-    model = TariffMarkup
-    extra = 0
+from .models import Customer, CustomerTariff, LegalEntityProfile, PhoneVerificationCode
 
 
 @admin.register(CustomerTariff)
 class CustomerTariffAdmin(TranslatedFieldsAdminMixin, admin.ModelAdmin):
     textarea_i18n_fields = ("benefits_text_i18n",)
-    list_display = ("name", "is_default", "payment_terms", "split_upfront_percent",
+    list_display = ("name", "is_default", "markup_percent", "payment_terms", "split_upfront_percent",
                     "can_enter_weight", "can_request_quote", "updated_at")
     list_filter = ("is_default", "payment_terms", "can_enter_weight", "can_request_quote")
     search_fields = ("name",)
     readonly_fields = ("created_at", "updated_at")
-    inlines = [TariffMarkupInline]
 
     # Customer.get_tariff() needs a default tariff: it can't be deleted, not even in bulk.
     def has_delete_permission(self, request, obj=None):

@@ -11,9 +11,10 @@ lost `accounts.test_legal_entity_mobile_verification.LegalEntityMobileVerificati
 
 ## Progress
 
-| Milestone | Legacy tests replaced | Still skipped |
+| Milestone | Legacy tests replaced | Legacy tests still skipped |
 |---|---|---|
-| M1 (accounts) | 36: all of `accounts/tests.py` (21; `demo_login_*` removed by G§8.11, route asserted unreachable) and the three legacy legal-entity modules (16, API removed by G§8.11; company data is captured at registration) | 90 |
+| M1 (accounts) | 37: all of `accounts/tests.py` (21; `demo_login_*` removed by G§8.11, route asserted unreachable) and the three legacy legal-entity modules (16, API removed by G§8.11; company data is captured at registration) | 89 (the M1 report's "90 skipped" also counted the PostgreSQL-only OTP test) |
+| M2 (pricing, search, cart) | 31: all 24 `parts.tests` legacy tests (search 6 → LP-BE-403, feed 5 → 404, calculate-price 3 → 405, quote requests 10 → 406) and all 7 `cart.tests` (→ 502/503; `cart/tests.py` removed). Plus 3 live legacy admin tests of the old quote "price ready" action, rewritten in `parts/test_admin.py` | **58**: orders 55 (M3/M4) + `accounts.test_regressions` 3 (LP-BE-801) |
 
 The three `accounts.test_regressions` order-access tests were retagged from LP-BE-206/210 to **LP-BE-801**:
 their account half is covered by LP-BE-206/212, the order-access half needs the new orders API.

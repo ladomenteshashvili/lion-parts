@@ -3,18 +3,22 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 11:26+0000\n"
+"POT-Creation-Date: 2026-11-03 14:07+0000\n"
 "Language: ru\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
 
-#: accounts/models.py:36
+#: accounts/models.py:38
 msgid "Make another tariff the default first."
 msgstr "Сначала сделайте другой тариф тарифом по умолчанию."
 
-#: accounts/otp.py:18
+#: accounts/models.py:40
+msgid "The default tariff needs a markup."
+msgstr "Тарифу по умолчанию нужна наценка."
+
+#: accounts/otp.py:19
 #, python-brace-format
 msgid "Lion Parts code: {code}"
 msgstr "Код Lion Parts: {code}"
@@ -43,7 +47,7 @@ msgstr "Для регистрации необходимо принять усл
 msgid "Choose one of the supported languages."
 msgstr "Выберите один из поддерживаемых языков."
 
-#: accounts/serializers.py:219
+#: accounts/serializers.py:219 accounts/serializers.py:240
 msgid "The current password is incorrect."
 msgstr "Текущий пароль неверен."
 
@@ -83,11 +87,11 @@ msgstr "Пароль должен содержать символ."
 msgid "Use upper- and lower-case letters, a digit and a symbol."
 msgstr "Используйте заглавные и строчные буквы, цифру и символ."
 
-#: accounts/views.py:119
+#: accounts/views.py:121
 msgid "If the account exists, a reset link has been sent."
 msgstr "Если аккаунт существует, ссылка для сброса отправлена."
 
-#: accounts/views.py:120
+#: accounts/views.py:122
 msgid "Password changed."
 msgstr "Пароль изменён."
 
@@ -382,14 +386,180 @@ msgstr "Подтвердите адрес электронной почты, о�
 msgid "The link is valid for 48 hours. If you didn't create a Lion Parts account, ignore this email."
 msgstr "Ссылка действительна 48 часов. Если вы не создавали аккаунт Lion Parts, проигнорируйте это письмо."
 
-#: config/settings.py:123
+#: cart/serializers.py:18 cart/services.py:47
+msgid "The quantity must be between 1 and 99."
+msgstr "Количество должно быть от 1 до 99."
+
+#: config/settings.py:124
 msgid "Georgian"
 msgstr "Грузинский"
 
-#: config/settings.py:123
+#: config/settings.py:124
 msgid "English"
 msgstr "Английский"
 
-#: config/settings.py:123
+#: config/settings.py:124
 msgid "Russian"
 msgstr "Русский"
+
+#: orders/texts.py:8
+msgid "The price is calculated with the estimated weight you entered. The final weight is set when the part arrives at the US warehouse. If it differs, the final amount may change: you may pay extra or get a refund."
+msgstr "Цена рассчитана по указанному вами примерному весу. Окончательный вес определяется при получении детали на складе в США. Если он отличается, итоговая сумма может измениться: возможна доплата или возврат."
+
+#: parts/admin.py:55
+msgid "Request"
+msgstr "Запрос"
+
+#: parts/admin.py:56
+msgid "Offer"
+msgstr "Предложение"
+
+#: parts/admin.py:58
+msgid "Operator price"
+msgstr "Цена оператора"
+
+#: parts/admin.py:59
+msgid "Enter the weight (and the supplier price for a manual request), then run the “price ready” action: the price is calculated for the customer automatically."
+msgstr "Введите вес (для ручного запроса — и цену поставщика), затем запустите действие «Цена готова»: цена для клиента рассчитается автоматически."
+
+#: parts/admin.py:63
+msgid "Price snapshot"
+msgstr "Снимок цены"
+
+#: parts/admin.py:64
+msgid "The approved price in USD (the base). Customers paying in GEL see it converted with the current NBG rate. Run “price ready” again to re-approve an expired quote."
+msgstr "Утверждённая цена в USD (база). Клиенты, платящие в GEL, видят её пересчёт по текущему курсу НБГ. Чтобы повторно утвердить просроченное предложение, снова запустите «Цена готова»."
+
+#: parts/admin.py:68 parts/admin.py:72
+msgid "Customer link"
+msgstr "Ссылка для клиента"
+
+#: parts/admin.py:79
+msgid "Price ready: calculate the price and create the customer link"
+msgstr "Цена готова: рассчитать цену и создать ссылку для клиента"
+
+#: parts/admin.py:94
+#, python-format
+msgid "%(n)d request priced; its customer link is active."
+msgid_plural "%(n)d requests priced; their customer links are active."
+msgstr[0] "%(n)d запрос оценён; ссылка для клиента активна."
+msgstr[1] "%(n)d запроса оценены; ссылки для клиентов активны."
+msgstr[2] "%(n)d запросов оценены; ссылки для клиентов активны."
+
+#: parts/admin.py:98
+#, python-format
+msgid "Skipped (enter a positive weight and supplier price): %(ids)s"
+msgstr "Пропущено (введите положительный вес и цену поставщика): %(ids)s"
+
+#: parts/admin.py:101
+#, python-format
+msgid "Not priced, the exchange rate is unavailable: %(ids)s"
+msgstr "Цена не рассчитана, курс валют недоступен: %(ids)s"
+
+#: parts/admin.py:112
+msgid "Preview"
+msgstr "Просмотр"
+
+#: parts/models.py:152
+msgid "The image must not be larger than 5 MB."
+msgstr "Изображение не должно превышать 5 МБ."
+
+#: parts/serializers.py:16
+msgid "Choose one of the available currencies."
+msgstr "Выберите одну из доступных валют."
+
+#: parts/serializers.py:66
+msgid "Enter a weight above 0 and up to 500 kg."
+msgstr "Введите вес больше 0 и не более 500 кг."
+
+#: parts/serializers.py:79
+msgid "Confirm that the price may change with the actual weight."
+msgstr "Подтвердите, что цена может измениться в зависимости от фактического веса."
+
+#: parts/views.py:73
+msgid "Choose one of: all, ready, checking, other."
+msgstr "Выберите одно из: all, ready, checking, other."
+
+#: pricing/admin.py:18
+msgid "Currency"
+msgstr "Валюта"
+
+#: pricing/admin.py:19
+msgid "USD is always the base pricing currency. Off: customers see and pay GEL only. On: USD is the default and customers can choose USD or GEL."
+msgstr "Базовая валюта цен всегда USD. Выключено: клиенты видят и оплачивают только в GEL. Включено: по умолчанию USD, клиент может выбрать USD или GEL."
+
+#: pricing/admin.py:23
+msgid "Prices"
+msgstr "Цены"
+
+#: pricing/admin.py:24
+msgid "Prices stay valid for this many Georgian business days (Monday to Friday, without the public holidays below, e.g. [\"2026-01-01\", \"2026-01-07\"])."
+msgstr "Цены действуют столько рабочих дней в Грузии (с понедельника по пятницу, без указанных ниже праздников, напр. [\"2026-01-01\", \"2026-01-07\"])."
+
+#: pricing/admin.py:28
+msgid "Delivery areas"
+msgstr "Зоны доставки"
+
+#: pricing/admin.py:29
+msgid "Cities: [{\"code\": \"tbilisi\", \"name\": {\"ka\": \"...\", \"en\": \"...\", \"ru\": \"...\"}}]. Districts also need \"city\" with an existing city code."
+msgstr "Города: [{\"code\": \"tbilisi\", \"name\": {\"ka\": \"...\", \"en\": \"...\", \"ru\": \"...\"}}]. Районам также нужен \"city\" с кодом существующего города."
+
+#: pricing/admin.py:33
+msgid "Invoice"
+msgstr "Счёт"
+
+#: pricing/admin.py:63
+msgid "Fetch today's NBG rate now"
+msgstr "Получить сегодняшний курс НБГ сейчас"
+
+#: pricing/admin.py:68
+msgid "The NBG rate is unavailable. Try again later."
+msgstr "Курс НБГ недоступен. Попробуйте позже."
+
+#: pricing/admin.py:70
+#, python-format
+msgid "USD rate %(rate)s stored for %(date)s."
+msgstr "Курс USD %(rate)s сохранён на %(date)s."
+
+#: pricing/models.py:62
+msgid "Enter a list of objects."
+msgstr "Введите список объектов."
+
+#: pricing/models.py:66
+msgid "Every row needs a code."
+msgstr "У каждой строки должен быть код."
+
+#: pricing/models.py:68
+#, python-format
+msgid "Duplicate code: %(code)s"
+msgstr "Повторяющийся код: %(code)s"
+
+#: pricing/models.py:72
+#, python-format
+msgid "%(code)s: the default-language name is required."
+msgstr "%(code)s: название на основном языке обязательно."
+
+#: pricing/models.py:74
+#, python-format
+msgid "%(code)s: unknown city."
+msgstr "%(code)s: неизвестный город."
+
+#: pricing/models.py:78
+msgid "Enter a list of dates like [\"2026-01-01\", \"2026-01-07\"]."
+msgstr "Введите список дат, напр. [\"2026-01-01\", \"2026-01-07\"]."
+
+#: pricing/models.py:91
+msgid "Site settings already exist; edit the existing row."
+msgstr "Настройки сайта уже существуют; измените существующую запись."
+
+#: pricing/models.py:140
+msgid "The value can't be negative."
+msgstr "Значение не может быть отрицательным."
+
+#: pricing/models.py:142
+msgid "A percentage can't exceed 100."
+msgstr "Процент не может превышать 100."
+
+#: pricing/models.py:144
+msgid "The end must be after the start."
+msgstr "Окончание должно быть позже начала."

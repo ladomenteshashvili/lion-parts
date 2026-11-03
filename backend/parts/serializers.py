@@ -1,82 +1,80 @@
+"""Input validation for the parts endpoints (G§8.4)."""
+
+from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 
-from .models import PartQuoteRequest
+from accounts.validators import normalize_vin
+from pricing.currency import allowed_currencies, default_currency
 
 
-class PartQuoteRequestSerializer(serializers.ModelSerializer):
-    is_price_ready = serializers.BooleanField(read_only=True)
+class CurrencyField(serializers.CharField):
+    """A currency customers may use now (GEL only unless multi-currency is on); else `invalid`."""
 
-    class Meta:
-        model = PartQuoteRequest
-        fields = [
-            "id",
-            "session_id",
-            "request_type",
-            "part_number",
-            "vin",
-            "customer_name",
-            "customer_phone",
-            "comment",
-            "quote_id",
-            "part_option_id",
-            "name",
-            "condition",
-            "brand",
-            "availability",
-            "eta_days",
-            "prepared_weight_kg",
-            "final_price_gel",
-            "currency",
-            "operator_message",
-            "status",
-            "is_price_ready",
-            "created_at",
-            "updated_at",
-        ]
-        read_only_fields = [
-            "id",
-            "prepared_weight_kg",
-            "final_price_gel",
-            "operator_message",
-            "status",
-            "is_price_ready",
-            "created_at",
-            "updated_at",
-        ]
+    def to_internal_value(self, data):
+        value = super().to_internal_value(data).upper()
+        if value not in allowed_currencies():
+            raise serializers.ValidationError(_("Choose one of the available currencies."), code="invalid")
+        return value
 
 
-class PublicPreparedQuoteSerializer(serializers.ModelSerializer):
-    token = serializers.UUIDField(source="notification_token", read_only=True)
-    weight_kg = serializers.DecimalField(
-        source="prepared_weight_kg",
-        max_digits=8,
-        decimal_places=2,
-        read_only=True,
-        allow_null=True,
-    )
-    is_acknowledged = serializers.SerializerMethodField()
+class VinField(serializers.CharField):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("default", "")
+        super().__init__(required=False, allow_blank=True, max_length=40, **kwargs)
 
-    class Meta:
-        model = PartQuoteRequest
-        fields = [
-            "id",
-            "token",
-            "part_number",
-            "vin",
-            "quote_id",
-            "part_option_id",
-            "name",
-            "condition",
-            "brand",
-            "availability",
-            "eta_days",
-            "weight_kg",
-            "final_price_gel",
-            "currency",
-            "operator_message",
-            "price_ready_at",
-            "is_acknowledged",
-        ]
+    def to_internal_value(self, data):
+        return normalize_vin(super().to_internal_value(data))  # Django ValidationError(code=invalid_vin)
 
-    def get_is_acknowledged(self, obj):
-        return obj.notification_acknowledged_at is not None
+
+class SearchSerializer(serializers.Serializer):
+    part_number = serializers.CharField(max_length=120)
+    vin = VinField()
+    currency = CurrencyField(required=False, default=default_currency)
+
+
+class QuoteRequestSerializer(serializers.Serializer):
+    """weight_price needs search_id + offer_id; manual_search needs part_number (G§8.4)."""
+
+    request_type = serializers.ChoiceField(choices=["weight_price", "manual_search"])
+    search_id = serializers.IntegerField(required=False)
+    offer_id = serializers.CharField(required=False, max_length=120)
+    part_number = serializers.CharField(required=False, max_length=120)
+    vin = VinField()
+    comment = serializers.CharField(required=False, allow_blank=True, max_length=2000, default="")
+
+    def validate(self, data):
+        required = (("search_id", "offer_id") if data["request_type"] == "weight_price" else ("part_number",))
+        missing = {f: serializers.ErrorDetail(str(serializers.Field.default_error_messages["required"]), "required")
+                   for f in required if not data.get(f)}
+        if missing:
+            raise serializers.ValidationError({f: [e] for f, e in missing.items()})
+        return data
+
+
+class WeightField(serializers.DecimalField):
+    """kg, > 0 and <= 500; any problem is `invalid_weight` (G§7.1)."""
+
+    def __init__(self, **kwargs):
+        super().__init__(max_digits=8, decimal_places=2, **kwargs)
+
+    def to_internal_value(self, data):
+        try:
+            value = super().to_internal_value(data)
+        except serializers.ValidationError:
+            value = None
+        if value is None or not (0 < value <= 500):
+            raise serializers.ValidationError(_("Enter a weight above 0 and up to 500 kg."), code="invalid_weight")
+        return value
+
+
+class CalculatePriceSerializer(serializers.Serializer):
+    search_id = serializers.IntegerField()
+    offer_id = serializers.CharField(max_length=120)
+    weight_kg = WeightField()
+    weight_consent = serializers.BooleanField()
+
+    def validate_weight_consent(self, value):
+        if value is not True:
+            raise serializers.ValidationError(
+                _("Confirm that the price may change with the actual weight."), code="required")
+        return value

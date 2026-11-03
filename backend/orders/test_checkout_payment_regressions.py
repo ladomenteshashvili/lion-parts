@@ -4,7 +4,6 @@ from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from accounts.models import Customer
-from cart.models import Cart, CartItem
 from orders.models import Order, OrderItem, OrderItemEvent, Payment
 
 from api.legacy import legacy_endpoint_test

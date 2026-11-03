@@ -3,11 +3,9 @@
 from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models, transaction
 from django.utils.translation import gettext_lazy as _
-
-CURRENCY_CHOICES = [("GEL", "GEL"), ("USD", "USD")]
-
 
 class CustomerTariff(models.Model):
     PAYMENT_FULL = "full"
@@ -19,6 +17,10 @@ class CustomerTariff(models.Model):
         max_length=20, choices=[(PAYMENT_FULL, "100%"), (PAYMENT_SPLIT, "70/30")], default=PAYMENT_FULL,
     )
     split_upfront_percent = models.DecimalField(max_digits=5, decimal_places=2, default=70)
+    # Markup on the canonical USD price (G§7.2). Empty -> the default tariff's markup; the default
+    # tariff must have one (pricing never falls back to zero).
+    markup_percent = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True,
+                                         validators=[MinValueValidator(0)])
     can_enter_weight = models.BooleanField(default=False)
     can_request_quote = models.BooleanField(default=False)
     benefits_text_i18n = models.JSONField(default=dict, blank=True)  # translated (G§5.8)
@@ -34,26 +36,14 @@ class CustomerTariff(models.Model):
     def clean(self):
         if not self.is_default and self.pk and CustomerTariff.objects.filter(pk=self.pk, is_default=True).exists():
             raise ValidationError({"is_default": _("Make another tariff the default first.")})
+        if self.is_default and self.markup_percent is None:
+            raise ValidationError({"markup_percent": _("The default tariff needs a markup.")})
 
     def save(self, *args, **kwargs):
         with transaction.atomic():
             if self.is_default:
                 CustomerTariff.objects.filter(is_default=True).exclude(pk=self.pk).update(is_default=False)
             super().save(*args, **kwargs)
-
-
-class TariffMarkup(models.Model):
-    tariff = models.ForeignKey(CustomerTariff, on_delete=models.CASCADE, related_name="markups")
-    currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES)
-    markup_percent = models.DecimalField(max_digits=6, decimal_places=2)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        unique_together = [("tariff", "currency")]
-
-    def __str__(self):
-        return f"{self.tariff} · {self.currency} {self.markup_percent}%"
 
 
 class Customer(models.Model):

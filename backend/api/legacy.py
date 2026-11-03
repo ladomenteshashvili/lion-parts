@@ -10,17 +10,22 @@ import unittest
 
 # urlconf module -> prefix it used to be mounted at
 LEGACY_URLCONFS = {
-    "parts.urls": "/api/parts/",
-    "cart.urls": "/api/cart/",
     "orders.urls": "/api/orders/",
 }
 
-# Routes whose modules were already deleted (LP-BE-201: accounts views/serializers/urls).
+# Routes whose modules were already deleted (LP-BE-201 accounts, LP-BE-402 parts).
 REMOVED_ROUTES = [
     f"/api/accounts/{route}" for route in (
         "profile/", "profile/password/", "profile/legal-entity/", "profile/legal-entity/send-code/",
         "profile/legal-entity/verify-code/", "login-password/", "password-reset/send-code/",
         "password-reset/", "demo-login/", "send-code/", "verify-code/",
+    )
+] + [
+    # LP-BE-402 deleted the legacy parts views; /api/parts/search/ etc. come back with the new contract
+    # (LP-BE-403..406), so only routes that are never reused are listed here.
+    f"/api/parts/{route}" for route in (
+        "feed/", "public/quote-requests/00000000-0000-0000-0000-000000000000/",
+        "public/quote-requests/00000000-0000-0000-0000-000000000000/acknowledge/",
     )
 ]
 

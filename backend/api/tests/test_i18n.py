@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 from django.conf import settings
-from django.test import SimpleTestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import path
 from django.utils import translation
 from rest_framework import serializers
@@ -15,20 +15,19 @@ from rest_framework.response import Response
 from api.drf_messages import DRF_MESSAGES
 from api.errors import MESSAGES
 from api.exceptions import DEFAULT_MESSAGES
+from orders.texts import EVENT_TEXTS
 
 BACKEND_DIR = Path(settings.BASE_DIR)
 
 # Every dict of gettext_lazy msgids the backend renders. Each story registers its own here
 # (MESSAGES, DEFAULT_MESSAGES, EVENT_TEXTS, DEFAULT_TITLES ...); the completeness test covers them all.
-TRANSLATED_REGISTRIES = [MESSAGES, DEFAULT_MESSAGES, DRF_MESSAGES]
+TRANSLATED_REGISTRIES = [MESSAGES, DEFAULT_MESSAGES, DRF_MESSAGES, EVENT_TEXTS]
 # Codes deliberately left untranslated (provider-facing, never shown to users; G§9 "—").
 UNTRANSLATED_CODES = set()
 
 # shortcut: legacy files that still contain Georgian literals; each is cleaned up by the named story.
 # The test fails once a listed file has none left, so this list only shrinks.
 LEGACY_GEORGIAN_FILES = {
-    "parts/providers.py": "LP-BE-402/405 (CUSTOMER_WEIGHT_NOTICE -> EVENT_TEXTS)",
-    "parts/admin.py": "LP-BE-1104",
     "orders/views.py": "LP-BE-1304 / LP-BE-1201",
     "orders/admin.py": "LP-BE-1103 / LP-BE-1304",
     "orders/invoices.py": "LP-BE-604",
@@ -61,7 +60,7 @@ def non_english_languages():
     return [code for code, _ in settings.LANGUAGES if code != "en"]
 
 
-class LanguageResolutionTests(SimpleTestCase):
+class LanguageResolutionTests(TestCase):
     def get_meta(self, accept_language=None):
         headers = {"accept-language": accept_language} if accept_language else {}
         return self.client.get("/api/meta/", headers=headers)
@@ -123,7 +122,8 @@ class CatalogTests(SimpleTestCase):
                 po = (BACKEND_DIR / "locale" / code / "LC_MESSAGES" / "django.po").read_text(encoding="utf-8")
                 entries = po.split("\n\n")[1:]  # skip the header entry
                 self.assertEqual([e for e in entries if "#, fuzzy" in e], [])
-                self.assertEqual([e for e in entries if e.rstrip().endswith('msgstr ""')], [])
+                # an empty msgstr / msgstr[n] (plural forms too); no-wrap catalogs have no continuation lines
+                self.assertEqual([e for e in entries if re.search(r'^msgstr(\[\d+\])? ""$', e, re.M)], [])
 
     def test_every_registered_msgid_is_translated(self):
         for code in non_english_languages():

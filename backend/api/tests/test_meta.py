@@ -1,13 +1,14 @@
 """LP-BE-105 (LPK-100): pagination, meta and health (G§4.5, G§8.1)."""
 
-from django.test import SimpleTestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import path
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 
 from api.pagination import Pagination
 
-META_KEYS = {"languages", "default_language", "currencies", "usd_rate", "pickup_points", "delivery",
+META_KEYS = {"languages", "default_language", "currencies", "multi_currency_enabled", "default_currency",
+             "base_currency", "price_valid_business_days", "usd_rate", "pickup_points", "delivery",
              "otp_length", "otp_resend_seconds", "password_rules"}
 
 
@@ -29,14 +30,14 @@ def list_view(pagination_class):
 urlpatterns = [path("items/", list_view(Pagination)), path("counted/", list_view(CountedPagination))]
 
 
-class MetaTests(SimpleTestCase):
+class MetaTests(TestCase):
     def test_meta_returns_every_g81_key(self):
         response = self.client.get("/api/meta/")
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(set(data), META_KEYS)
-        self.assertEqual(data["delivery"], {"country": "GE", "cities": [], "districts": []})
-        self.assertEqual((data["currencies"], data["usd_rate"], data["pickup_points"]), ([], None, []))
+        self.assertEqual(data["currencies"], [{"code": "GEL", "symbol": "₾"}])  # multi-currency off by default
+        self.assertIsNone(data["usd_rate"])  # no rate fetched yet
         self.assertEqual((data["otp_length"], data["otp_resend_seconds"]), (6, 60))
         self.assertEqual(data["password_rules"],
                          {"min_length": 8, "upper": True, "lower": True, "digit": True, "symbol": True})

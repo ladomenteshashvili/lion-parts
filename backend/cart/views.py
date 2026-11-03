@@ -1,108 +1,59 @@
-from django.shortcuts import render
+"""Cart endpoints (G§8.5): guest session or customer (AllowAny), always server-priced."""
 
-# Create your views here.
-from django.shortcuts import get_object_or_404
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from rest_framework import status
 
-from .models import Cart, CartItem
-from .serializers import CartSerializer
+from api.throttles import SearchThrottle
 
-
-def get_or_create_cart(session_id: str):
-    cart, _created = Cart.objects.get_or_create(session_id=session_id)
-    return cart
-
-
-@api_view(["GET"])
-def get_cart(request):
-    session_id = request.query_params.get("session_id", "").strip()
-
-    if not session_id:
-        return Response(
-            {"detail": "session_id is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    cart = get_or_create_cart(session_id)
-    serializer = CartSerializer(cart)
-    return Response(serializer.data)
+from . import services
+from .serializers import AddItemSerializer, CartUpdateSerializer, UpdateItemSerializer, VinSerializer
 
 
 @api_view(["POST"])
-def add_cart_item(request):
-    session_id = request.data.get("session_id", "").strip()
-
-    if not session_id:
-        return Response(
-            {"detail": "session_id is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    required_fields = [
-        "cart_item_id",
-        "quote_id",
-        "part_option_id",
-        "part_number",
-        "name",
-        "final_price_gel",
-    ]
-
-    for field in required_fields:
-        if request.data.get(field) in [None, ""]:
-            return Response(
-                {"detail": f"{field} is required"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-    cart = get_or_create_cart(session_id)
-
-    cart_item_id = request.data["cart_item_id"]
-
-    item, created = CartItem.objects.get_or_create(
-        cart=cart,
-        cart_item_id=cart_item_id,
-        defaults={
-            "quote_id": request.data["quote_id"],
-            "part_option_id": request.data["part_option_id"],
-            "part_number": request.data["part_number"],
-            "name": request.data["name"],
-            "condition": request.data.get("condition", ""),
-            "brand": request.data.get("brand", ""),
-            "availability": request.data.get("availability", ""),
-            "eta_days": request.data.get("eta_days"),
-            "weight_kg": request.data.get("weight_kg"),            
-            "final_price_gel": request.data["final_price_gel"],
-            "currency": request.data.get("currency", "GEL"),
-            "note": request.data.get("note", ""),
-            "customer_notice": request.data.get("customer_notice", ""),
-            "weight_source": request.data.get("weight_source", ""),            
-            "quantity": request.data.get("quantity", 1),
-        },
-    )
-
-    if not created:
-        item.quantity += int(request.data.get("quantity", 1))
-        item.save(update_fields=["quantity", "updated_at"])
-
-    serializer = CartSerializer(cart)
-    return Response(serializer.data, status=status.HTTP_201_CREATED)
+@permission_classes([AllowAny])
+def add_item(request):
+    serializer = AddItemSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    cart = services.add_item(request, serializer.validated_data)
+    return Response(services.cart_data(request, cart), status=201)
 
 
-@api_view(["DELETE"])
-def remove_cart_item(request, cart_item_id):
-    session_id = request.query_params.get("session_id", "").strip()
+@api_view(["GET", "PATCH"])
+@permission_classes([AllowAny])
+def cart(request):
+    if request.method == "PATCH":
+        serializer = CartUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response(services.cart_data(request, services.switch_currency(request, serializer.validated_data["currency"])))
+    return Response(services.cart_data(request, services.get_cart(request, create=False)))
 
-    if not session_id:
-        return Response(
-            {"detail": "session_id is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
 
-    cart = get_object_or_404(Cart, session_id=session_id)
-    item = get_object_or_404(CartItem, cart=cart, cart_item_id=cart_item_id)
-    item.delete()
+@api_view(["PATCH", "DELETE"])
+@permission_classes([AllowAny])
+def item(request, item_id):
+    line = services.own_line(request, item_id)
+    if request.method == "DELETE":
+        line.delete()
+    else:
+        serializer = UpdateItemSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        services.update_line(line, serializer.validated_data)
+    return Response(services.cart_data(request, line.cart))
 
-    serializer = CartSerializer(cart)
-    return Response(serializer.data)
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def apply_vin(request):
+    serializer = VinSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    cart = services.get_cart(request)
+    services.apply_vin(cart, serializer.validated_data["vin"])
+    return Response(services.cart_data(request, cart))
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([SearchThrottle])  # each call queries the supplier
+def refresh_item(request, item_id):
+    return Response(services.cart_data(request, services.refresh_line(request, services.own_line(request, item_id))))

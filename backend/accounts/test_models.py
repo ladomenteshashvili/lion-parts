@@ -6,18 +6,15 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 
-from accounts.models import Customer, CustomerTariff, LegalEntityProfile, TariffMarkup
+from accounts.models import Customer, CustomerTariff, LegalEntityProfile
 from accounts.testing import make_customer
 
 
 class TariffSeedTests(TestCase):
-    def test_migration_seeds_exactly_one_default_tariff_with_markups(self):
+    def test_migration_seeds_exactly_one_default_tariff_with_its_markup(self):
         default = CustomerTariff.objects.get(is_default=True)
-        self.assertEqual((default.name, default.payment_terms), ("Standard", "full"))
-        self.assertEqual(
-            dict(default.markups.values_list("currency", "markup_percent")),
-            {"GEL": Decimal("20.00"), "USD": Decimal("20.00")},
-        )
+        self.assertEqual((default.name, default.payment_terms, default.markup_percent),
+                         ("Standard", "full", Decimal("20.00")))
 
     def test_saving_another_default_unsets_the_first(self):
         partner = CustomerTariff.objects.create(name="Partner", is_default=True, payment_terms="split_70_30")
@@ -29,11 +26,6 @@ class TariffSeedTests(TestCase):
         with self.assertRaises(ValidationError) as ctx:
             default.full_clean()
         self.assertIn("is_default", ctx.exception.message_dict)
-
-    def test_one_markup_per_currency(self):
-        tariff = CustomerTariff.objects.get(is_default=True)
-        with self.assertRaises(IntegrityError), transaction.atomic():
-            TariffMarkup.objects.create(tariff=tariff, currency="GEL", markup_percent=10)
 
 
 class CustomerModelTests(TestCase):
