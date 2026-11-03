@@ -8,7 +8,7 @@ from django.test import TestCase
 
 from accounts.testing import make_customer
 from orders.models import Order, OrderItem
-from orders.services import recalculate_order
+from orders.services import cancel_order, recalculate_order
 from orders.testing import make_order
 from payments.models import Payment
 from payments.services import create_payment
@@ -57,6 +57,10 @@ class AdminActionTests(TestCase):
         self.invoice.refresh_from_db()
         self.assertEqual(self.invoice.status, "pending")
         self.act(PAYMENTS, "payment_received", self.invoice)
+        self.act(PAYMENTS, "mark_refunded", self.invoice)  # D20: nothing is owed back on an open order
+        self.invoice.refresh_from_db()
+        self.assertEqual(self.invoice.status, "paid")
+        cancel_order(self.order.pk, "Supplier failure", actor="operator", operator=True)
         self.act(PAYMENTS, "mark_refunded", self.invoice)
         self.invoice.refresh_from_db()
         self.order.refresh_from_db()

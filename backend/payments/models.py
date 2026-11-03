@@ -39,3 +39,20 @@ class Payment(models.Model):
 
     def __str__(self):
         return f"{self.provider_order_id or self.pk} · {self.amount} {self.currency} · {self.status}"
+
+
+class Refund(models.Model):
+    """A manual (partial) refund of a paid payment (owner decision D20): what an operator paid back outside
+    the platform. amount_paid = paid payments minus their refunds. Never edited or deleted."""
+
+    payment = models.ForeignKey(Payment, on_delete=models.PROTECT, related_name="refunds")
+    amount = models.DecimalField(max_digits=12, decimal_places=2)  # payment currency
+    reason = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+
+    def __str__(self):
+        return f"{self.payment} · -{self.amount}"

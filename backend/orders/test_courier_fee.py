@@ -9,7 +9,7 @@ from rest_framework.test import APIClient
 
 from accounts.testing import make_customer
 from orders.models import CourierFeeProposal, Order, OrderSupportMessage
-from orders.services import cancel_order, propose_courier_fee
+from orders.services import OperatorError, cancel_order, propose_courier_fee
 from orders.testing import make_order
 from payments.services import create_payment, mark_payment
 from pricing.models import ExchangeRate, PickupPoint
@@ -96,9 +96,9 @@ class CourierFeeTests(TestCase):
 
     def test_only_open_delivery_orders(self):
         pickup = make_order(self.customer, status=Order.STATUS_PROCESSING)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(OperatorError):
             propose_courier_fee(pickup.pk, D("10"), "")
-        with self.assertRaises(ValueError):
+        with self.assertRaises(OperatorError):
             propose_courier_fee(self.order(fee=None).pk, D("-1"), "")
 
     def test_decline_switches_to_pickup_without_a_fee(self):

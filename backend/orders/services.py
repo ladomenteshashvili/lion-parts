@@ -7,6 +7,7 @@ from decimal import Decimal
 from django.db import transaction
 from django.db.models import F, Sum
 from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
 
 from pricing.discounts import round2
 
@@ -24,6 +25,14 @@ CANCELLABLE_ITEM_STATUSES = {OrderItem.STATUS_CREATED, OrderItem.STATUS_PAYMENT_
 ZERO = Decimal("0.00")
 
 
+class OperatorError(Exception):
+    """An operator action that can't be applied (admin shows the message, demo endpoints a field error)."""
+
+    def __init__(self, field, message):
+        super().__init__(message)
+        self.field, self.message = field, message
+
+
 def assign_order_number(order):
     """LP-{year}-{pk:05d}, right after the insert, inside the creating transaction (unique by pk)."""
     order.order_number = f"LP-{order.created_at.year}-{order.pk:05d}"
@@ -35,11 +44,13 @@ def _live_items(order):
 
 
 def paid_amount(order):
-    """Sum of paid payments (a refunded payment is no longer `paid`)."""
-    payments = getattr(order, "payments", None)
-    if payments is None:  # the payments app arrives with LP-BE-701
-        return ZERO
-    return payments.filter(status="paid").aggregate(s=Sum("amount"))["s"] or ZERO
+    """Paid payments minus their partial refunds (a fully refunded payment is no longer `paid`)."""
+    from payments.models import Payment, Refund
+
+    paid = Payment.objects.filter(order=order, status=Payment.STATUS_PAID)
+    collected = paid.aggregate(s=Sum("amount"))["s"] or ZERO
+    returned = Refund.objects.filter(payment__in=paid).aggregate(s=Sum("amount"))["s"] or ZERO
+    return collected - returned
 
 
 def recalculate_order(order):
@@ -187,14 +198,14 @@ def proposed_courier_fee(order):
 def propose_courier_fee(order_id, fee_gel, message, actor=None):
     """Admin/demo (G§7.14 step 2): a new proposal version. GEL orders: the GEL fee as is; USD orders: converted
     with the current NBG rate, which is frozen with the proposal (D21). A pending proposal is superseded;
-    accepted ones stay as they are. Raises RateUnavailable (nothing changes) / ValueError."""
+    accepted ones stay as they are. Raises RateUnavailable (nothing changes) / OperatorError."""
     from pricing.rates import get_usd_rate
 
     order = Order.objects.select_for_update().get(pk=order_id)
     if order.status not in Order.OPEN_STATUSES or order.delivery_method != "delivery":
-        raise ValueError("courier fees are proposed for open delivery orders only")
+        raise OperatorError("fee_gel", _("Courier fees can be proposed for open delivery orders only."))
     if fee_gel is None or fee_gel < 0:
-        raise ValueError("the courier fee must be zero or more")
+        raise OperatorError("fee_gel", _("The courier fee must be zero or more."))
     rate = None if order.currency == "GEL" else get_usd_rate()
     amount = round2(fee_gel) if rate is None else round2(fee_gel / rate)
     order.courier_fee_proposals.filter(status=CourierFeeProposal.STATUS_PENDING).update(
@@ -295,7 +306,7 @@ def cancel_order(order_id, reason, *, actor, actor_name="", operator=False):
     from payments.services import mark_payment
 
     if operator and not reason.strip():
-        raise ValueError("an operator cancellation needs a reason")
+        raise OperatorError("reason", _("A cancellation reason is required."))
     open_payments = list(Payment.objects.select_for_update().filter(order_id=order_id,
                                                                      status__in=Payment.OPEN_STATUSES))
     order = Order.objects.select_for_update().get(pk=order_id)
@@ -357,3 +368,117 @@ def respond_courier_fee(order_id, accept):
     recalculate_order(order)
     sync_order_status(order)
     return order
+
+
+ACTION_TYPES = ("price_change", "eta_change", "alternative_required", "fitment_issue", "weight_change", "other")
+OPERATOR_STATUSES = (OrderItem.STATUS_CHECKING, OrderItem.STATUS_PURCHASED, OrderItem.STATUS_RECEIVED_USA,
+                     OrderItem.STATUS_SHIPPED_TO_GEORGIA, OrderItem.STATUS_RECEIVED_GEORGIA,
+                     OrderItem.STATUS_READY_FOR_PICKUP, OrderItem.STATUS_COMPLETED, OrderItem.STATUS_CANCELLED)
+PAID_STATUSES_ONLY = (OrderItem.STATUS_READY_FOR_PICKUP, OrderItem.STATUS_COMPLETED)
+
+
+def _lock_for_operator(item_id):
+    """(order, item) row-locked, order first (the lock order used everywhere)."""
+    order_id = OrderItem.objects.values_list("order_id", flat=True).get(pk=item_id)
+    order = Order.objects.select_for_update().get(pk=order_id)
+    return order, OrderItem.objects.select_for_update().get(pk=item_id)
+
+
+def _positive(field, value):
+    if value is None or value <= 0:
+        raise OperatorError(field, _("Enter a value greater than zero."))
+
+
+@transaction.atomic
+def request_item_action(item_id, action_type, message="", *, actor_name="", proposed_unit_price=None,
+                        proposed_eta_min_days=None, proposed_eta_max_days=None, proposed_part_number="",
+                        proposed_name="", proposed_weight_kg=None):
+    """Operator asks the customer to decide (G§7.9). Proposed prices are in the order currency. A weight change
+    after purchase is a notice (acknowledge only; the item keeps its status). -> the item."""
+    order, item = _lock_for_operator(item_id)
+    if action_type not in ACTION_TYPES:
+        raise OperatorError("action_type", _("Unknown action type."))
+    if order.status not in (Order.STATUS_PROCESSING, Order.STATUS_ACTION_REQUIRED):
+        raise OperatorError("action_type", _("Customer decisions can be requested on paid, open orders only."))
+    if item.item_status in (OrderItem.STATUS_CANCELLED, OrderItem.STATUS_COMPLETED):
+        raise OperatorError("action_type", _("This item is already cancelled or completed."))
+    if action_type in ("price_change", "weight_change") or (action_type == "alternative_required"
+                                                            and proposed_unit_price is not None):
+        _positive("proposed_unit_price", proposed_unit_price)
+    if action_type == "price_change" and proposed_unit_price == item.unit_price:
+        raise OperatorError("proposed_unit_price", _("The proposed price equals the current price."))
+    if action_type == "eta_change":
+        _positive("proposed_eta_min_days", proposed_eta_min_days)
+        _positive("proposed_eta_max_days", proposed_eta_max_days)
+        if proposed_eta_min_days > proposed_eta_max_days:
+            raise OperatorError("proposed_eta_max_days", _("The maximum can't be less than the minimum."))
+        if (proposed_eta_min_days, proposed_eta_max_days) == (item.eta_min_days, item.eta_max_days):
+            raise OperatorError("proposed_eta_min_days", _("The proposed delivery time equals the current one."))
+    if action_type == "alternative_required":
+        if not proposed_part_number.strip() or not proposed_name.strip():
+            raise OperatorError("proposed_part_number", _("Enter the alternative part number and name."))
+        if proposed_part_number.strip().upper() == item.part_number.upper():
+            raise OperatorError("proposed_part_number", _("The alternative is the same part number."))
+    if action_type == "weight_change":
+        _positive("proposed_weight_kg", proposed_weight_kg)
+    if action_type in ("fitment_issue", "other") and not message.strip():
+        raise OperatorError("message", _("Write a message for the customer."))
+
+    before = {"item_status": item.item_status, "action_type": item.action_type}
+    for field, value in PROPOSED_CLEAR.items():
+        setattr(item, field, value)
+    item.action_required, item.action_type, item.action_message = True, action_type, message.strip()
+    item.proposed_unit_price, item.proposed_part_number = proposed_unit_price, proposed_part_number.strip()
+    item.proposed_name, item.proposed_weight_kg = proposed_name.strip(), proposed_weight_kg
+    item.proposed_eta_min_days, item.proposed_eta_max_days = proposed_eta_min_days, proposed_eta_max_days
+    if not (action_type == "weight_change" and item.purchased_at):
+        item.item_status = OrderItem.STATUS_ACTION_REQUIRED
+    item.save()
+    old, new = action_change(item)
+    params = {"amount": _str(proposed_unit_price) or "0", "currency": order.currency,
+              "part_number": item.proposed_part_number, "weight_kg": _str(proposed_weight_kg),
+              "eta_min_days": proposed_eta_min_days, "eta_max_days": proposed_eta_max_days}
+    create_item_event(item, "action_requested", text_code=f"action_requested_{action_type}", params=params,
+                      message=item.action_message, old={**before, **_jsonable(old)},
+                      new={"item_status": item.item_status, "action_type": action_type, **_jsonable(new)},
+                      actor=OrderItemEvent.ACTOR_OPERATOR, actor_name=actor_name, visible=True)
+    sync_order_status(order)
+    # LP-BE-903: notify(order.customer, "action_required", order=order, item=item)
+    return item
+
+
+@transaction.atomic
+def set_item_status(item_id, status, *, actor_name="", reason="", bypass_balance_guard=False):
+    """Operator status change (G§7.8). Balance guard: no ready_for_pickup/completed while balance_due > 0
+    (only demo endpoints bypass it). `purchased` stamps purchased_at. Cancelling needs a reason and may
+    happen at any stage (D19); the money is recalculated (overpaid -> refund_pending). A pending customer
+    action is closed. -> True when changed, False when the item already had that status."""
+    order, item = _lock_for_operator(item_id)
+    reason = reason.strip()
+    if status not in OPERATOR_STATUSES:
+        raise OperatorError("item_status", _("This status can't be set here."))
+    if order.status in (Order.STATUS_CANCELLED, Order.STATUS_COMPLETED) or \
+            item.item_status == OrderItem.STATUS_CANCELLED:
+        raise OperatorError("item_status", _("The order or item is already closed."))
+    if order.status == Order.STATUS_PAYMENT_PENDING and status != OrderItem.STATUS_CANCELLED:
+        raise OperatorError("item_status", _("The order is not paid yet."))
+    if item.item_status == status:
+        return False
+    if status in PAID_STATUSES_ONLY and order.balance_due > 0 and not bypass_balance_guard:
+        raise OperatorError("item_status", _("The order still has a balance due."))
+    if status == OrderItem.STATUS_CANCELLED and not reason:
+        raise OperatorError("reason", _("A cancellation reason is required."))
+    before = {"item_status": item.item_status, "action_type": item.action_type}
+    if status == OrderItem.STATUS_PURCHASED and item.purchased_at is None:
+        item.purchased_at = timezone.now()
+    for field, value in PROPOSED_CLEAR.items():
+        setattr(item, field, value)
+    item.item_status = status
+    item.save()
+    create_item_event(item, "status_changed", text_code=f"status_{status}", message=reason, old=before,
+                      new={"item_status": status, **({"reason": reason} if reason else {})},
+                      actor=OrderItemEvent.ACTOR_OPERATOR, actor_name=actor_name, visible=True)
+    recalculate_order(order)
+    sync_order_status(order)
+    # LP-BE-903: notify(order.customer, "status_update", order=order, item=item)
+    return True
