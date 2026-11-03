@@ -1,5 +1,9 @@
+import logging
+
 import requests
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 
 class SenderGeError(Exception):
@@ -13,6 +17,8 @@ def send_sms(destination, content):
     destination must be Georgian 9 digit mobile number without +995.
     """
     if not settings.SENDER_GE_ENABLED:
+        # Never log the content (it may hold a code); the last digits identify the recipient enough.
+        logger.warning("SMS not delivered: SENDER_GE_ENABLED=False (recipient …%s)", str(destination)[-2:])
         return {
             "provider": "console",
             "messageId": "console",

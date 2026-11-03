@@ -1,6 +1,7 @@
 """Phone OTP (G§5.7): 6 digits, stored hashed, TTL, resend cooldown per (session, phone, purpose),
 max attempts per code. Codes and API keys are never logged."""
 
+import logging
 import math
 import secrets
 from datetime import timedelta
@@ -16,6 +17,12 @@ from .models import PhoneVerificationCode
 from .sms import SenderGeError, send_sms
 
 SMS_TEXT = _("Lion Parts code: {code}")
+
+logger = logging.getLogger(__name__)
+
+
+def demo_codes_enabled():
+    return settings.SMS_DEMO_MODE and (settings.DEBUG or settings.ENABLE_DEMO_ENDPOINTS)
 
 
 def mask_phone(phone):
@@ -37,6 +44,11 @@ def send_code(*, session_key, phone, purpose, customer=None, language=None):
     if latest and (age := (now - latest.created_at).total_seconds()) < cooldown:
         raise ApiError("otp_resend_too_soon", status=409, resend_in=math.ceil(cooldown - age))
 
+    if not settings.SENDER_GE_ENABLED and not demo_codes_enabled():
+        # Nobody could ever receive this code: fail loudly instead of pretending it was sent.
+        logger.error("OTP not sent: SMS delivery is disabled and demo codes are off")
+        raise ApiError("sms_failed", status=502)
+
     code = f"{secrets.randbelow(10**6):06d}"
     with translation.override(language or translation.get_language()):
         text = str(SMS_TEXT).format(code=code)
@@ -56,7 +68,7 @@ def send_code(*, session_key, phone, purpose, customer=None, language=None):
     otp.save()
 
     response = {"masked_phone": mask_phone(phone), "expires_in": ttl, "resend_in": cooldown}
-    if settings.SMS_DEMO_MODE and (settings.DEBUG or settings.ENABLE_DEMO_ENDPOINTS):
+    if demo_codes_enabled():
         response["demo_code"] = code
     return response
 

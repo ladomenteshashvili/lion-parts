@@ -53,7 +53,10 @@ def save_registration_draft(request, data):
 
 def load_registration_draft(request):
     draft = request.session.get(DRAFT_KEY)
-    if not draft or datetime.fromisoformat(draft["expires_at"]) <= timezone.now():
+    if draft and datetime.fromisoformat(draft["expires_at"]) <= timezone.now():
+        del request.session[DRAFT_KEY]  # don't keep the applicant's personal data longer than needed
+        draft = None
+    if not draft:
         raise ApiError("registration_expired")
     return draft
 

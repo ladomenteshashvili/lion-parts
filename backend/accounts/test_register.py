@@ -161,6 +161,7 @@ class ResendCodeTests(TestCase):
         session["registration_draft"]["expires_at"] = (timezone.now() - timedelta(seconds=1)).isoformat()
         session.save()
         self.assertEqual(self.resend().json()["code"], "registration_expired")
+        self.assertNotIn("registration_draft", self.client.session)  # personal data is not kept
 
 
 @override_settings(SMS_DEMO_MODE=True, ENABLE_DEMO_ENDPOINTS=True)

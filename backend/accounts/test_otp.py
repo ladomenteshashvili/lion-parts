@@ -6,12 +6,12 @@ from datetime import timedelta
 from unittest import mock
 
 from django.db import connection
-from django.test import TestCase, TransactionTestCase, override_settings
+from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
 from accounts import otp
 from accounts.models import PhoneVerificationCode
-from accounts.sms import SenderGeError
+from accounts.sms import SenderGeError, send_sms
 from api.errors import ApiError
 
 ARGS = {"session_key": "s1", "phone": "555123456", "purpose": "registration"}
@@ -94,8 +94,32 @@ class SendCodeTests(TestCase):
         ]
         for i, (demo, debug, endpoints, present) in enumerate(cases):
             with self.subTest(demo=demo, debug=debug, endpoints=endpoints), \
-                    self.settings(SMS_DEMO_MODE=demo, DEBUG=debug, ENABLE_DEMO_ENDPOINTS=endpoints):
+                    self.settings(SMS_DEMO_MODE=demo, DEBUG=debug, ENABLE_DEMO_ENDPOINTS=endpoints,
+                                  SENDER_GE_ENABLED=True), \
+                    mock.patch("accounts.otp.send_sms", return_value={}):
                 self.assertEqual("demo_code" in send(session_key=f"d{i}"), present)
+
+    @override_settings(SENDER_GE_ENABLED=False, SMS_DEMO_MODE=False)
+    def test_disabled_sms_without_demo_codes_fails_loudly(self):
+        with mock.patch("accounts.otp.send_sms") as sms, self.assertLogs("accounts.otp", "ERROR") as logs:
+            err = error_of(send)
+        self.assertEqual((err["code"], err["status"]), ("sms_failed", 502))
+        sms.assert_not_called()
+        self.assertFalse(PhoneVerificationCode.objects.exists())
+        self.assertIn("SMS delivery is disabled", logs.output[0])
+
+
+class SendSmsTests(SimpleTestCase):
+    @override_settings(SENDER_GE_ENABLED=False)
+    def test_disabled_delivery_is_logged_without_the_content(self):
+        with mock.patch("accounts.sms.requests.post") as post, self.assertLogs("accounts.sms", "WARNING") as logs:
+            result = send_sms("555123456", "Lion Parts code: 123456")
+        post.assert_not_called()
+        self.assertEqual(result["provider"], "console")
+        self.assertIn("SENDER_GE_ENABLED=False", logs.output[0])
+        self.assertIn("56", logs.output[0])
+        self.assertNotIn("123456", logs.output[0])
+        self.assertNotIn("555123456", logs.output[0])
 
 
 @override_settings(SMS_DEMO_MODE=True, ENABLE_DEMO_ENDPOINTS=True)
