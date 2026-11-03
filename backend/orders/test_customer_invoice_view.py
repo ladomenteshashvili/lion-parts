@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from django.test import TestCase
 
-from accounts.models import Customer, CustomerSession
+from accounts.models import Customer
 from orders.models import Order, OrderItem, Payment
 
 from api.legacy import legacy_endpoint_test

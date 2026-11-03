@@ -1,37 +1,23 @@
 from django.urls import path
 
-from .views import (
-    demo_login,
-    get_profile,
-    login_with_password,
-    reset_password,
-    send_password_reset_code,
-    send_legal_entity_mobile_verification_code,
-    send_phone_verification_code,
-    set_profile_password,
-    upsert_legal_entity_profile,
-    verify_legal_entity_mobile_code,
-    verify_phone_code,
-)
+from . import views
 
 urlpatterns = [
-    path("profile/", get_profile, name="accounts-profile"),
-    path("profile/password/", set_profile_password, name="accounts-profile-password"),
-    path("profile/legal-entity/", upsert_legal_entity_profile, name="accounts-profile-legal-entity"),
-    path(
-        "profile/legal-entity/send-code/",
-        send_legal_entity_mobile_verification_code,
-        name="accounts-profile-legal-entity-send-code",
-    ),
-    path(
-        "profile/legal-entity/verify-code/",
-        verify_legal_entity_mobile_code,
-        name="accounts-profile-legal-entity-verify-code",
-    ),
-    path("login-password/", login_with_password, name="accounts-login-password"),
-    path("password-reset/send-code/", send_password_reset_code, name="accounts-password-reset-send-code"),
-    path("password-reset/", reset_password, name="accounts-password-reset"),
-    path("demo-login/", demo_login, name="accounts-demo-login"),
-    path("send-code/", send_phone_verification_code, name="accounts-send-code"),
-    path("verify-code/", verify_phone_code, name="accounts-verify-code"),
+    path("profile/", views.profile, name="profile"),
+    path("profile/password/", views.profile_password, name="profile-password"),
+    path("profile/email/", views.profile_email, name="profile-email"),
+    path("profile/phone/", views.profile_phone, name="profile-phone"),
+    path("profile/phone/verify/", views.profile_phone_verify, name="profile-phone-verify"),
+    path("profile/email/confirm/", views.profile_email_confirm, name="profile-email-confirm"),
+    path("auth/csrf/", views.csrf, name="auth-csrf"),
+    path("auth/me/", views.me, name="auth-me"),
+    path("auth/login/", views.login_view, name="auth-login"),
+    path("auth/logout/", views.logout_view, name="auth-logout"),
+    path("auth/password-reset/", views.password_reset, name="auth-password-reset"),
+    path("auth/password-reset/confirm/", views.password_reset_confirm, name="auth-password-reset-confirm"),
+    path("auth/email/send-verification/", views.email_send_verification, name="auth-email-send-verification"),
+    path("auth/email/verify/", views.email_verify, name="auth-email-verify"),
+    path("auth/register/", views.register, name="auth-register"),
+    path("auth/register/verify-phone/", views.register_verify_phone, name="auth-register-verify-phone"),
+    path("auth/register/resend-code/", views.register_resend_code, name="auth-register-resend-code"),
 ]

@@ -1,0 +1,4 @@
+<div class="translated-json">{% for widget in widget.subwidgets %}
+  <div style="margin-bottom:4px"><label for="{{ widget.attrs.id }}" style="display:inline-block;min-width:9em">{{ widget.language }}</label>
+  {% include widget.template_name %}</div>{% endfor %}
+</div>

@@ -8,7 +8,8 @@ from rest_framework.test import APIClient
 
 from .models import CarrierService, PartQuoteRequest, PartSearchLog
 from .admin import PartQuoteRequestAdmin
-from accounts.models import Customer, CustomerSession, CustomerTariff
+from accounts.models import Customer, CustomerTariff
+from accounts.testing import make_customer
 
 from api.legacy import legacy_endpoint_test
 
@@ -392,12 +393,7 @@ class PartQuoteRequestApiTests(TestCase):
         self.client = APIClient()
         self.session_id = "guest-test-session"
 
-        Customer.objects.create(
-            session_id=self.session_id,
-            name="Test Customer",
-            phone="+995555123456",
-            can_request_quote=True,
-        )
+        self.customer = make_customer(first_name="Test", last_name="Customer")
 
     @legacy_endpoint_test("LP-BE-406")
     def test_create_quote_request(self):
@@ -529,14 +525,14 @@ class PartQuoteRequestApiTests(TestCase):
 
     @legacy_endpoint_test("LP-BE-406")
     def test_feed_shows_processing_and_then_ready_price(self):
-        customer = Customer.objects.get(session_id=self.session_id)
+        customer = self.customer
         customer.is_phone_verified = True
         customer.save(update_fields=["is_phone_verified", "updated_at"])
 
         quote_request = PartQuoteRequest.objects.create(
             session_id=self.session_id,
             part_number="NO-WEIGHT-1",
-            customer_name=customer.name,
+            customer_name=customer.full_name,
             customer_phone=customer.phone,
             name="Part without supplier weight",
         )
@@ -625,12 +621,12 @@ class PartQuoteRequestApiTests(TestCase):
     @override_settings(PARTS_PROVIDER="amt")
     @patch("parts.admin.calculate_part_price_provider")
     def test_admin_action_calculates_weight_quote_price(self, calculate_price):
-        customer = Customer.objects.get(session_id=self.session_id)
+        customer = self.customer
         quote_request = PartQuoteRequest.objects.create(
             session_id=self.session_id,
             request_type=PartQuoteRequest.REQUEST_TYPE_WEIGHT_PRICE,
             part_number="51118070648",
-            customer_name=customer.name,
+            customer_name=customer.full_name,
             customer_phone=customer.phone,
             quote_id="AMT-51118070648",
             part_option_id="AMT-1-51118070648",
@@ -673,12 +669,12 @@ class PartQuoteRequestApiTests(TestCase):
         self,
         calculate_price,
     ):
-        customer = Customer.objects.get(session_id=self.session_id)
+        customer = self.customer
         quote_request = PartQuoteRequest.objects.create(
             session_id=self.session_id,
             request_type=PartQuoteRequest.REQUEST_TYPE_WEIGHT_PRICE,
             part_number="51118070648",
-            customer_name=customer.name,
+            customer_name=customer.full_name,
             customer_phone=customer.phone,
             quote_id="AMT-51118070648",
             part_option_id="AMT-1-51118070648",
@@ -699,7 +695,7 @@ class PartQuoteRequestApiTests(TestCase):
 
     @legacy_endpoint_test("LP-BE-406")
     def test_verified_regular_customer_can_create_weight_price_request(self):
-        customer = Customer.objects.get(session_id=self.session_id)
+        customer = self.customer
         customer.can_request_quote = False
         customer.is_phone_verified = True
         customer.save(update_fields=[
@@ -750,7 +746,7 @@ class PartQuoteRequestApiTests(TestCase):
 
     @legacy_endpoint_test("LP-BE-406")
     def test_weight_price_request_requires_selected_offer(self):
-        customer = Customer.objects.get(session_id=self.session_id)
+        customer = self.customer
         customer.is_phone_verified = True
         customer.save(update_fields=["is_phone_verified", "updated_at"])
 

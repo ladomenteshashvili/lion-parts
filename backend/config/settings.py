@@ -108,6 +108,7 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 8}},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+    {"NAME": "accounts.validators.ComplexityValidator"},
 ]
 
 PASSWORD_RESET_TIMEOUT = 60 * 60
@@ -251,6 +252,23 @@ SENDER_GE_API_KEY = config("SENDER_GE_API_KEY", default="")
 # Demo endpoints expose emails and demo codes; refuse them alongside real SMS or payments (= production).
 if ENABLE_DEMO_ENDPOINTS and (SENDER_GE_ENABLED or PAYMENT_PROVIDER != "fake"):
     raise ImproperlyConfigured("ENABLE_DEMO_ENDPOINTS must be False when SENDER_GE_ENABLED or PAYMENT_PROVIDER is real.")
+
+# Deployment environment (master plan D10). Fail-closed: unset means production, so a forgotten
+# value can never switch on debug, demo routes, demo SMS codes or a mail backend that drops emails.
+DEPLOY_ENVS = ("production", "staging", "development", "test")
+DEPLOY_ENV = config("DEPLOY_ENV", default="production")
+if DEPLOY_ENV not in DEPLOY_ENVS:
+    raise ImproperlyConfigured(f"DEPLOY_ENV must be one of {', '.join(DEPLOY_ENVS)}.")
+if DEPLOY_ENV == "production":
+    _forbidden = [name for name, is_set in (
+        ("DEBUG", DEBUG),
+        ("ENABLE_DEMO_ENDPOINTS", ENABLE_DEMO_ENDPOINTS),
+        ("SMS_DEMO_MODE", SMS_DEMO_MODE),
+        ("PARTS_PROVIDER=demo", PARTS_PROVIDER == "demo"),
+        (f"EMAIL_BACKEND={email_backend}", bool({"locmem", "console", "dummy", "filebased"} & set(email_backend.split(".")))),
+    ) if is_set]
+    if _forbidden:
+        raise ImproperlyConfigured(f"DEPLOY_ENV=production forbids: {', '.join(_forbidden)}.")
 SENDER_GE_SEND_URL = config(
     "SENDER_GE_SEND_URL",
     default="https://sender.ge/api/send.php",

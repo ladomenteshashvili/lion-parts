@@ -1,0 +1,8 @@
+{% load i18n %}{% autoescape off %}{% blocktranslate %}Hello, {{ name }}!{% endblocktranslate %}
+
+{% blocktranslate %}The email address of your Lion Parts account was changed to {{ new_email }}.{% endblocktranslate %}
+
+{% translate "If you didn't make this change, contact Lion Parts support right away." %}
+
+Lion Parts
+{% endautoescape %}

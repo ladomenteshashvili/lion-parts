@@ -1,0 +1,9 @@
+{% load i18n %}{% autoescape off %}{% blocktranslate %}Hello, {{ name }}!{% endblocktranslate %}
+
+{% translate "To use this address for your Lion Parts account, open this link:" %}
+{{ link }}
+
+{% translate "The link is valid for 48 hours. Until you confirm, your old address stays active." %}
+
+Lion Parts
+{% endautoescape %}

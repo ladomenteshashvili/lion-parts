@@ -6,7 +6,8 @@ client-generated `session_id` (backend-review F1–F4, F6) and cannot pass the n
 below now returns 404. The legacy browser frontend in `frontend/` therefore no longer works against
 this backend; the external frontend builds against the new contract (AI_IMPLEMENTATION_GUIDE §8).
 
-The view modules stay in the tree (the Django admin imports helpers from `orders/views.py`; AMT,
+**LP-BE-201** deleted the accounts views, serializers and URLs (their routes are frozen in
+`api.legacy.REMOVED_ROUTES` and still asserted unreachable). The other view modules stay in the tree (the Django admin imports helpers from `orders/views.py`; AMT,
 pricing and invoice logic are reused) and are deleted by **LP-BE-1201**. Their tests are kept but
 skipped with the replacing story in the skip reason (`api/legacy.py::legacy_endpoint_test`).
 `api/tests/test_legacy.py` asserts that every route of the modules in `api.legacy.LEGACY_URLCONFS`

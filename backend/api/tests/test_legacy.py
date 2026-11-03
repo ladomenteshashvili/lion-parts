@@ -7,12 +7,13 @@ import uuid
 from django.test import SimpleTestCase, override_settings
 from django.urls import Resolver404, resolve
 
-from api.legacy import LEGACY_URLCONFS
+from api.legacy import LEGACY_URLCONFS, REMOVED_ROUTES
 
 SAMPLES = {"int": "1", "uuid": str(uuid.uuid4()), "path": "a/b", "str": "LP-1", "slug": "x"}
 
 
 def legacy_paths():
+    yield from REMOVED_ROUTES
     for module, prefix in LEGACY_URLCONFS.items():
         for pattern in importlib.import_module(module).urlpatterns:
             route = re.sub(r"<(?:(\w+):)?\w+>", lambda m: SAMPLES[m.group(1) or "str"], str(pattern.pattern))

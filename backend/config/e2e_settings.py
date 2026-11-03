@@ -1,6 +1,7 @@
 import os
 
 os.environ.setdefault("SECRET_KEY", "e2e-secret-key")
+os.environ.setdefault("DEPLOY_ENV", "test")
 os.environ.setdefault("DEBUG", "True")
 os.environ.setdefault("ALLOWED_HOSTS", "localhost,127.0.0.1")
 

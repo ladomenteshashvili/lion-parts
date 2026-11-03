@@ -1,1047 +1,213 @@
-import secrets
-from datetime import timedelta
+"""Auth and profile endpoints (G§8.2, G§8.3). Thin views: validation in serializers, logic in services."""
 
-from django.conf import settings
-from django.core.exceptions import ValidationError
-from django.core.validators import validate_email
-from django.db import transaction
-from django.utils import timezone
-from rest_framework import status
-from rest_framework.decorators import api_view
+from django.contrib.auth import authenticate, logout, update_session_auth_hash
+from django.middleware.csrf import get_token
+from django.utils.translation import gettext_lazy as _
+from django.views.decorators.csrf import ensure_csrf_cookie
+from rest_framework import serializers
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from .models import Customer, LegalEntityProfile, PhoneVerificationCode
-from .customer_sessions import attach_customer_session, get_customer_for_session
-from .serializers import CustomerSerializer
-from .sms import SenderGeError, send_sms
+from api.errors import ApiError
+from api.throttles import (
+    EmailLoginThrottle, EmailSendThrottle, LoginIpThrottle, OtpSendIpThrottle, OtpVerifyThrottle,
+    PasswordResetThrottle, PhoneThrottle, RegisterThrottle,
+)
+
+from . import otp, services
+from .serializers import (
+    CodeSerializer, CustomerSerializer, DeleteAccountSerializer, EmailChangeSerializer, LoginSerializer, PasswordChangeSerializer, PasswordResetConfirmSerializer,
+    PasswordResetSerializer, PhoneChangeSerializer, ProfileUpdateSerializer, RegisterSerializer, TokenSerializer, check_password_rules,
+)
 
 
-def normalize_georgian_phone(phone):
-    digits = "".join(ch for ch in str(phone or "") if ch.isdigit())
-
-    if digits.startswith("995"):
-        digits = digits[3:]
-
-    if len(digits) != 9 or not digits.startswith("5"):
-        raise ValueError("customer_phone must be a Georgian mobile number")
-
-    return digits
-
-
-def generate_sms_code():
-    return f"{secrets.randbelow(1000000):06d}"
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([RegisterThrottle, PhoneThrottle, OtpSendIpThrottle])
+def register(request):
+    serializer = RegisterSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    services.ensure_session(request)
+    draft = services.save_registration_draft(request, serializer.validated_data)
+    return Response(services.send_registration_code(request, draft))
 
 
-def is_real_customer_name(name, phone):
-    cleaned_name = str(name or "").strip()
-    return bool(cleaned_name) and cleaned_name != phone
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([PhoneThrottle, OtpSendIpThrottle])
+def register_resend_code(request):
+    draft = services.load_registration_draft(request)
+    return Response(services.send_registration_code(request, draft))
 
 
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([OtpVerifyThrottle])
+def register_verify_phone(request):
+    draft = services.load_registration_draft(request)
+    serializer = CodeSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    otp.verify_code(session_key=request.session.session_key, phone=draft["phone"], purpose="registration",
+                    code=serializer.validated_data["code"])  # a wrong code leaves the draft for a retry
+    customer = services.create_customer_from_draft(draft)
+    services.login_customer(request, customer)
+    request.session.pop(services.DRAFT_KEY, None)
+    sent = services.send_email_verification(customer)
+    return Response({"customer": CustomerSerializer(customer).data, "email_verification_sent": sent,
+                     "csrf_token": get_token(request)}, status=201)
 
-def get_verified_customer_for_profile_action(request):
-    session_id = request.data.get("session_id", "").strip()
-
-    if not session_id:
-        return None, Response(
-            {"detail": "session_id is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    customer = get_customer_for_session(session_id)
-
-    if not customer or not customer.is_phone_verified:
-        return None, Response(
-            {"detail": "phone verification required"},
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
-    return customer, None
-
-
-def get_customer_legal_entity_profile(customer):
-    try:
-        return customer.legal_entity_profile
-    except LegalEntityProfile.DoesNotExist:
-        return None
+@ensure_csrf_cookie
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def csrf(request):
+    return Response({"csrf_token": get_token(request)})
 
 
-def get_existing_verified_customer_by_phone(phone):
-    return (
-        Customer.objects.filter(
-            phone=phone,
-            is_phone_verified=True,
-        )
-        .order_by("-updated_at")
-        .first()
-    )
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([LoginIpThrottle, EmailLoginThrottle])
+def login_view(request):
+    serializer = LoginSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    user = authenticate(request, username=serializer.validated_data["email"].strip().lower(),
+                        password=serializer.validated_data["password"])
+    if not services.can_log_in(user):
+        raise ApiError("invalid_credentials")  # same body for every failure (no account enumeration)
+    services.login_customer(request, user.customer)
+    return Response({"customer": CustomerSerializer(user.customer).data, "csrf_token": get_token(request)})
+
+
+@api_view(["POST"])
+def logout_view(request):
+    logout(request)
+    return Response({"csrf_token": get_token(request)})
 
 
 @api_view(["GET"])
-def get_profile(request):
-    session_id = request.query_params.get("session_id", "").strip()
-
-    if not session_id:
-        return Response(
-            {"detail": "session_id is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    customer = get_customer_for_session(session_id)
-
-    if not customer:
-        return Response(
-            {"detail": "profile not found"},
-            status=status.HTTP_404_NOT_FOUND,
-        )
-
-    serializer = CustomerSerializer(customer)
-    return Response(serializer.data)
-
-
-
-LEGAL_ENTITY_REQUIRED_FIELDS = [
-    "company_identification_code",
-    "company_official_name",
-    "legal_address",
-    "contact_first_name",
-    "contact_last_name",
-    "email",
-    "mobile_phone",
-]
-
-
-def clean_required_text(data, field_name):
-    value = str(data.get(field_name, "") or "").strip()
-
-    if not value:
-        raise ValueError(f"{field_name} is required")
-
-    return value
-
-
-def clean_legal_entity_email(email):
-    email = str(email or "").strip().lower()
-
-    if not email:
-        raise ValueError("email is required")
-
-    try:
-        validate_email(email)
-    except ValidationError:
-        raise ValueError("invalid email")
-
-    return email
-
-
-def build_legal_entity_payload(data):
-    payload = {
-        "company_identification_code": clean_required_text(
-            data,
-            "company_identification_code",
-        ),
-        "company_official_name": clean_required_text(
-            data,
-            "company_official_name",
-        ),
-        "legal_address": clean_required_text(data, "legal_address"),
-        "contact_first_name": clean_required_text(data, "contact_first_name"),
-        "contact_last_name": clean_required_text(data, "contact_last_name"),
-        "email": clean_legal_entity_email(data.get("email")),
-    }
-
-    payload["mobile_phone"] = normalize_georgian_phone(
-        clean_required_text(data, "mobile_phone")
-    )
-
-    return payload
-
-
-@api_view(["POST", "PUT", "PATCH"])
-def upsert_legal_entity_profile(request):
-    session_id = request.data.get("session_id", "").strip()
-
-    if not session_id:
-        return Response(
-            {"detail": "session_id is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    customer = get_customer_for_session(session_id)
-
-    if not customer or not customer.is_phone_verified:
-        return Response(
-            {"detail": "phone verification required"},
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
-    try:
-        payload = build_legal_entity_payload(request.data)
-    except ValueError as exc:
-        return Response(
-            {"detail": str(exc)},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    duplicate_company = LegalEntityProfile.objects.filter(
-        company_identification_code=payload["company_identification_code"],
-    ).exclude(customer=customer).exists()
-
-    if duplicate_company:
-        return Response(
-            {"detail": "company identification code already exists"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    duplicate_email = LegalEntityProfile.objects.filter(
-        email__iexact=payload["email"],
-    ).exclude(customer=customer).exists()
-
-    if duplicate_email:
-        return Response(
-            {"detail": "email already exists"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    old_profile = getattr(customer, "legal_entity_profile", None)
-
-    is_mobile_verified = payload["mobile_phone"] == customer.phone
-    mobile_verified_at = timezone.now() if is_mobile_verified else None
-
-    if old_profile and old_profile.mobile_phone == payload["mobile_phone"]:
-        is_mobile_verified = old_profile.is_mobile_verified
-        mobile_verified_at = old_profile.mobile_verified_at
-
-    LegalEntityProfile.objects.update_or_create(
-        customer=customer,
-        defaults={
-            **payload,
-            "is_mobile_verified": is_mobile_verified,
-            "mobile_verified_at": mobile_verified_at,
-            "is_active": True,
-        },
-    )
-
-    customer.refresh_from_db()
-
-    serializer = CustomerSerializer(customer)
-    return Response(serializer.data, status=status.HTTP_200_OK)
-
+@permission_classes([AllowAny])
+def me(request):
+    customer = getattr(request.user, "customer", None) if services.can_log_in(request.user) else None
+    return Response({
+        "authenticated": customer is not None,
+        "customer": CustomerSerializer(customer).data if customer else None,
+        "cart_count": 0,  # filled by the cart (LP-BE-503)
+        "badges": None,   # filled by notifications (LP-BE-904)
+    })
 
 
 @api_view(["POST"])
-def send_legal_entity_mobile_verification_code(request):
-    customer, error_response = get_verified_customer_for_profile_action(request)
-
-    if error_response:
-        return error_response
-
-    legal_entity = get_customer_legal_entity_profile(customer)
-
-    if not legal_entity:
-        return Response(
-            {"detail": "legal entity profile not found"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if legal_entity.is_mobile_verified:
-        return Response(
-            {
-                "detail": "legal entity mobile already verified",
-                "phone": legal_entity.mobile_phone,
-                "already_verified": True,
-            },
-            status=status.HTTP_200_OK,
-        )
-
-    session_id = request.data.get("session_id", "").strip()
-    mobile_phone = legal_entity.mobile_phone
-
-    resend_after = timezone.now() - timedelta(
-        seconds=settings.PHONE_VERIFICATION_RESEND_SECONDS
-    )
-
-    recent_code = PhoneVerificationCode.objects.filter(
-        session_id=session_id,
-        phone=mobile_phone,
-        purpose=PhoneVerificationCode.PURPOSE_LEGAL_ENTITY_MOBILE,
-        status=PhoneVerificationCode.STATUS_PENDING,
-        created_at__gte=resend_after,
-    ).first()
-
-    if recent_code:
-        remaining_seconds = max(
-            0,
-            int((recent_code.expires_at - timezone.now()).total_seconds()),
-        )
-
-        return Response(
-            {
-                "detail": "verification code already sent",
-                "phone": mobile_phone,
-                "expires_in_seconds": remaining_seconds,
-                "retry_after_seconds": settings.PHONE_VERIFICATION_RESEND_SECONDS,
-                "already_sent": True,
-            },
-            status=status.HTTP_200_OK,
-        )
-
-    code = generate_sms_code()
-    message = f"Lion Parts legal entity verification code: {code}"
-
-    try:
-        provider_response = send_sms(mobile_phone, message)
-    except SenderGeError as exc:
-        return Response(
-            {"detail": str(exc)},
-            status=status.HTTP_502_BAD_GATEWAY,
-        )
-
-    expires_at = timezone.now() + timedelta(
-        minutes=settings.PHONE_VERIFICATION_CODE_TTL_MINUTES
-    )
-
-    with transaction.atomic():
-        PhoneVerificationCode.objects.filter(
-            session_id=session_id,
-            phone=mobile_phone,
-            purpose=PhoneVerificationCode.PURPOSE_LEGAL_ENTITY_MOBILE,
-            status=PhoneVerificationCode.STATUS_PENDING,
-        ).update(status=PhoneVerificationCode.STATUS_EXPIRED)
-
-        verification = PhoneVerificationCode(
-            session_id=session_id,
-            phone=mobile_phone,
-            purpose=PhoneVerificationCode.PURPOSE_LEGAL_ENTITY_MOBILE,
-            status=PhoneVerificationCode.STATUS_PENDING,
-            max_attempts=settings.PHONE_VERIFICATION_MAX_ATTEMPTS,
-            expires_at=expires_at,
-            sent_message_id=str(provider_response.get("messageId", "")),
-            provider_response=provider_response,
-        )
-        verification.set_code(code)
-        verification.save()
-
-    response_data = {
-        "detail": "verification code sent",
-        "phone": mobile_phone,
-        "expires_in_seconds": settings.PHONE_VERIFICATION_CODE_TTL_MINUTES * 60,
-    }
-
-    if not settings.SENDER_GE_ENABLED:
-        response_data["demo_code"] = code
-
-    return Response(response_data, status=status.HTTP_200_OK)
+@throttle_classes([EmailSendThrottle])
+def email_send_verification(request):
+    customer = request.user.customer
+    if customer.is_email_verified:
+        raise ApiError("already_verified", status=409)
+    services.send_email_verification(customer)
+    return Response({"sent_to": customer.user.email, "resend_in": 60})
 
 
 @api_view(["POST"])
-def verify_legal_entity_mobile_code(request):
-    customer, error_response = get_verified_customer_for_profile_action(request)
+@permission_classes([AllowAny])
+def email_verify(request):
+    serializer = TokenSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    customer = services.verify_email_token(serializer.validated_data["token"])
+    own = request.user.is_authenticated and request.user.pk == customer.user_id
+    return Response({"verified": True, "customer": CustomerSerializer(customer).data if own else None})
 
-    if error_response:
-        return error_response
 
-    legal_entity = get_customer_legal_entity_profile(customer)
-
-    if not legal_entity:
-        return Response(
-            {"detail": "legal entity profile not found"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    code = request.data.get("code", "").strip()
-
-    if not code:
-        return Response(
-            {"detail": "code is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    session_id = request.data.get("session_id", "").strip()
-
-    verification = PhoneVerificationCode.objects.filter(
-        session_id=session_id,
-        phone=legal_entity.mobile_phone,
-        purpose=PhoneVerificationCode.PURPOSE_LEGAL_ENTITY_MOBILE,
-        status=PhoneVerificationCode.STATUS_PENDING,
-    ).first()
-
-    if not verification:
-        return Response(
-            {"detail": "verification code not found"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if verification.is_expired():
-        verification.status = PhoneVerificationCode.STATUS_EXPIRED
-        verification.save(update_fields=["status"])
-
-        return Response(
-            {"detail": "verification code expired"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if verification.attempts >= verification.max_attempts:
-        verification.status = PhoneVerificationCode.STATUS_FAILED
-        verification.save(update_fields=["status"])
-
-        return Response(
-            {"detail": "too many attempts"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    verification.attempts += 1
-
-    if not verification.check_code(code):
-        if verification.attempts >= verification.max_attempts:
-            verification.status = PhoneVerificationCode.STATUS_FAILED
-
-        verification.save(update_fields=["attempts", "status"])
-
-        return Response(
-            {"detail": "invalid verification code"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    verification.status = PhoneVerificationCode.STATUS_VERIFIED
-    verification.verified_at = timezone.now()
-    verification.save(update_fields=["status", "verified_at", "attempts"])
-
-    legal_entity.is_mobile_verified = True
-    legal_entity.mobile_verified_at = timezone.now()
-    legal_entity.save(update_fields=["is_mobile_verified", "mobile_verified_at", "updated_at"])
-
-    customer.refresh_from_db()
-
-    serializer = CustomerSerializer(customer)
-    return Response(serializer.data, status=status.HTTP_200_OK)
+RESET_SENT = _("If the account exists, a reset link has been sent.")
+PASSWORD_CHANGED = _("Password changed.")
 
 
 @api_view(["POST"])
-def demo_login(request):
-    session_id = request.data.get("session_id", "").strip()
-    customer_name = request.data.get("customer_name", "").strip()
-    customer_phone = request.data.get("customer_phone", "").strip()
-
-    if not session_id:
-        return Response(
-            {"detail": "session_id is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if not customer_name:
-        return Response(
-            {"detail": "customer_name is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if not customer_phone:
-        return Response(
-            {"detail": "customer_phone is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    customer, _created = Customer.objects.update_or_create(
-        session_id=session_id,
-        defaults={
-            "name": customer_name,
-            "phone": customer_phone,
-            "is_phone_verified": False,
-        },
-    )
-
-    serializer = CustomerSerializer(customer)
-    return Response(serializer.data, status=status.HTTP_200_OK)
+@permission_classes([AllowAny])
+@throttle_classes([PasswordResetThrottle])
+def password_reset(request):
+    serializer = PasswordResetSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    services.request_password_reset(serializer.validated_data["email"])
+    return Response({"detail": str(RESET_SENT)})  # identical for known and unknown emails
 
 
 @api_view(["POST"])
-def send_phone_verification_code(request):
-    session_id = request.data.get("session_id", "").strip()
-    customer_phone = request.data.get("customer_phone", "").strip()
-
-    if not session_id:
-        return Response(
-            {"detail": "session_id is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if not customer_phone:
-        return Response(
-            {"detail": "customer_phone is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
+@permission_classes([AllowAny])
+@throttle_classes([PasswordResetThrottle])
+def password_reset_confirm(request):
+    serializer = PasswordResetConfirmSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    data = serializer.validated_data
+    user = services.reset_password_user(data["uid"], data["token"])
     try:
-        normalized_phone = normalize_georgian_phone(customer_phone)
-    except ValueError:
-        return Response(
-            {
-                "detail": (
-                    "ტელეფონის ნომერი უნდა იყოს ქართული მობილური ნომერი, "
-                    "მაგ: 555123456 ან +995555123456"
-                )
-            },
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+        check_password_rules(data["new_password"], user.email, user.first_name, user.last_name)
+    except serializers.ValidationError as exc:
+        raise serializers.ValidationError({"new_password": exc.detail}) from None
+    user.set_password(data["new_password"])  # rotates the session hash: other sessions end
+    user.save(update_fields=["password"])
+    return Response({"detail": str(PASSWORD_CHANGED)})
 
-    resend_after = timezone.now() - timedelta(
-        seconds=settings.PHONE_VERIFICATION_RESEND_SECONDS
-    )
 
-    recent_code = PhoneVerificationCode.objects.filter(
-        session_id=session_id,
-        phone=normalized_phone,
-        purpose=PhoneVerificationCode.PURPOSE_LOGIN,
-        status=PhoneVerificationCode.STATUS_PENDING,
-        created_at__gte=resend_after,
-    ).first()
-
-    if recent_code:
-        remaining_seconds = max(
-            0,
-            int((recent_code.expires_at - timezone.now()).total_seconds()),
-        )
-
-        return Response(
-            {
-                "detail": "verification code already sent",
-                "phone": normalized_phone,
-                "expires_in_seconds": remaining_seconds,
-                "retry_after_seconds": settings.PHONE_VERIFICATION_RESEND_SECONDS,
-                "already_sent": True,
-            },
-            status=status.HTTP_200_OK,
-        )
-
-    code = generate_sms_code()
-    message = f"Lion Parts verification code: {code}"
-
-    try:
-        provider_response = send_sms(normalized_phone, message)
-    except SenderGeError as exc:
-        return Response(
-            {"detail": str(exc)},
-            status=status.HTTP_502_BAD_GATEWAY,
-        )
-
-    expires_at = timezone.now() + timedelta(
-        minutes=settings.PHONE_VERIFICATION_CODE_TTL_MINUTES
-    )
-
-    with transaction.atomic():
-        PhoneVerificationCode.objects.filter(
-            session_id=session_id,
-            phone=normalized_phone,
-            purpose=PhoneVerificationCode.PURPOSE_LOGIN,
-            status=PhoneVerificationCode.STATUS_PENDING,
-        ).update(status=PhoneVerificationCode.STATUS_EXPIRED)
-
-        verification = PhoneVerificationCode(
-            session_id=session_id,
-            phone=normalized_phone,
-            purpose=PhoneVerificationCode.PURPOSE_LOGIN,
-            status=PhoneVerificationCode.STATUS_PENDING,
-            max_attempts=settings.PHONE_VERIFICATION_MAX_ATTEMPTS,
-            expires_at=expires_at,
-            sent_message_id=str(provider_response.get("messageId", "")),
-            provider_response=provider_response,
-        )
-        verification.set_code(code)
-        verification.save()
-
-    response_data = {
-        "detail": "verification code sent",
-        "phone": normalized_phone,
-        "expires_in_seconds": settings.PHONE_VERIFICATION_CODE_TTL_MINUTES * 60,
-    }
-
-    if not settings.SENDER_GE_ENABLED:
-        response_data["demo_code"] = code
-
-    return Response(response_data, status=status.HTTP_200_OK)
+@api_view(["GET", "PATCH", "DELETE"])
+def profile(request):
+    customer = request.user.customer
+    if request.method == "DELETE":
+        serializer = DeleteAccountSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        if not request.user.check_password(serializer.validated_data["current_password"]):
+            raise ApiError("invalid_credentials")
+        services.anonymize_customer(customer)
+        logout(request)
+        return Response(status=204)
+    if request.method == "PATCH":
+        serializer = ProfileUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        for field, value in serializer.validated_data.items():
+            setattr(customer, field, value)
+        customer.save(update_fields=[*serializer.validated_data, "updated_at"])
+    return Response(CustomerSerializer(customer).data)
 
 
 @api_view(["POST"])
-def verify_phone_code(request):
-    session_id = request.data.get("session_id", "").strip()
-    customer_phone = request.data.get("customer_phone", "").strip()
-    code = request.data.get("code", "").strip()
-    customer_name = request.data.get("customer_name", "").strip()
-
-    if not session_id:
-        return Response(
-            {"detail": "session_id is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if not customer_phone:
-        return Response(
-            {"detail": "customer_phone is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if not code:
-        return Response(
-            {"detail": "code is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    try:
-        normalized_phone = normalize_georgian_phone(customer_phone)
-    except ValueError:
-        return Response(
-            {"detail": "invalid customer_phone"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    verification = PhoneVerificationCode.objects.filter(
-        session_id=session_id,
-        phone=normalized_phone,
-        purpose=PhoneVerificationCode.PURPOSE_LOGIN,
-        status=PhoneVerificationCode.STATUS_PENDING,
-    ).first()
-
-    if not verification:
-        return Response(
-            {"detail": "verification code not found"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if verification.is_expired():
-        verification.status = PhoneVerificationCode.STATUS_EXPIRED
-        verification.save(update_fields=["status"])
-
-        return Response(
-            {"detail": "verification code expired"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if verification.attempts >= verification.max_attempts:
-        verification.status = PhoneVerificationCode.STATUS_FAILED
-        verification.save(update_fields=["status"])
-
-        return Response(
-            {"detail": "too many attempts"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    verification.attempts += 1
-
-    if not verification.check_code(code):
-        if verification.attempts >= verification.max_attempts:
-            verification.status = PhoneVerificationCode.STATUS_FAILED
-
-        verification.save(update_fields=["attempts", "status"])
-
-        return Response(
-            {"detail": "invalid verification code"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    existing_phone_customer = get_existing_verified_customer_by_phone(normalized_phone)
-    existing_session_customer = Customer.objects.filter(session_id=session_id).first()
-
-    final_customer_name = customer_name
-
-    if (
-        not is_real_customer_name(final_customer_name, normalized_phone)
-        and existing_phone_customer
-        and is_real_customer_name(existing_phone_customer.name, normalized_phone)
-    ):
-        final_customer_name = existing_phone_customer.name
-
-    if (
-        not is_real_customer_name(final_customer_name, normalized_phone)
-        and existing_session_customer
-        and existing_session_customer.phone == normalized_phone
-        and is_real_customer_name(existing_session_customer.name, normalized_phone)
-    ):
-        final_customer_name = existing_session_customer.name
-
-    if not is_real_customer_name(final_customer_name, normalized_phone):
-        verification.save(update_fields=["attempts"])
-
-        return Response(
-            {
-                "detail": "customer name is required",
-                "phone": normalized_phone,
-                "requires_customer_name": True,
-            },
-            status=status.HTTP_200_OK,
-        )
-
-    verification.status = PhoneVerificationCode.STATUS_VERIFIED
-    verification.verified_at = timezone.now()
-    verification.save(update_fields=["status", "verified_at", "attempts"])
-
-    if existing_phone_customer:
-        customer = existing_phone_customer
-        customer.session_id = session_id
-        customer.name = final_customer_name
-        customer.phone = normalized_phone
-        customer.is_phone_verified = True
-        customer.save(
-            update_fields=[
-                "session_id",
-                "name",
-                "phone",
-                "is_phone_verified",
-                "updated_at",
-            ]
-        )
-    else:
-        customer, _created = Customer.objects.update_or_create(
-            phone=normalized_phone,
-            defaults={
-                "session_id": session_id,
-                "name": final_customer_name,
-                "is_phone_verified": True,
-            },
-        )
-
-    attach_customer_session(customer, session_id)
-
-    serializer = CustomerSerializer(customer)
-    return Response(serializer.data, status=status.HTTP_200_OK)
-
-def get_customer_password_errors(password):
-    password = str(password or "")
-    errors = []
-
-    if len(password) < 8:
-        errors.append("password must be at least 8 characters long")
-
-    if not any(ch.isupper() for ch in password):
-        errors.append("password must contain at least one uppercase letter")
-
-    if not any(ch.islower() for ch in password):
-        errors.append("password must contain at least one lowercase letter")
-
-    if not any(ch.isdigit() for ch in password):
-        errors.append("password must contain at least one digit")
-
-    if not any(not ch.isalnum() for ch in password):
-        errors.append("password must contain at least one symbol")
-
-    return errors
+def profile_password(request):
+    serializer = PasswordChangeSerializer(data=request.data, context={"user": request.user})
+    serializer.is_valid(raise_exception=True)
+    request.user.set_password(serializer.validated_data["new_password"])
+    request.user.save(update_fields=["password"])
+    update_session_auth_hash(request, request.user)  # keep this session; the others end
+    return Response({"customer": CustomerSerializer(request.user.customer).data, "csrf_token": get_token(request)})
 
 
 @api_view(["POST"])
-def set_profile_password(request):
-    session_id = request.data.get("session_id", "").strip()
-    current_password = request.data.get("current_password", "")
-    new_password = request.data.get("new_password") or request.data.get("password") or ""
-
-    if not session_id:
-        return Response(
-            {"detail": "session_id is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    customer = get_customer_for_session(session_id)
-
-    if not customer or not customer.is_phone_verified:
-        return Response(
-            {"detail": "phone verification required"},
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
-    if customer.has_password:
-        if not current_password:
-            return Response(
-                {"detail": "current password is required"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if not customer.check_password(current_password):
-            return Response(
-                {"detail": "current password is incorrect"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-    errors = get_customer_password_errors(new_password)
-
-    if errors:
-        return Response(
-            {"password": errors},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    customer.set_password(new_password)
-
-    serializer = CustomerSerializer(customer)
-    return Response(serializer.data, status=status.HTTP_200_OK)
+@throttle_classes([EmailSendThrottle])
+def profile_email(request):
+    serializer = EmailChangeSerializer(data=request.data, context={"user": request.user})
+    serializer.is_valid(raise_exception=True)
+    new_email = serializer.validated_data["new_email"]
+    services.request_email_change(request.user.customer, new_email)
+    return Response({"sent_to": new_email, "resend_in": 60})
 
 
 @api_view(["POST"])
-def login_with_password(request):
-    session_id = request.data.get("session_id", "").strip()
-    customer_phone = request.data.get("customer_phone", "").strip()
-    password = request.data.get("password", "")
-
-    if not session_id:
-        return Response(
-            {"detail": "session_id is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if not customer_phone:
-        return Response(
-            {"detail": "customer_phone is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if not password:
-        return Response(
-            {"detail": "password is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    try:
-        normalized_phone = normalize_georgian_phone(customer_phone)
-    except ValueError:
-        return Response(
-            {"detail": "invalid customer_phone"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    customer = Customer.objects.filter(
-        phone=normalized_phone,
-        is_phone_verified=True,
-    ).first()
-
-    if not customer or not customer.has_password:
-        return Response(
-            {"detail": "password login is not enabled for this account"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if not customer.check_password(password):
-        return Response(
-            {"detail": "invalid phone or password"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    attach_customer_session(customer, session_id)
-
-    serializer = CustomerSerializer(customer)
-    return Response(serializer.data, status=status.HTTP_200_OK)
+@permission_classes([AllowAny])
+def profile_email_confirm(request):
+    serializer = TokenSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    customer = services.confirm_email_change(serializer.validated_data["token"])
+    return Response({"email": customer.user.email})
 
 
 @api_view(["POST"])
-def send_password_reset_code(request):
-    session_id = request.data.get("session_id", "").strip()
-    customer_phone = request.data.get("customer_phone", "").strip()
-
-    if not session_id:
-        return Response(
-            {"detail": "session_id is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if not customer_phone:
-        return Response(
-            {"detail": "customer_phone is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    try:
-        normalized_phone = normalize_georgian_phone(customer_phone)
-    except ValueError:
-        return Response(
-            {"detail": "invalid customer_phone"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    customer = Customer.objects.filter(
-        phone=normalized_phone,
-        is_phone_verified=True,
-    ).first()
-
-    if not customer:
-        return Response(
-            {"detail": "verified customer not found"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    resend_after = timezone.now() - timedelta(
-        seconds=settings.PHONE_VERIFICATION_RESEND_SECONDS
-    )
-
-    recent_code = PhoneVerificationCode.objects.filter(
-        session_id=session_id,
-        phone=normalized_phone,
-        purpose=PhoneVerificationCode.PURPOSE_PASSWORD_RESET,
-        status=PhoneVerificationCode.STATUS_PENDING,
-        created_at__gte=resend_after,
-    ).first()
-
-    if recent_code:
-        remaining_seconds = max(
-            0,
-            int((recent_code.expires_at - timezone.now()).total_seconds()),
-        )
-
-        return Response(
-            {
-                "detail": "verification code already sent",
-                "phone": normalized_phone,
-                "expires_in_seconds": remaining_seconds,
-                "retry_after_seconds": settings.PHONE_VERIFICATION_RESEND_SECONDS,
-                "already_sent": True,
-            },
-            status=status.HTTP_200_OK,
-        )
-
-    code = generate_sms_code()
-    message = f"Lion Parts password reset code: {code}"
-
-    try:
-        provider_response = send_sms(normalized_phone, message)
-    except SenderGeError as exc:
-        return Response(
-            {"detail": str(exc)},
-            status=status.HTTP_502_BAD_GATEWAY,
-        )
-
-    expires_at = timezone.now() + timedelta(
-        minutes=settings.PHONE_VERIFICATION_CODE_TTL_MINUTES
-    )
-
-    with transaction.atomic():
-        PhoneVerificationCode.objects.filter(
-            session_id=session_id,
-            phone=normalized_phone,
-            purpose=PhoneVerificationCode.PURPOSE_PASSWORD_RESET,
-            status=PhoneVerificationCode.STATUS_PENDING,
-        ).update(status=PhoneVerificationCode.STATUS_EXPIRED)
-
-        verification = PhoneVerificationCode(
-            session_id=session_id,
-            phone=normalized_phone,
-            purpose=PhoneVerificationCode.PURPOSE_PASSWORD_RESET,
-            status=PhoneVerificationCode.STATUS_PENDING,
-            max_attempts=settings.PHONE_VERIFICATION_MAX_ATTEMPTS,
-            expires_at=expires_at,
-            sent_message_id=str(provider_response.get("messageId", "")),
-            provider_response=provider_response,
-        )
-        verification.set_code(code)
-        verification.save()
-
-    response_data = {
-        "detail": "verification code sent",
-        "phone": normalized_phone,
-        "expires_in_seconds": settings.PHONE_VERIFICATION_CODE_TTL_MINUTES * 60,
-    }
-
-    if not settings.SENDER_GE_ENABLED:
-        response_data["demo_code"] = code
-
-    return Response(response_data, status=status.HTTP_200_OK)
+@throttle_classes([PhoneThrottle, OtpSendIpThrottle])
+def profile_phone(request):
+    serializer = PhoneChangeSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    return Response(services.start_phone_change(request, request.user.customer, serializer.validated_data["phone"]))
 
 
 @api_view(["POST"])
-def reset_password(request):
-    session_id = request.data.get("session_id", "").strip()
-    customer_phone = request.data.get("customer_phone", "").strip()
-    code = request.data.get("code", "").strip()
-    new_password = request.data.get("new_password") or request.data.get("password") or ""
-
-    if not session_id:
-        return Response(
-            {"detail": "session_id is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if not customer_phone:
-        return Response(
-            {"detail": "customer_phone is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if not code:
-        return Response(
-            {"detail": "code is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    try:
-        normalized_phone = normalize_georgian_phone(customer_phone)
-    except ValueError:
-        return Response(
-            {"detail": "invalid customer_phone"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    errors = get_customer_password_errors(new_password)
-
-    if errors:
-        return Response(
-            {"password": errors},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    verification = PhoneVerificationCode.objects.filter(
-        session_id=session_id,
-        phone=normalized_phone,
-        purpose=PhoneVerificationCode.PURPOSE_PASSWORD_RESET,
-        status=PhoneVerificationCode.STATUS_PENDING,
-    ).first()
-
-    if not verification:
-        return Response(
-            {"detail": "verification code not found"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if verification.is_expired():
-        verification.status = PhoneVerificationCode.STATUS_EXPIRED
-        verification.save(update_fields=["status"])
-
-        return Response(
-            {"detail": "verification code expired"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if verification.attempts >= verification.max_attempts:
-        verification.status = PhoneVerificationCode.STATUS_FAILED
-        verification.save(update_fields=["status"])
-
-        return Response(
-            {"detail": "too many attempts"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    verification.attempts += 1
-
-    if not verification.check_code(code):
-        if verification.attempts >= verification.max_attempts:
-            verification.status = PhoneVerificationCode.STATUS_FAILED
-
-        verification.save(update_fields=["attempts", "status"])
-
-        return Response(
-            {"detail": "invalid verification code"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    customer = Customer.objects.filter(
-        phone=normalized_phone,
-        is_phone_verified=True,
-    ).first()
-
-    if not customer:
-        return Response(
-            {"detail": "verified customer not found"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    verification.status = PhoneVerificationCode.STATUS_VERIFIED
-    verification.verified_at = timezone.now()
-    verification.save(update_fields=["status", "verified_at", "attempts"])
-
-    customer.set_password(new_password)
-    attach_customer_session(customer, session_id)
-
-    serializer = CustomerSerializer(customer)
-    return Response(serializer.data, status=status.HTTP_200_OK)
+@throttle_classes([OtpVerifyThrottle])
+def profile_phone_verify(request):
+    serializer = CodeSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    customer = services.confirm_phone_change(request, request.user.customer, serializer.validated_data["code"])
+    return Response(CustomerSerializer(customer).data)

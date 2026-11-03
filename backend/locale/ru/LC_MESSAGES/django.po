@@ -3,12 +3,97 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 09:27+0000\n"
+"POT-Creation-Date: 2026-11-03 11:26+0000\n"
 "Language: ru\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+#: accounts/models.py:36
+msgid "Make another tariff the default first."
+msgstr "Сначала сделайте другой тариф тарифом по умолчанию."
+
+#: accounts/otp.py:18
+#, python-brace-format
+msgid "Lion Parts code: {code}"
+msgstr "Код Lion Parts: {code}"
+
+#: accounts/serializers.py:16 api/errors.py:23
+msgid "This email is already linked to another account."
+msgstr "Этот адрес эл. почты уже привязан к другому аккаунту."
+
+#: accounts/serializers.py:17
+msgid "This phone number is already linked to another account."
+msgstr "Этот номер телефона уже привязан к другому аккаунту."
+
+#: accounts/serializers.py:18
+msgid "An account with this personal ID already exists."
+msgstr "Аккаунт с этим личным номером уже существует."
+
+#: accounts/serializers.py:19
+msgid "A company with this identification code is already registered."
+msgstr "Компания с этим идентификационным кодом уже зарегистрирована."
+
+#: accounts/serializers.py:68
+msgid "You must accept the terms to register."
+msgstr "Для регистрации необходимо принять условия."
+
+#: accounts/serializers.py:88 accounts/serializers.py:209
+msgid "Choose one of the supported languages."
+msgstr "Выберите один из поддерживаемых языков."
+
+#: accounts/serializers.py:219
+msgid "The current password is incorrect."
+msgstr "Текущий пароль неверен."
+
+#: accounts/validators.py:19
+msgid "Enter a valid Georgian mobile number."
+msgstr "Введите корректный грузинский номер мобильного телефона."
+
+#: accounts/validators.py:25
+msgid "The personal ID must have 11 digits."
+msgstr "Личный номер должен состоять из 11 цифр."
+
+#: accounts/validators.py:30
+msgid "The company ID must have 9 digits."
+msgstr "Идентификационный код компании должен состоять из 9 цифр."
+
+#: accounts/validators.py:37
+msgid "Enter a valid 17-character VIN."
+msgstr "Введите корректный VIN из 17 символов."
+
+#: accounts/validators.py:50
+msgid "The password must contain an uppercase letter."
+msgstr "Пароль должен содержать заглавную букву."
+
+#: accounts/validators.py:51
+msgid "The password must contain a lowercase letter."
+msgstr "Пароль должен содержать строчную букву."
+
+#: accounts/validators.py:52
+msgid "The password must contain a digit."
+msgstr "Пароль должен содержать цифру."
+
+#: accounts/validators.py:54
+msgid "The password must contain a symbol."
+msgstr "Пароль должен содержать символ."
+
+#: accounts/validators.py:64
+msgid "Use upper- and lower-case letters, a digit and a symbol."
+msgstr "Используйте заглавные и строчные буквы, цифру и символ."
+
+#: accounts/views.py:119
+msgid "If the account exists, a reset link has been sent."
+msgstr "Если аккаунт существует, ссылка для сброса отправлена."
+
+#: accounts/views.py:120
+msgid "Password changed."
+msgstr "Пароль изменён."
+
+#: api/admin_i18n.py:38
+msgid "The default-language value is required."
+msgstr "Значение на основном языке обязательно."
 
 #: api/drf_messages.py:8
 msgid "This field is required."
@@ -156,10 +241,6 @@ msgstr "Действие не разрешено."
 msgid "Not found."
 msgstr "Не найдено."
 
-#: api/errors.py:23
-msgid "This email is already linked to another account."
-msgstr "Этот адрес эл. почты уже привязан к другому аккаунту."
-
 #: api/errors.py:24
 msgid "Email is already verified."
 msgstr "Эл. почта уже подтверждена."
@@ -232,14 +313,83 @@ msgstr "Метод не разрешён."
 msgid "Malformed request."
 msgstr "Некорректный запрос."
 
-#: config/settings.py:121
+#: api/mail.py:15
+msgid "Confirm your email address"
+msgstr "Подтвердите адрес электронной почты"
+
+#: api/mail.py:16
+msgid "Reset your password"
+msgstr "Сброс пароля"
+
+#: api/mail.py:17
+msgid "Confirm your new email address"
+msgstr "Подтвердите новый адрес электронной почты"
+
+#: api/mail.py:18
+msgid "Your email address was changed"
+msgstr "Ваш адрес электронной почты изменён"
+
+#: api/templates/emails/email_change_confirm.html:2
+#: api/templates/emails/email_change_confirm.txt:1
+#: api/templates/emails/email_changed_notice.html:2
+#: api/templates/emails/email_changed_notice.txt:1
+#: api/templates/emails/password_reset.html:2
+#: api/templates/emails/password_reset.txt:1
+#: api/templates/emails/verify_email.html:2
+#: api/templates/emails/verify_email.txt:1
+#, python-format
+msgid "Hello, %(name)s!"
+msgstr "Здравствуйте, %(name)s!"
+
+#: api/templates/emails/email_change_confirm.html:3
+#: api/templates/emails/email_change_confirm.txt:3
+msgid "To use this address for your Lion Parts account, open this link:"
+msgstr "Чтобы использовать этот адрес для аккаунта Lion Parts, откройте ссылку:"
+
+#: api/templates/emails/email_change_confirm.html:5
+#: api/templates/emails/email_change_confirm.txt:6
+msgid "The link is valid for 48 hours. Until you confirm, your old address stays active."
+msgstr "Ссылка действительна 48 часов. До подтверждения старый адрес остаётся активным."
+
+#: api/templates/emails/email_changed_notice.html:3
+#: api/templates/emails/email_changed_notice.txt:3
+#, python-format
+msgid "The email address of your Lion Parts account was changed to %(new_email)s."
+msgstr "Адрес электронной почты вашего аккаунта Lion Parts изменён на %(new_email)s."
+
+#: api/templates/emails/email_changed_notice.html:4
+#: api/templates/emails/email_changed_notice.txt:5
+msgid "If you didn't make this change, contact Lion Parts support right away."
+msgstr "Если вы не вносили это изменение, сразу свяжитесь со службой поддержки Lion Parts."
+
+#: api/templates/emails/password_reset.html:3
+#: api/templates/emails/password_reset.txt:3
+msgid "To set a new password, open this link:"
+msgstr "Чтобы задать новый пароль, откройте ссылку:"
+
+#: api/templates/emails/password_reset.html:5
+#: api/templates/emails/password_reset.txt:6
+msgid "The link is valid for 1 hour and works once. If you didn't ask to reset your password, ignore this email."
+msgstr "Ссылка действительна 1 час и работает один раз. Если вы не запрашивали сброс пароля, проигнорируйте это письмо."
+
+#: api/templates/emails/verify_email.html:3
+#: api/templates/emails/verify_email.txt:3
+msgid "Please confirm your email address by opening this link:"
+msgstr "Подтвердите адрес электронной почты, открыв ссылку:"
+
+#: api/templates/emails/verify_email.html:5
+#: api/templates/emails/verify_email.txt:6
+msgid "The link is valid for 48 hours. If you didn't create a Lion Parts account, ignore this email."
+msgstr "Ссылка действительна 48 часов. Если вы не создавали аккаунт Lion Parts, проигнорируйте это письмо."
+
+#: config/settings.py:123
 msgid "Georgian"
 msgstr "Грузинский"
 
-#: config/settings.py:121
+#: config/settings.py:123
 msgid "English"
 msgstr "Английский"
 
-#: config/settings.py:121
+#: config/settings.py:123
 msgid "Russian"
 msgstr "Русский"

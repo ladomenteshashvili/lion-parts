@@ -7,7 +7,8 @@ from rest_framework.test import APIClient
 
 from cart.models import Cart, CartItem
 from orders.models import Order, OrderCustomerNotification, OrderItem, OrderItemEvent, OrderSupportMessage, Payment
-from accounts.models import Customer, CustomerSession
+from accounts.models import Customer
+from accounts.testing import make_customer
 from orders.admin import request_order_item_action_from_admin, set_order_item_status_from_admin
 
 from api.legacy import legacy_endpoint_test
@@ -18,12 +19,7 @@ class OrderFlowTests(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.session_id = "test-session-automated"
-        self.customer = Customer.objects.create(
-            session_id=self.session_id,
-            name="Lado",
-            phone="599123456",
-            is_phone_verified=True,
-        )
+        self.customer = make_customer(first_name="Lado", phone="599123456", is_phone_verified=True)
         self.cart = Cart.objects.create(session_id=self.session_id)
 
         self.cart_item = CartItem.objects.create(

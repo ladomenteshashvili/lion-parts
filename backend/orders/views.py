@@ -16,7 +16,10 @@ from cart.models import Cart
 from .models import Order, OrderCustomerNotification, OrderItem, OrderItemEvent, OrderSupportMessage, Payment
 from .invoices import render_order_invoice_html
 from .serializers import OrderCustomerNotificationPublicSerializer, OrderSerializer
+from django.core.exceptions import ValidationError as DjangoValidationError
+
 from accounts.models import Customer, LegalEntityProfile
+from accounts.validators import normalize_phone
 from accounts.customer_sessions import get_customer_for_session
 
 
@@ -45,18 +48,6 @@ def build_customer_order_access_filter(session_id, prefix=""):
         )
 
     return access_filter
-
-
-def normalize_checkout_phone(phone):
-    digits = "".join(ch for ch in str(phone or "") if ch.isdigit())
-
-    if digits.startswith("995"):
-        digits = digits[3:]
-
-    if len(digits) != 9 or not digits.startswith("5"):
-        raise ValueError("customer_phone must be a Georgian mobile number")
-
-    return digits
 
 
 def should_use_courier_delivery(value):
@@ -470,8 +461,8 @@ def checkout(request):
         )
 
     try:
-        normalized_customer_phone = normalize_checkout_phone(customer_phone)
-    except ValueError:
+        normalized_customer_phone = normalize_phone(customer_phone)
+    except DjangoValidationError:
         return Response(
             {
                 "detail": (
