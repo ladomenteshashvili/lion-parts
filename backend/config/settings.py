@@ -251,6 +251,8 @@ if DEPLOY_ENV == "production":
         ("ENABLE_DEMO_ENDPOINTS", ENABLE_DEMO_ENDPOINTS),
         ("SMS_DEMO_MODE", SMS_DEMO_MODE),
         ("PARTS_PROVIDER=demo", PARTS_PROVIDER == "demo"),
+        # FakeProvider never takes money; production needs a real adapter (M3 audit fix 3)
+        ("PAYMENT_PROVIDER=fake", PAYMENT_PROVIDER == "fake"),
         (f"EMAIL_BACKEND={email_backend}", bool({"locmem", "console", "dummy", "filebased"} & set(email_backend.split(".")))),
     ) if is_set]
     if _forbidden:
