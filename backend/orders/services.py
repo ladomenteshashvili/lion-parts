@@ -12,6 +12,7 @@ from django.utils.translation import gettext_lazy as _
 from pricing.discounts import round2
 
 from .models import CourierFeeProposal, Order, OrderItem, OrderItemEvent, OrderSupportMessage
+from .notifications import notify_after_commit
 from .texts import render_plural, render_text
 
 PROGRESS = {
@@ -218,7 +219,7 @@ def propose_courier_fee(order_id, fee_gel, message, actor=None):
     order.save(update_fields=["proposed_courier_fee_gel", "courier_fee_message", "courier_fee_action_required",
                               "updated_at"])
     sync_order_status(order)
-    # LP-BE-903: notify(order.customer, "courier_fee_proposed", order=order)
+    notify_after_commit(order.customer, "courier_fee_proposed", order=order, params={"proposal_id": proposal.pk})
     return proposal
 
 
@@ -294,7 +295,6 @@ def decide(customer, item_id, decision, actor_name=""):
                               actor_name=actor_name)
         return order
     sync_order_status(order)
-    # LP-BE-902: notify operators? (not in G§7.11; the admin list shows the decision)
     return order
 
 
@@ -355,7 +355,8 @@ def close_cancelled_order(order, open_payments, reason, *, item, actor, actor_na
                            "reason": reason}, actor=actor, actor_name=actor_name)
     order.cancelled_at = timezone.now()  # after the item events: the timeline ends with "cancelled"
     order.save(update_fields=["cancelled_at", "updated_at"])
-    # LP-BE-902: notify(order.customer, "status_update", order=order)
+    if actor == OrderItemEvent.ACTOR_OPERATOR:  # the customer's own cancellation needs no message
+        notify_after_commit(order.customer, "status_update", order=order, params={"order_status": order.status})
 
 
 @transaction.atomic
@@ -467,12 +468,14 @@ def request_item_action(item_id, action_type, message="", *, actor_name="", prop
     params = {"amount": _str(proposed_unit_price) or "0", "currency": order.currency,
               "part_number": item.proposed_part_number, "weight_kg": _str(proposed_weight_kg),
               "eta_min_days": proposed_eta_min_days, "eta_max_days": proposed_eta_max_days}
-    create_item_event(item, "action_requested", text_code=f"action_requested_{action_type}", params=params,
-                      message=item.action_message, old={**before, **_jsonable(old)},
-                      new={"item_status": item.item_status, "action_type": action_type, **_jsonable(new)},
-                      actor=OrderItemEvent.ACTOR_OPERATOR, actor_name=actor_name, visible=True)
+    event = create_item_event(
+        item, "action_requested", text_code=f"action_requested_{action_type}", params=params,
+        message=item.action_message, old={**before, **_jsonable(old)},
+        new={"item_status": item.item_status, "action_type": action_type, **_jsonable(new)},
+        actor=OrderItemEvent.ACTOR_OPERATOR, actor_name=actor_name, visible=True)
     sync_order_status(order)
-    # LP-BE-903: notify(order.customer, "action_required", order=order, item=item)
+    notify_after_commit(order.customer, "action_required", order=order, item=item,
+                        params={"event_id": event.pk})
     return item
 
 
@@ -517,7 +520,7 @@ def set_item_status(item_id, status, *, actor_name="", reason="", bypass_balance
     if status == OrderItem.STATUS_CANCELLED and order.status == Order.STATUS_PAYMENT_PENDING:
         _reset_amount_due_now(order, open_payments)
     sync_order_status(order)
-    # LP-BE-903: notify(order.customer, "status_update", order=order, item=item)
+    notify_after_commit(order.customer, "status_update", order=order, item=item, params={"item_status": status})
     return True
 
 
@@ -530,3 +533,15 @@ def _reset_amount_due_now(order, open_payments):
     order.save(update_fields=["amount_due_now", "updated_at"])
     for payment in open_payments:
         mark_payment(payment, "expired", payload={"expired_by": "order_total_changed"})
+
+
+@transaction.atomic
+def reply_to_order(order, message, sender_name):
+    """Operator message on an order (G§7.16): visible to the customer, customer messages marked read by the
+    operator, then notify(support_reply). -> the message."""
+    reply = OrderSupportMessage.objects.create(order=order, sender_type=OrderSupportMessage.SENDER_OPERATOR,
+                                               sender_name=sender_name, message=message, is_read_by_operator=True)
+    order.support_messages.filter(sender_type=OrderSupportMessage.SENDER_CUSTOMER).update(is_read_by_operator=True)
+    notify_after_commit(order.customer, "support_reply", order=order, support_message=reply,
+                        message=message)
+    return reply

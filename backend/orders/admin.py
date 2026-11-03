@@ -237,12 +237,7 @@ class OrderAdmin(OperatePermissionMixin, ReadOnlyAdminMixin, admin.ModelAdmin):
     @admin.action(description=_("Reply to the customer"), permissions=["operate"])
     def reply_to_customer(self, request, queryset):
         def run(order, data):
-            OrderSupportMessage.objects.create(order=order, sender_type=OrderSupportMessage.SENDER_OPERATOR,
-                                               sender_name=actor(request), message=data["message"],
-                                               is_read_by_operator=True)
-            order.support_messages.filter(sender_type=OrderSupportMessage.SENDER_CUSTOMER).update(
-                is_read_by_operator=True)
-            # LP-BE-903: notify(order.customer, "support_reply", support_message=...)
+            services.reply_to_order(order, data["message"], actor(request))
             return _("reply sent")
         return form_action(self, request, queryset, ReplyForm, _("Reply to the customer"), run)
 

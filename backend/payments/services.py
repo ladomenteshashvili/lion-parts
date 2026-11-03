@@ -43,7 +43,11 @@ def mark_payment(payment, status, payload=None, confirmed_by=None):
             create_item_event(item, "status_changed", text_code="payment_confirmed", visible=True,
                               params={"amount": f"{payment.amount:.2f}", "currency": payment.currency})
     sync_order_status(order)
-    # LP-BE-902: transaction.on_commit(notify(order.customer, "payment_update", order=order))
+    if status in (Payment.STATUS_PAID, Payment.STATUS_FAILED):
+        from orders.notifications import notify_after_commit
+
+        notify_after_commit(order.customer, "payment_update", order=order,
+                            params={"payment_id": payment.pk, "status": status})
     return payment
 
 

@@ -42,7 +42,10 @@ def mark_quote_price_ready(quote_request):
     quote_request.price_valid_until = price_valid_until(quote_request.price_ready_at)
     quote_request.seen_at = None
     quote_request.save()
-    # LP-BE-1104/903: notify(price_ready) once notifications exist.
+    from orders.notifications import notify_after_commit
+
+    notify_after_commit(quote_request.customer, "price_ready", quote_request=quote_request,
+                        params={"price_ready_at": quote_request.price_ready_at.isoformat()})
     return quote_request
 
 
