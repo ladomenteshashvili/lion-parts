@@ -90,3 +90,30 @@ class CustomerTicketTests(TestCase):
         page = admin.get(f"/admin/orders/supportticket/{SupportTicket.objects.get().pk}/change/")
         self.assertEqual(page.status_code, 200)
         self.assertNotIn("<script>alert(1)</script>", page.content.decode())
+
+
+class CustomerSupportThrottleTests(TestCase):
+    """M5 audit fix 1: customers' tickets and order messages are limited per user."""
+
+    def test_tickets_and_order_messages_share_a_per_user_limit(self):
+        from django.test import override_settings
+        from rest_framework.settings import api_settings
+
+        from orders.testing import make_order
+
+        cache.clear()
+        customer = make_customer()
+        client = APIClient()
+        client.force_login(customer.user)
+        order = make_order(customer)
+        rates = {**api_settings.DEFAULT_THROTTLE_RATES, "support_customer": "3/hour"}
+        with override_settings(REST_FRAMEWORK={"DEFAULT_THROTTLE_RATES": rates}):
+            api_settings.reload()
+            try:
+                codes = [client.post(URL, {**BODY, "message": f"m{i}"}, format="json").status_code for i in range(2)]
+                codes += [client.post(f"/api/orders/{order.order_number}/support/messages/", {"message": f"x{i}"},
+                                      format="json").status_code for i in range(2)]
+                listing = client.get(URL).status_code  # reading is never limited
+            finally:
+                api_settings.reload()
+        self.assertEqual((codes, listing), ([201, 201, 201, 429], 200))

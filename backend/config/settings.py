@@ -169,7 +169,7 @@ REST_FRAMEWORK = {
         "otp_send_phone": "5/hour", "otp_send_ip": "20/hour", "otp_verify": "10/min",
         "login_ip": "10/min", "login_email": "5/min", "password_reset": "5/hour",
         "email_send": "5/hour", "register": "10/hour", "search": "30/min", "support_guest": "5/hour",
-        "public_link": "30/min",
+        "public_link": "30/min", "support_customer": "20/hour",
     },
 }
 

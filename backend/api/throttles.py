@@ -96,3 +96,14 @@ class EmailSendThrottle(SettingsRateThrottle):
 
     def get_cache_key(self, request, view):
         return self.key(request.user.pk if request.user.is_authenticated else None)
+
+
+class SupportCustomerThrottle(SettingsRateThrottle):
+    """Support tickets and order messages per logged-in user (guests: SupportGuestThrottle)."""
+
+    scope = "support_customer"
+
+    def get_cache_key(self, request, view):
+        if request.method != "POST" or not (request.user and request.user.is_authenticated):
+            return None
+        return self.key(str(request.user.pk))

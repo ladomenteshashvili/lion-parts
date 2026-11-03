@@ -16,7 +16,7 @@ from rest_framework.response import Response
 from api.errors import MESSAGES, ApiError
 from api.pagination import Pagination
 from api.permissions import IsFullyVerified
-from api.throttles import PublicLinkThrottle, SupportGuestThrottle
+from api.throttles import PublicLinkThrottle, SupportCustomerThrottle, SupportGuestThrottle
 
 from payments.models import Payment
 from payments.services import request_payment, start_payment
@@ -171,6 +171,7 @@ class SupportMessageSerializer(serializers.Serializer):
 
 
 @api_view(["POST"])
+@throttle_classes([SupportCustomerThrottle])
 def support_message(request, order_number):
     """G§7.16: a customer message on their order, optionally about one of its items. -> 201 Order."""
     order = own_order(request, order_number)
@@ -245,7 +246,7 @@ def public_notification(request, token):
 
 @api_view(["GET", "POST"])
 @permission_classes([AllowAny])
-@throttle_classes([SupportGuestThrottle])
+@throttle_classes([SupportGuestThrottle, SupportCustomerThrottle])
 def support_tickets(request):
     """POST: guests (contact required, throttled per IP) and customers. GET: the customer's own tickets."""
     from accounts.services import can_log_in, ensure_session
