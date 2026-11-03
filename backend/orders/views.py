@@ -144,3 +144,13 @@ def order_cancel(request, order_number):
     order = services.cancel_order(order.pk, reason.strip(), actor="customer",
                                   actor_name=f"{customer.first_name} {customer.last_name}")
     return _order_response(request, order)
+
+
+@api_view(["POST"])
+def courier_fee_accept(request, order_number):
+    return _order_response(request, services.respond_courier_fee(own_order(request, order_number).pk, accept=True))
+
+
+@api_view(["POST"])
+def courier_fee_decline(request, order_number):
+    return _order_response(request, services.respond_courier_fee(own_order(request, order_number).pk, accept=False))

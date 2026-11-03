@@ -9,7 +9,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from accounts.testing import make_customer
-from orders.models import Order, OrderItem, OrderSupportMessage
+from orders.models import CourierFeeProposal, Order, OrderItem, OrderSupportMessage
 from orders.services import create_item_event
 from orders.testing import make_order
 from payments.services import create_payment, mark_payment
@@ -126,7 +126,8 @@ class DetailContentTests(OrderApiTestCase):
 
     def test_action_and_courier_fee_in_the_order_currency(self):
         order = make_order(self.customer, currency="USD", status=Order.STATUS_PROCESSING)
-        Order.objects.filter(pk=order.pk).update(proposed_courier_fee_gel=D("26.00"), exchange_rate=D("2.6"))
+        CourierFeeProposal.objects.create(order=order, fee_gel=D("26.00"), exchange_rate=D("2.6"),
+                                          amount=D("10.00"), currency="USD")
         OrderItem.objects.filter(order=order).update(action_required=True, action_type="price_change",
                                                      action_message="New price", proposed_unit_price=D("120.00"),
                                                      item_status="action_required")

@@ -10,7 +10,7 @@ from django.utils import timezone
 
 from pricing.discounts import round2
 
-from .models import Order, OrderItem, OrderItemEvent
+from .models import CourierFeeProposal, Order, OrderItem, OrderItemEvent, OrderSupportMessage
 from .texts import render_plural, render_text
 
 PROGRESS = {
@@ -171,12 +171,44 @@ def action_data(item):
             "decisions": decisions(item)}
 
 
+def pending_proposal(order):
+    """The pending courier fee proposal (from prefetched data when available)."""
+    return next((p for p in order.courier_fee_proposals.all() if p.status == CourierFeeProposal.STATUS_PENDING),
+                None)
+
+
 def proposed_courier_fee(order):
-    """The proposed GEL courier fee in the order currency at the order's frozen rate (G§7.14)."""
-    gel = order.proposed_courier_fee_gel
-    if gel is None or order.currency == "GEL":
-        return gel
-    return round2(gel / order.exchange_rate)
+    """The amount the customer is asked to accept, in the order currency, frozen in the proposal (D21)."""
+    proposal = pending_proposal(order)
+    return proposal.amount if proposal else None
+
+
+@transaction.atomic
+def propose_courier_fee(order_id, fee_gel, message, actor=None):
+    """Admin/demo (G§7.14 step 2): a new proposal version. GEL orders: the GEL fee as is; USD orders: converted
+    with the current NBG rate, which is frozen with the proposal (D21). A pending proposal is superseded;
+    accepted ones stay as they are. Raises RateUnavailable (nothing changes) / ValueError."""
+    from pricing.rates import get_usd_rate
+
+    order = Order.objects.select_for_update().get(pk=order_id)
+    if order.status not in Order.OPEN_STATUSES or order.delivery_method != "delivery":
+        raise ValueError("courier fees are proposed for open delivery orders only")
+    if fee_gel is None or fee_gel < 0:
+        raise ValueError("the courier fee must be zero or more")
+    rate = None if order.currency == "GEL" else get_usd_rate()
+    amount = round2(fee_gel) if rate is None else round2(fee_gel / rate)
+    order.courier_fee_proposals.filter(status=CourierFeeProposal.STATUS_PENDING).update(
+        status=CourierFeeProposal.STATUS_SUPERSEDED, answered_at=timezone.now())
+    proposal = CourierFeeProposal.objects.create(order=order, fee_gel=round2(fee_gel), exchange_rate=rate,
+                                                 amount=amount, currency=order.currency, message=message,
+                                                 proposed_by=actor)
+    order.proposed_courier_fee_gel, order.courier_fee_message = proposal.fee_gel, message
+    order.courier_fee_action_required = True
+    order.save(update_fields=["proposed_courier_fee_gel", "courier_fee_message", "courier_fee_action_required",
+                              "updated_at"])
+    sync_order_status(order)
+    # LP-BE-903: notify(order.customer, "courier_fee_proposed", order=order)
+    return proposal
 
 
 PROPOSED_CLEAR = {"action_required": False, "action_type": "", "action_message": "", "proposed_part_number": "",
@@ -280,10 +312,48 @@ def cancel_order(order_id, reason, *, actor, actor_name="", operator=False):
                           old={"item_status": old}, new={"item_status": item.item_status, "reason": reason},
                           actor=actor, actor_name=actor_name, visible=True)
     order.status, order.cancelled_at, order.cancel_reason = Order.STATUS_CANCELLED, timezone.now(), reason
-    order.courier_fee_action_required = False
-    order.save(update_fields=["status", "cancelled_at", "cancel_reason", "courier_fee_action_required", "updated_at"])
+    order.courier_fee_action_required, order.proposed_courier_fee_gel = False, None
+    order.save(update_fields=["status", "cancelled_at", "cancel_reason", "courier_fee_action_required",
+                              "proposed_courier_fee_gel", "updated_at"])
+    order.courier_fee_proposals.filter(status=CourierFeeProposal.STATUS_PENDING).update(
+        status=CourierFeeProposal.STATUS_CANCELLED, answered_at=timezone.now())
     for payment in open_payments:
         mark_payment(payment, Payment.STATUS_EXPIRED, payload={"expired_by": "order_cancelled"})
     recalculate_order(order)
     # LP-BE-902: notify(order.customer, "status_update", order=order)
+    return order
+
+
+@transaction.atomic
+def respond_courier_fee(order_id, accept):
+    """G§7.14 accept/decline of the pending proposal; nothing pending -> 409 no_pending_action.
+    Accept: the proposal's frozen amount becomes courier_fee (a separate money line; item prices and the
+    order rate are untouched). Decline: pickup at the first active point and no courier fee. The answer is
+    kept on the proposal and as a system support message (code + params). -> the order."""
+    from api.errors import ApiError
+    from pricing.models import PickupPoint
+
+    order = Order.objects.select_for_update().get(pk=order_id)
+    proposal = order.courier_fee_proposals.select_for_update().filter(
+        status=CourierFeeProposal.STATUS_PENDING).first()
+    if proposal is None or not order.courier_fee_action_required or order.status not in Order.OPEN_STATUSES:
+        raise ApiError("no_pending_action", status=409)
+    now = timezone.now()
+    order.courier_fee_action_required = False
+    if accept:
+        order.courier_fee, order.courier_fee_confirmed_at = proposal.amount, now
+        proposal.status, code = CourierFeeProposal.STATUS_ACCEPTED, "courier_fee_accepted"
+    else:
+        order.courier_fee, order.courier_fee_declined_at = ZERO, now
+        order.delivery_method, order.pickup_point = "pickup", PickupPoint.objects.filter(is_active=True).first()
+        proposal.status, code = CourierFeeProposal.STATUS_DECLINED, "courier_fee_declined"
+    proposal.answered_at = now
+    proposal.save(update_fields=["status", "answered_at"])
+    order.proposed_courier_fee_gel = None
+    order.save()
+    OrderSupportMessage.objects.create(
+        order=order, sender_type=OrderSupportMessage.SENDER_SYSTEM, text_code=code, is_read_by_customer=True,
+        text_params={"amount": f"{proposal.amount:.2f}", "currency": proposal.currency, "proposal_id": proposal.pk})
+    recalculate_order(order)
+    sync_order_status(order)
     return order

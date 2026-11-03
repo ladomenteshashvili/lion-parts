@@ -22,7 +22,7 @@ def order_queryset(detail=False):
     related = [Prefetch("items__events", queryset=OrderItemEvent.objects.filter(visible_to_customer=True))]
     if detail:
         related += ["payments", "support_messages"]
-    return Order.objects.select_related("pickup_point").prefetch_related("items", *related)
+    return Order.objects.select_related("pickup_point").prefetch_related("items", "courier_fee_proposals", *related)
 
 
 def payment_data(payment):

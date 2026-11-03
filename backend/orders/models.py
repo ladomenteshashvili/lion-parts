@@ -2,6 +2,7 @@
 exchange rate used; every item keeps its canonical USD snapshot and its amounts in the order
 currency. Exchange-rate changes never touch an order."""
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
@@ -32,7 +33,7 @@ class Order(models.Model):
     delivery_address = models.CharField(max_length=255, blank=True)
     delivery_comment = models.TextField(blank=True)
     courier_fee = models.DecimalField(default=0, **MONEY)  # confirmed, order currency
-    proposed_courier_fee_gel = models.DecimalField(null=True, blank=True, **MONEY)
+    proposed_courier_fee_gel = models.DecimalField(null=True, blank=True, **MONEY)  # mirror of the pending proposal
     courier_fee_action_required = models.BooleanField(default=False)
     courier_fee_message = models.TextField(blank=True)
     courier_fee_confirmed_at = models.DateTimeField(null=True, blank=True)
@@ -64,6 +65,37 @@ class Order(models.Model):
             if stored and any(stored[f] != getattr(self, f) for f in self.FROZEN_FIELDS):
                 raise ValidationError("An order's currency and exchange rate are frozen at checkout.")
         super().save(*args, **kwargs)
+
+
+class CourierFeeProposal(models.Model):
+    """One version of a courier fee proposal (G§7.14, owner decision D21). Frozen when created: the GEL fee,
+    for USD orders the NBG rate of that moment, and the amount in the order currency the customer will
+    accept. Never edited afterwards except its status; a changed fee is a new proposal."""
+
+    STATUS_PENDING = "pending"
+    STATUS_ACCEPTED = "accepted"
+    STATUS_DECLINED = "declined"
+    STATUS_SUPERSEDED = "superseded"
+    STATUS_CANCELLED = "cancelled"
+    STATUSES = [(s, s) for s in (STATUS_PENDING, STATUS_ACCEPTED, STATUS_DECLINED, STATUS_SUPERSEDED,
+                                 STATUS_CANCELLED)]
+
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="courier_fee_proposals")
+    fee_gel = models.DecimalField(**MONEY)
+    exchange_rate = models.DecimalField(max_digits=10, decimal_places=4, null=True, blank=True)  # USD orders
+    amount = models.DecimalField(**MONEY)  # in currency, frozen
+    currency = models.CharField(max_length=3)
+    message = models.TextField(blank=True)
+    status = models.CharField(max_length=12, choices=STATUSES, default=STATUS_PENDING, db_index=True)
+    proposed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    proposed_at = models.DateTimeField(auto_now_add=True)
+    answered_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["proposed_at", "id"]
+
+    def __str__(self):
+        return f"{self.order} · {self.amount} {self.currency} · {self.status}"
 
 
 class OrderItem(models.Model):
