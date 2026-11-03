@@ -1,5 +1,6 @@
 """LP-BE-902: notify() and delivery (G§7.11; D23, D24)."""
 
+import re
 import threading
 import unittest
 from decimal import Decimal
@@ -70,11 +71,23 @@ class NotifyTests(TestCase):
         self.assertIn("?lang=ru", mail.outbox[-1].body)
 
     def test_email_holds_no_amounts_names_or_operator_text(self):
+        """D24. The link's random token may contain any digits, so amounts and the phone are checked in the
+        human-readable text (the link removed); the link itself must be exactly the /n/<uuid>?lang= URL."""
         channel("support_reply", "email")
-        notify(self.customer, "support_reply", order=self.order, message="Your address Rustaveli 1 is wrong")
+        n = notify(self.customer, "support_reply", order=self.order, message="Your address Rustaveli 1 is wrong")
         email = mail.outbox[-1]
-        for private in ("Rustaveli", "Nino", "Beridze", "260", "555123456"):
-            self.assertNotIn(private, email.subject + email.body)
+        text = f"{email.subject}\n{email.body}"
+        link = re.compile(r"https://lionparts\.ge/n/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
+                          r"\?lang=(?:ka|en|ru)(?=\s|$)")
+        self.assertEqual(link.findall(text), [f"https://lionparts.ge/n/{n.token}?lang=en"])
+        self.assertEqual(re.findall(r"https?://\S+", text), link.findall(text))  # no other URL anywhere
+        readable = link.sub("<link>", text)
+        for private in ("Rustaveli", "address", "wrong", "Nino", "Beridze", "nino@example.com"):  # anywhere
+            self.assertNotIn(private, text)
+        total = f"{self.order.total:.2f}"
+        for private in (total, total.split(".")[0], "555123456"):  # amounts and the phone, outside the token
+            self.assertNotIn(private, readable)
+        self.assertIsNone(re.search(r"\d+[.,]\d{2}\b|₾|\$|\bGEL\b|\bUSD\b", readable), readable)
 
     def test_the_same_notification_is_not_sent_twice(self):
         channel("payment_update", "sms")
