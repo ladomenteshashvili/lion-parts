@@ -1,11 +1,13 @@
 """LP-BE-902: notify() and delivery (G§7.11; D23, D24)."""
 
+import threading
+import unittest
 from decimal import Decimal
 from unittest import mock
 
 from django.core import mail
-from django.db import transaction
-from django.test import TestCase, override_settings
+from django.db import connection, transaction
+from django.test import TestCase, TransactionTestCase, override_settings
 
 from accounts.testing import make_customer
 from orders.models import Notification, NotificationChannelSetting, NotificationDelivery, NotificationTemplate, \
@@ -133,3 +135,33 @@ class GuestReplyTests(TestCase):
         self.assertEqual(notify_contact(ticket, "ok").deliveries.count(), 0)
         channel("support_reply", "sms")
         self.assertEqual(notify_contact(ticket, "ok").deliveries.get().recipient, "555123456")
+
+
+@unittest.skipUnless(connection.vendor == "postgresql", "row locks need PostgreSQL (CI)")
+@override_settings(SENDER_GE_ENABLED=False)
+class ParallelNotifyTests(TransactionTestCase):
+    """M5 audit: the same notification triggered twice at once (e.g. a provider retrying a callback) is
+    created and sent once."""
+
+    serialized_rollback = True
+
+    def test_two_parallel_identical_notifications_send_once(self):
+        customer = make_customer()
+        order = make_order(customer)
+        channel("payment_update", "email")
+        barrier = threading.Barrier(2)
+
+        def run():
+            barrier.wait()
+            try:
+                notify(customer, "payment_update", order=order, params={"payment_id": 7})
+            finally:
+                connection.close()
+
+        threads = [threading.Thread(target=run) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.assertEqual(Notification.objects.filter(event_type="payment_update").count(), 1)
+        self.assertEqual(NotificationDelivery.objects.count(), 1)
