@@ -7,7 +7,7 @@ from accounts.models import Customer
 from .amt_provider import AMTProviderError, get_price_by_oem
 from pricing.rates import RateUnavailable, get_usd_rate
 from .models import CarrierService, PartSearchLog
-from .pricing import calculate_final_price_gel
+from pricing.engine import PriceInput, default_shipping_usd_per_kg, price_offer
 
 
 class PartsProviderError(Exception):
@@ -170,15 +170,6 @@ def _is_no_part_found_row(row: dict[str, Any]) -> bool:
     return description == "NO_PART_FOUND" or price in ("", None)
 
 
-def _get_customer_markup_percent(customer: Customer | None) -> Decimal:
-    # shortcut: legacy pricing reads the tariff's GEL markup until LP-BE-303's engine replaces it.
-    markup = customer and customer.get_tariff().markups.filter(currency="GEL").first()
-    if markup:
-        return markup.markup_percent
-
-    return Decimal(str(settings.DEFAULT_CUSTOMER_MARKUP_PERCENT))
-
-
 def _get_carrier_values() -> tuple[Decimal, int]:
     carrier = CarrierService.get_default()
 
@@ -186,7 +177,7 @@ def _get_carrier_values() -> tuple[Decimal, int]:
         return carrier.usd_per_kg, carrier.max_eta_days
 
     return (
-        Decimal(str(settings.DEFAULT_SHIPPING_USD_PER_KG)),
+        default_shipping_usd_per_kg(),
         settings.DEFAULT_ETA_DAYS,
     )
 
@@ -216,18 +207,15 @@ def _build_amt_part_option(
     )
 
     shipping_usd_per_kg, eta_days = _get_carrier_values()
-    customer_markup_percent = _get_customer_markup_percent(customer)
 
     final_price_gel = None
 
     if not requires_weight_input:
-        final_price_gel = calculate_final_price_gel(
-            api_price_usd=api_price_usd,
-            weight_kg=effective_weight_kg,
-            usd_to_gel_rate=usd_to_gel_rate,
-            shipping_usd_per_kg=shipping_usd_per_kg,
-            customer_markup_percent=customer_markup_percent,
-        )
+        final_price_gel = price_offer(
+            PriceInput(api_price_usd, effective_weight_kg, shipping_usd_per_kg),
+            customer=customer, currency="GEL", part_number=part_number,
+            brand=_clean_api_text(row.get("brand")), usd_rate=usd_to_gel_rate,
+        ).unit_price
 
     oem = _clean_api_text(row.get("oem")) or part_number
     description = _clean_api_text(row.get("descr")) or f"Part {oem}"

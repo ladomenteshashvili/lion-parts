@@ -5,7 +5,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from parts.amt_provider import AMTProviderError, get_price_by_oem
 from pricing.rates import RateUnavailable, get_usd_rate
-from parts.pricing import calculate_final_price_gel
+from pricing.engine import PriceInput, default_shipping_usd_per_kg, price_offer
 
 
 class Command(BaseCommand):
@@ -57,11 +57,11 @@ class Command(BaseCommand):
                 self.stdout.write("")
                 continue
 
-            final_price = calculate_final_price_gel(
-                api_price_usd=Decimal(str(api_price)),
-                weight_kg=Decimal(str(weight)),
-                usd_to_gel_rate=usd_rate,
-            )
+            final_price = price_offer(
+                PriceInput(Decimal(str(api_price)), Decimal(str(weight)), default_shipping_usd_per_kg()),
+                customer=None, currency="GEL", part_number=part_number, brand=str(row.get("brand") or ""),
+                usd_rate=usd_rate,
+            ).unit_price  # guest (default tariff) price
 
             self.stdout.write(
                 self.style.SUCCESS(

@@ -228,16 +228,7 @@ AMT_VERIFY_SSL = config("AMT_VERIFY_SSL", default=True, cast=bool)
 AMT_TIMEOUT_SECONDS = config("AMT_TIMEOUT_SECONDS", default=15, cast=int)
 
 
-# Temporary pricing defaults (moved to the pricing app in LP-BE-302/303).
-DEFAULT_SHIPPING_USD_PER_KG = config(
-    "DEFAULT_SHIPPING_USD_PER_KG",
-    default="8.00",
-)
-DEFAULT_CUSTOMER_MARKUP_PERCENT = config(
-    "DEFAULT_CUSTOMER_MARKUP_PERCENT",
-    default="20.00",
-)
-VAT_MULTIPLIER = config("VAT_MULTIPLIER", default="1.18")
+# Legacy ETA fallback; LP-BE-402 takes ETAs from the default CarrierService only.
 DEFAULT_ETA_DAYS = config("DEFAULT_ETA_DAYS", default=14, cast=int)
 
 
