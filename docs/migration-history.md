@@ -59,5 +59,15 @@ Detection before any `migrate`: `python manage.py showmigrations accounts` on a 
 shows `[X] 0001_initial` and `[ ] 0002_seed_default_tariff`. That combination means "old schema; do not
 migrate".
 
-The orders, cart and payments apps get the same treatment (fresh migrations) in LP-BE-501/601/701.
-The same rule applies then: fresh databases only.
+## M2 (branch `feature/m2-pricing-search-cart`)
+
+| App | Change | Effect on a database migrated before M2 |
+|---|---|---|
+| pricing (new) | `0001_initial`, `0002_seed` (currencies, pickup point, Tbilisi districts, SiteSettings) | Additive; applies cleanly. |
+| parts | `0007_drop_legacy_quote_request`: search log gains customer FK, `kind`, `currency`, `exchange_rate`, `price_valid_until`, `hidden_at`; `session_id` is **renamed** to `session_key` and shortened to 64 chars; phone/name copies dropped; the legacy `PartQuoteRequest` table is **dropped**. `0008_quote_request` recreates it (G§6.3); `PartImage` added. | Search-log rows are kept; on PostgreSQL the shortening fails if any old `session_id` is longer than 64 characters. **Old quote requests are deleted** (they were keyed by session/phone and can't be mapped to customers). |
+| cart | Old `0001`–`0003` **deleted**, a fresh `0001_initial` (G§6.4) | Same silent-mismatch problem as accounts: an old DB records `cart 0001_initial` as applied while its tables have the legacy schema (`session_id`, `final_price_gel`, …). Detection: the `cart_cartitem` table has no `unit_price` column. |
+
+Conclusion unchanged: **only fresh databases** (CI, a new staging DB) are supported. Never run this
+branch's `migrate` against a database migrated before `befe29b`.
+
+The orders and payments apps get the same treatment (fresh migrations) in LP-BE-601/701.
