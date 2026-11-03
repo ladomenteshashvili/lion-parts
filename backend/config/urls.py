@@ -24,6 +24,7 @@ urlpatterns = [
     path(settings.ADMIN_URL_PATH, admin.site.urls),
     path("api/", include("api.urls")),
     path("api/", include("accounts.urls")),
+    path("api/", include("parts.urls")),
     # Legacy session_id routes (accounts/parts/cart/orders urls) are not mounted: see api/legacy.py.
 ]
 

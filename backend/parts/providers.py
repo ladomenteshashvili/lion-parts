@@ -88,14 +88,14 @@ def fetch_rows(part_number):
     return (PartSearchLog.PROVIDER_DEMO, *_demo_rows(part_number))
 
 
-def build_offers(rows, *, customer, currency, part_number, weight_source="api", weight_override=None):
+def build_offers(rows, *, customer, currency, part_number, weight_source="api", weight_override=None, usd_rate=None):
     """Price every row for `customer` (None = guest) in `currency`. A row without a weight is
     `checking` with null prices. `weight_override` (customer weight calculation) replaces the
     supplier weight and sets `weight_source`."""
     carrier = CarrierService.get_default()
     shipping = default_shipping_usd_per_kg()
     eta_min, eta_max = (carrier.min_eta_days, carrier.max_eta_days) if carrier else (None, None)
-    rate = None
+    rate = usd_rate
     offers = []
     for row in rows:
         weight = weight_override if weight_override is not None else row["weight_kg"]

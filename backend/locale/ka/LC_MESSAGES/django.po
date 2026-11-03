@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 12:45+0000\n"
+"POT-Creation-Date: 2026-11-03 12:49+0000\n"
 "Language: ka\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -447,6 +447,10 @@ msgstr "გადახედვა"
 msgid "The image must not be larger than 5 MB."
 msgstr "სურათი არ უნდა აღემატებოდეს 5 მბ-ს."
 
+#: parts/serializers.py:16
+msgid "Choose one of the available currencies."
+msgstr "აირჩიეთ ერთ-ერთი ხელმისაწვდომი ვალუტა."
+
 #: pricing/admin.py:18
 msgid "Prices"
 msgstr "ფასები"
@@ -490,6 +494,7 @@ msgid "Duplicate code: %(code)s"
 msgstr "განმეორებული კოდი: %(code)s"
 
 #: pricing/models.py:54
+#, python-format
 msgid "%(code)s: the default-language name is required."
 msgstr "%(code)s: ძირითად ენაზე სახელი სავალდებულოა."
 
