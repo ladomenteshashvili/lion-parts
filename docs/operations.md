@@ -16,9 +16,13 @@ development agent: no environment was provisioned, migrated or changed. Security
 - **B3 – native-speaker sign-off** of the ka/ru texts.
 - **B4 – the operations items below** (access-log masking, `NUM_PROXIES`, cron, backups, HSTS policy).
 
-> ⚠️ **`scripts/deploy-staging.sh` belongs to the legacy installation.** It checks out `main`, which is now v1,
-> and runs `migrate` in `/home/lado/lion-parts`. Running it would apply the v1 migrations to the legacy
-> staging database (B2). Do not run it for v1; a v1 staging is built fresh (§2).
+> ⚠️ **`scripts/deploy-staging.sh` belongs to the legacy installation and is disabled in this repository.**
+> It checked out `main` (now v1) and ran `migrate` in `/home/lado/lion-parts`, which would apply the v1
+> migrations to the legacy staging database (B2). Since M6 the repository copy stops at once with an error
+> (exit 1) before any command (regression test `backend/api/tests/test_deploy_script.py`).
+> **Any OLD copy already present on a server (e.g. a checkout of an earlier commit in `/home/lado/lion-parts`)
+> is still dangerous** until an authorized operator disables or removes it there; nothing on a server was
+> changed. A v1 staging is built fresh (§2).
 
 ## 1. Architecture
 
