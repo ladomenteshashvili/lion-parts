@@ -145,7 +145,7 @@ def _content(notification):
             return None
         with translation.override(ticket.language):
             title = notification_title(notification)
-            body = _("Lion Parts support replied to your request:\n\n%(reply)s") % {"reply": notification.message}
+            body = f"{_('Lion Parts support replied to your request:')}\n\n{notification.message}"
             return (ticket.language, ticket.contact, ticket.contact, f"Lion Parts: {notification.message}",
                     f"Lion Parts: {title}", body)
     language = customer_language(customer)

@@ -69,14 +69,16 @@ def send_registration_code(request, draft):
 # Login (G§5.7): read the guest session key before login() rotates it, then attach guest data.
 
 def attach_guest_data(old_session_key, customer):
-    """The guest session's data becomes the customer's (G§7.6, G§7.7): search logs and the guest cart
-    (merged). Support tickets follow in LP-BE-1001."""
+    """The guest session's data becomes the customer's (G§7.6, G§7.7, G§7.16): search logs, support tickets
+    and the guest cart (merged)."""
     from cart.services import merge_guest_cart
+    from orders.models import SupportTicket
     from parts.models import PartSearchLog
 
     if not old_session_key:
         return
     PartSearchLog.objects.filter(session_key=old_session_key, customer__isnull=True).update(customer=customer)
+    SupportTicket.objects.filter(session_key=old_session_key, customer__isnull=True).update(customer=customer)
     merge_guest_cart(old_session_key, customer)
 
 

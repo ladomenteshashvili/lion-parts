@@ -53,7 +53,12 @@ class SearchThrottle(IpThrottle):
 
 
 class SupportGuestThrottle(IpThrottle):
+    """Guests only (G§8.9): logged-in customers are identified and not limited per IP."""
+
     scope = "support_guest"
+
+    def get_cache_key(self, request, view):
+        return None if request.user and request.user.is_authenticated else super().get_cache_key(request, view)
 
 
 class PublicLinkThrottle(IpThrottle):

@@ -5,6 +5,7 @@ from . import views
 urlpatterns = [
     path("checkout/options/", views.checkout_options, name="checkout-options"),
     path("orders/checkout/", views.checkout_create, name="checkout"),
+    path("support/tickets/", views.support_tickets, name="support-tickets"),
     path("notifications/", views.notification_list, name="notification-list"),
     path("notifications/<int:notification_id>/read/", views.notification_read, name="notification-read"),
     path("public/n/<str:token>/", views.public_notification, name="public-notification"),

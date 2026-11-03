@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 17:38+0000\n"
+"POT-Creation-Date: 2026-11-03 17:44+0000\n"
 "Language: ka\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -87,11 +87,11 @@ msgstr "პაროლი უნდა შეიცავდეს სიმბ
 msgid "Use upper- and lower-case letters, a digit and a symbol."
 msgstr "გამოიყენეთ დიდი და პატარა ასოები, ციფრი და სიმბოლო."
 
-#: accounts/views.py:121
+#: accounts/views.py:136
 msgid "If the account exists, a reset link has been sent."
 msgstr "თუ ანგარიში არსებობს, აღდგენის ბმული გამოგზავნილია."
 
-#: accounts/views.py:122
+#: accounts/views.py:137
 msgid "Password changed."
 msgstr "პაროლი შეიცვალა."
 
@@ -434,7 +434,7 @@ msgstr "კურიერის საფასური (GEL)"
 msgid "Message to the customer"
 msgstr "შეტყობინება მომხმარებელს"
 
-#: orders/admin.py:82 orders/admin.py:237 orders/admin.py:247
+#: orders/admin.py:82 orders/admin.py:237 orders/admin.py:242
 msgid "Reply to the customer"
 msgstr "მომხმარებლისთვის პასუხი"
 
@@ -545,35 +545,35 @@ msgstr "შეკვეთის გაუქმება"
 msgid "cancelled"
 msgstr "გაუქმებულია"
 
-#: orders/admin.py:246
+#: orders/admin.py:241
 msgid "reply sent"
 msgstr "პასუხი გაიგზავნა"
 
-#: orders/admin.py:249
+#: orders/admin.py:244
 msgid "Invoice CSV export"
 msgstr "ინვოისების CSV ექსპორტი"
 
-#: orders/admin.py:289 orders/admin.py:294
+#: orders/admin.py:284 orders/admin.py:289
 msgid "Request a customer decision"
 msgstr "მომხმარებლის გადაწყვეტილების მოთხოვნა"
 
-#: orders/admin.py:293
+#: orders/admin.py:288
 msgid "decision requested"
 msgstr "გადაწყვეტილება მოთხოვნილია"
 
-#: orders/admin.py:296 orders/admin.py:302
+#: orders/admin.py:291 orders/admin.py:297
 msgid "Change status"
 msgstr "სტატუსის შეცვლა"
 
-#: orders/admin.py:301
+#: orders/admin.py:296
 msgid "status changed"
 msgstr "სტატუსი შეიცვალა"
 
-#: orders/admin.py:301
+#: orders/admin.py:296
 msgid "already in this status"
 msgstr "უკვე ამ სტატუსშია"
 
-#: orders/admin.py:320
+#: orders/admin.py:315
 msgid "Mark read"
 msgstr "წაკითხულად მონიშვნა"
 
@@ -597,81 +597,84 @@ msgstr "აირჩიეთ ქალაქი სიიდან."
 msgid "Choose a district of this city."
 msgstr "აირჩიეთ ამ ქალაქის რაიონი."
 
-#: orders/notifications.py:119
-#, python-format
-msgid ""
-"Lion Parts support replied to your request:\n"
+#: orders/notifications.py:148
+msgid "Lion Parts support replied to your request:"
+msgstr "Lion Parts-ის მხარდაჭერამ გიპასუხათ:"
+"Lion Parts-ის მხარდაჭერამ გიპასუხათ:\n"
 "\n"
 "%(reply)s"
-msgstr "Lion Parts-ის მხარდაჭერამ გიპასუხათ:\n\n%(reply)s"
 
-#: orders/services.py:206
+#: orders/services.py:207
 msgid "Courier fees can be proposed for open delivery orders only."
 msgstr "კურიერის საფასურის შეთავაზება შესაძლებელია მხოლოდ მიტანით აქტიურ შეკვეთებზე."
 
-#: orders/services.py:208
+#: orders/services.py:209
 msgid "The courier fee must be zero or more."
 msgstr "კურიერის საფასური უნდა იყოს ნული ან მეტი."
 
-#: orders/services.py:311 orders/services.py:501
+#: orders/services.py:311 orders/services.py:504
 msgid "A cancellation reason is required."
 msgstr "გაუქმების მიზეზის მითითება სავალდებულოა."
 
-#: orders/services.py:418
+#: orders/services.py:419
 msgid "Enter a value greater than zero."
 msgstr "შეიყვანეთ ნულზე მეტი მნიშვნელობა."
 
-#: orders/services.py:429
+#: orders/services.py:430
 msgid "Unknown action type."
 msgstr "უცნობი მოქმედების ტიპი."
 
-#: orders/services.py:431
+#: orders/services.py:432
 msgid "Customer decisions can be requested on paid, open orders only."
 msgstr "მომხმარებლის გადაწყვეტილების მოთხოვნა შესაძლებელია მხოლოდ გადახდილ, აქტიურ შეკვეთებზე."
 
-#: orders/services.py:433
+#: orders/services.py:434
 msgid "This item is already cancelled or completed."
 msgstr "ეს ნაწილი უკვე გაუქმებული ან დასრულებულია."
 
-#: orders/services.py:438
+#: orders/services.py:439
 msgid "The proposed price equals the current price."
 msgstr "შემოთავაზებული ფასი მიმდინარე ფასის ტოლია."
 
-#: orders/services.py:443
+#: orders/services.py:444
 msgid "The maximum can't be less than the minimum."
 msgstr "მაქსიმუმი მინიმუმზე ნაკლები ვერ იქნება."
 
-#: orders/services.py:445
+#: orders/services.py:446
 msgid "The proposed delivery time equals the current one."
 msgstr "შემოთავაზებული მიწოდების ვადა მიმდინარეს ემთხვევა."
 
-#: orders/services.py:448
+#: orders/services.py:449
 msgid "Enter the alternative part number and name."
 msgstr "შეიყვანეთ ალტერნატიული ნაწილის ნომერი და დასახელება."
 
-#: orders/services.py:450
+#: orders/services.py:451
 msgid "The alternative is the same part number."
 msgstr "ალტერნატივას იგივე ნაწილის ნომერი აქვს."
 
-#: orders/services.py:454
+#: orders/services.py:455
 msgid "Write a message for the customer."
 msgstr "დაწერეთ შეტყობინება მომხმარებლისთვის."
 
-#: orders/services.py:490
+#: orders/services.py:493
 msgid "This status can't be set here."
 msgstr "ამ სტატუსის აქ დაყენება შეუძლებელია."
 
-#: orders/services.py:493
+#: orders/services.py:496
 msgid "The order or item is already closed."
 msgstr "შეკვეთა ან ნაწილი უკვე დახურულია."
 
-#: orders/services.py:495
+#: orders/services.py:498
 msgid "The order is not paid yet."
 msgstr "შეკვეთა ჯერ არ არის გადახდილი."
 
-#: orders/services.py:499
+#: orders/services.py:502
 msgid "The order still has a balance due."
 msgstr "შეკვეთაზე ჯერ კიდევ არის დარჩენილი გადასახდელი თანხა."
+
+#: orders/support.py:43
+msgid "Enter a valid email address or Georgian mobile number."
+msgstr "შეიყვანეთ სწორი ელფოსტა ან საქართველოს მობილურის ნომერი."
 
 #: orders/templates/admin/orders/action_form.html:10
 msgid "Apply"
@@ -975,27 +978,27 @@ msgstr "შეიყვანეთ წონა 0-ზე მეტი და �
 msgid "Confirm that the price may change with the actual weight."
 msgstr "დაადასტურეთ, რომ ფასი შეიძლება შეიცვალოს რეალური წონის მიხედვით."
 
-#: parts/services.py:62
+#: parts/services.py:65
 msgid "Enter a weight greater than zero."
 msgstr "შეიყვანეთ ნულზე მეტი წონა."
 
-#: parts/services.py:66
+#: parts/services.py:69
 msgid "The request is cancelled."
 msgstr "მოთხოვნა გაუქმებულია."
 
-#: parts/services.py:71
+#: parts/services.py:74
 msgid "The supplier is unavailable; enter the supplier price."
 msgstr "მომწოდებელი მიუწვდომელია; შეიყვანეთ მომწოდებლის ფასი."
 
-#: parts/services.py:74
+#: parts/services.py:77
 msgid "The supplier no longer offers this part; enter the supplier price."
 msgstr "მომწოდებელი ამ ნაწილს აღარ სთავაზობს; შეიყვანეთ მომწოდებლის ფასი."
 
-#: parts/services.py:79
+#: parts/services.py:82
 msgid "Enter the supplier price."
 msgstr "შეიყვანეთ მომწოდებლის ფასი."
 
-#: parts/views.py:73
+#: parts/views.py:74
 msgid "Choose one of: all, ready, checking, other."
 msgstr "აირჩიეთ ერთ-ერთი: all, ready, checking, other."
 

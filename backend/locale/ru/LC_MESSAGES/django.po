@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 17:38+0000\n"
+"POT-Creation-Date: 2026-11-03 17:44+0000\n"
 "Language: ru\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -87,11 +87,11 @@ msgstr "Пароль должен содержать символ."
 msgid "Use upper- and lower-case letters, a digit and a symbol."
 msgstr "Используйте заглавные и строчные буквы, цифру и символ."
 
-#: accounts/views.py:121
+#: accounts/views.py:136
 msgid "If the account exists, a reset link has been sent."
 msgstr "Если аккаунт существует, ссылка для сброса отправлена."
 
-#: accounts/views.py:122
+#: accounts/views.py:137
 msgid "Password changed."
 msgstr "Пароль изменён."
 
@@ -434,7 +434,7 @@ msgstr "Стоимость курьера (GEL)"
 msgid "Message to the customer"
 msgstr "Сообщение клиенту"
 
-#: orders/admin.py:82 orders/admin.py:237 orders/admin.py:247
+#: orders/admin.py:82 orders/admin.py:237 orders/admin.py:242
 msgid "Reply to the customer"
 msgstr "Ответ клиенту"
 
@@ -546,35 +546,35 @@ msgstr "Отменить заказ"
 msgid "cancelled"
 msgstr "отменено"
 
-#: orders/admin.py:246
+#: orders/admin.py:241
 msgid "reply sent"
 msgstr "ответ отправлен"
 
-#: orders/admin.py:249
+#: orders/admin.py:244
 msgid "Invoice CSV export"
 msgstr "Экспорт счетов в CSV"
 
-#: orders/admin.py:289 orders/admin.py:294
+#: orders/admin.py:284 orders/admin.py:289
 msgid "Request a customer decision"
 msgstr "Запросить решение клиента"
 
-#: orders/admin.py:293
+#: orders/admin.py:288
 msgid "decision requested"
 msgstr "решение запрошено"
 
-#: orders/admin.py:296 orders/admin.py:302
+#: orders/admin.py:291 orders/admin.py:297
 msgid "Change status"
 msgstr "Изменить статус"
 
-#: orders/admin.py:301
+#: orders/admin.py:296
 msgid "status changed"
 msgstr "статус изменён"
 
-#: orders/admin.py:301
+#: orders/admin.py:296
 msgid "already in this status"
 msgstr "уже в этом статусе"
 
-#: orders/admin.py:320
+#: orders/admin.py:315
 msgid "Mark read"
 msgstr "Отметить прочитанным"
 
@@ -598,81 +598,84 @@ msgstr "Выберите город из списка."
 msgid "Choose a district of this city."
 msgstr "Выберите район этого города."
 
-#: orders/notifications.py:119
-#, python-format
-msgid ""
-"Lion Parts support replied to your request:\n"
+#: orders/notifications.py:148
+msgid "Lion Parts support replied to your request:"
+msgstr "Служба поддержки Lion Parts ответила на ваш запрос:"
+"Служба поддержки Lion Parts ответила на ваш запрос:\n"
 "\n"
 "%(reply)s"
-msgstr "Служба поддержки Lion Parts ответила на ваш запрос:\n\n%(reply)s"
 
-#: orders/services.py:206
+#: orders/services.py:207
 msgid "Courier fees can be proposed for open delivery orders only."
 msgstr "Стоимость курьера можно предложить только для открытых заказов с доставкой."
 
-#: orders/services.py:208
+#: orders/services.py:209
 msgid "The courier fee must be zero or more."
 msgstr "Стоимость курьера должна быть нулевой или больше."
 
-#: orders/services.py:311 orders/services.py:501
+#: orders/services.py:311 orders/services.py:504
 msgid "A cancellation reason is required."
 msgstr "Укажите причину отмены."
 
-#: orders/services.py:418
+#: orders/services.py:419
 msgid "Enter a value greater than zero."
 msgstr "Введите значение больше нуля."
 
-#: orders/services.py:429
+#: orders/services.py:430
 msgid "Unknown action type."
 msgstr "Неизвестный тип действия."
 
-#: orders/services.py:431
+#: orders/services.py:432
 msgid "Customer decisions can be requested on paid, open orders only."
 msgstr "Решение клиента можно запросить только по оплаченным открытым заказам."
 
-#: orders/services.py:433
+#: orders/services.py:434
 msgid "This item is already cancelled or completed."
 msgstr "Эта позиция уже отменена или завершена."
 
-#: orders/services.py:438
+#: orders/services.py:439
 msgid "The proposed price equals the current price."
 msgstr "Предлагаемая цена равна текущей."
 
-#: orders/services.py:443
+#: orders/services.py:444
 msgid "The maximum can't be less than the minimum."
 msgstr "Максимум не может быть меньше минимума."
 
-#: orders/services.py:445
+#: orders/services.py:446
 msgid "The proposed delivery time equals the current one."
 msgstr "Предлагаемый срок доставки совпадает с текущим."
 
-#: orders/services.py:448
+#: orders/services.py:449
 msgid "Enter the alternative part number and name."
 msgstr "Введите номер и название альтернативной детали."
 
-#: orders/services.py:450
+#: orders/services.py:451
 msgid "The alternative is the same part number."
 msgstr "У альтернативы тот же номер детали."
 
-#: orders/services.py:454
+#: orders/services.py:455
 msgid "Write a message for the customer."
 msgstr "Напишите сообщение для клиента."
 
-#: orders/services.py:490
+#: orders/services.py:493
 msgid "This status can't be set here."
 msgstr "Этот статус здесь установить нельзя."
 
-#: orders/services.py:493
+#: orders/services.py:496
 msgid "The order or item is already closed."
 msgstr "Заказ или позиция уже закрыты."
 
-#: orders/services.py:495
+#: orders/services.py:498
 msgid "The order is not paid yet."
 msgstr "Заказ ещё не оплачен."
 
-#: orders/services.py:499
+#: orders/services.py:502
 msgid "The order still has a balance due."
 msgstr "По заказу ещё есть задолженность."
+
+#: orders/support.py:43
+msgid "Enter a valid email address or Georgian mobile number."
+msgstr "Введите корректный адрес эл. почты или грузинский мобильный номер."
 
 #: orders/templates/admin/orders/action_form.html:10
 msgid "Apply"
@@ -977,27 +980,27 @@ msgstr "Введите вес больше 0 и не более 500 кг."
 msgid "Confirm that the price may change with the actual weight."
 msgstr "Подтвердите, что цена может измениться в зависимости от фактического веса."
 
-#: parts/services.py:62
+#: parts/services.py:65
 msgid "Enter a weight greater than zero."
 msgstr "Введите вес больше нуля."
 
-#: parts/services.py:66
+#: parts/services.py:69
 msgid "The request is cancelled."
 msgstr "Запрос отменён."
 
-#: parts/services.py:71
+#: parts/services.py:74
 msgid "The supplier is unavailable; enter the supplier price."
 msgstr "Поставщик недоступен; введите цену поставщика."
 
-#: parts/services.py:74
+#: parts/services.py:77
 msgid "The supplier no longer offers this part; enter the supplier price."
 msgstr "Поставщик больше не предлагает эту деталь; введите цену поставщика."
 
-#: parts/services.py:79
+#: parts/services.py:82
 msgid "Enter the supplier price."
 msgstr "Введите цену поставщика."
 
-#: parts/views.py:73
+#: parts/views.py:74
 msgid "Choose one of: all, ready, checking, other."
 msgstr "Выберите одно из: all, ready, checking, other."
 

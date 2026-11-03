@@ -21,7 +21,7 @@ from . import services
 from .admin_actions import OperatePermissionMixin, form_action
 from .invoices import invoice_language, render_invoice
 from .models import (CourierFeeProposal, Notification, NotificationChannelSetting, NotificationTemplate, Order,
-                     OrderItem, OrderItemEvent, OrderSupportMessage)
+                     OrderItem, OrderItemEvent, OrderSupportMessage, SupportTicket)
 
 
 class ReadOnlyAdminMixin:
@@ -366,3 +366,14 @@ class NotificationAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     search_fields = ("order__order_number", "customer__user__email")
     list_select_related = ("customer", "order")
     exclude = ("token",)  # the public link token is never shown
+
+
+@admin.register(SupportTicket)
+class SupportTicketAdmin(OperatePermissionMixin, ReadOnlyAdminMixin, admin.ModelAdmin):
+    """G§7.16. Read-only; operators answer through the "send reply" action (LP-BE-1002)."""
+
+    list_display = ("id", "context", "status", "customer", "contact", "language", "created_at", "replied_at")
+    list_filter = ("status", "context", "language")
+    search_fields = ("message", "part_number", "vin", "contact", "customer__user__email", "customer__phone")
+    list_select_related = ("customer",)
+    exclude = ("session_key",)

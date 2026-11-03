@@ -8,6 +8,7 @@ from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.translation import get_language
 from rest_framework import serializers
+from rest_framework.exceptions import NotAuthenticated
 from rest_framework.decorators import api_view, authentication_classes, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -15,14 +16,15 @@ from rest_framework.response import Response
 from api.errors import MESSAGES, ApiError
 from api.pagination import Pagination
 from api.permissions import IsFullyVerified
-from api.throttles import PublicLinkThrottle
+from api.throttles import PublicLinkThrottle, SupportGuestThrottle
 
 from payments.models import Payment
 from payments.services import request_payment, start_payment
 
 from . import checkout, services
 from .invoices import invoice_language, render_invoice
-from .models import Notification, Order, OrderItem, OrderSupportMessage
+from .models import Notification, Order, OrderItem, OrderSupportMessage, SupportTicket
+from .support import TicketSerializer, create_ticket, ticket_data
 from .notifications import PUBLIC_LINK_DAYS, notification_data, public_notification_data
 from .serializers import order_data, order_queryset, orders_data, payment_data
 
@@ -237,3 +239,27 @@ def public_notification(request, token):
     if n is None:
         raise ApiError("not_found", status=404)
     return Response(public_notification_data(n))
+
+
+# Support tickets (G§8.9, LP-BE-1001)
+
+@api_view(["GET", "POST"])
+@permission_classes([AllowAny])
+@throttle_classes([SupportGuestThrottle])
+def support_tickets(request):
+    """POST: guests (contact required, throttled per IP) and customers. GET: the customer's own tickets."""
+    from accounts.services import can_log_in, ensure_session
+
+    customer = request.user.customer if can_log_in(request.user) else None
+    if request.method == "GET":
+        if customer is None:
+            raise NotAuthenticated()
+        paginator = Pagination()
+        page = paginator.paginate_queryset(SupportTicket.objects.filter(customer=customer), request)
+        return paginator.get_paginated_response([ticket_data(t) for t in page])
+    serializer = TicketSerializer(data=request.data, context={"customer": customer})
+    serializer.is_valid(raise_exception=True)
+    ticket = create_ticket(serializer.validated_data, customer=customer,
+                           session_key=None if customer else ensure_session(request))
+    return Response({"id": ticket.pk, "context": ticket.context, "status": ticket.status,
+                     "created_at": ticket.created_at}, status=201)
