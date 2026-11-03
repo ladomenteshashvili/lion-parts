@@ -3,12 +3,17 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 12:56+0000\n"
+"POT-Creation-Date: 2026-11-03 13:14+0000\n"
 "Language: ru\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+#: accounts/admin.py:24
+#, python-format
+msgid "The default tariff needs a markup for every active currency: %(codes)s"
+msgstr "Тарифу по умолчанию нужна наценка для каждой активной валюты: %(codes)s"
 
 #: accounts/models.py:36
 msgid "Make another tariff the default first."
@@ -83,11 +88,11 @@ msgstr "Пароль должен содержать символ."
 msgid "Use upper- and lower-case letters, a digit and a symbol."
 msgstr "Используйте заглавные и строчные буквы, цифру и символ."
 
-#: accounts/views.py:119
+#: accounts/views.py:121
 msgid "If the account exists, a reset link has been sent."
 msgstr "Если аккаунт существует, ссылка для сброса отправлена."
 
-#: accounts/views.py:120
+#: accounts/views.py:122
 msgid "Password changed."
 msgstr "Пароль изменён."
 
@@ -382,7 +387,7 @@ msgstr "Подтвердите адрес электронной почты, о�
 msgid "The link is valid for 48 hours. If you didn't create a Lion Parts account, ignore this email."
 msgstr "Ссылка действительна 48 часов. Если вы не создавали аккаунт Lion Parts, проигнорируйте это письмо."
 
-#: cart/serializers.py:18 cart/services.py:42
+#: cart/serializers.py:18 cart/services.py:43
 msgid "The quantity must be between 1 and 99."
 msgstr "Количество должно быть от 1 до 99."
 
@@ -528,14 +533,19 @@ msgstr "%(code)s: неизвестный город."
 msgid "Site settings already exist; edit the existing row."
 msgstr "Настройки сайта уже существуют; измените существующую запись."
 
-#: pricing/models.py:138
+#: pricing/models.py:98
+#, python-format
+msgid "Add a %(currency)s markup to the default tariff before activating %(currency)s."
+msgstr "Перед активацией %(currency)s добавьте наценку %(currency)s в тариф по умолчанию."
+
+#: pricing/models.py:146
 msgid "The value can't be negative."
 msgstr "Значение не может быть отрицательным."
 
-#: pricing/models.py:140
+#: pricing/models.py:148
 msgid "A percentage can't exceed 100."
 msgstr "Процент не может превышать 100."
 
-#: pricing/models.py:142
+#: pricing/models.py:150
 msgid "The end must be after the start."
 msgstr "Окончание должно быть позже начала."

@@ -7,6 +7,7 @@
 Every priced line stores the full PriceSnapshot; repricing reuses its S, W and R with the current
 rate, markup, VAT and discounts."""
 
+import logging
 from dataclasses import asdict, dataclass, fields
 from decimal import Decimal
 
@@ -18,6 +19,8 @@ from parts.models import CarrierService
 from .discounts import best_discount, round2
 from .models import CurrencySettings, SiteSettings
 from .rates import get_usd_rate
+
+logger = logging.getLogger(__name__)
 
 DECIMAL_FIELDS = ("supplier_price_usd", "weight_kg", "shipping_usd_per_kg", "markup_percent", "vat_percent",
                   "exchange_rate", "list_unit_price", "discount_unit_amount", "unit_price")
@@ -59,13 +62,20 @@ def default_shipping_usd_per_kg():
     return carrier.usd_per_kg if carrier else SiteSettings.get().default_shipping_usd_per_kg
 
 
+class PricingConfigurationError(Exception):
+    """Pricing data is missing (e.g. no default markup for a currency). Never priced as zero: the
+    request fails (500, logged) until an operator fixes the configuration in admin."""
+
+
 def markup_percent(customer, currency):
-    """The customer's tariff markup for `currency`; the default tariff's when the tariff has none.
-    A default tariff without a markup row for an active currency is a configuration error (500)."""
-    default = CustomerTariff.objects.get(is_default=True)
-    tariff = customer.get_tariff() if customer else default
-    markup = TariffMarkup.objects.filter(tariff=tariff, currency=currency).first()
-    return (markup or TariffMarkup.objects.get(tariff=default, currency=currency)).markup_percent
+    """The customer's tariff markup for `currency`, else the default tariff's. Never a silent zero."""
+    tariff = customer.get_tariff() if customer else CustomerTariff.objects.filter(is_default=True).first()
+    markups = TariffMarkup.objects.filter(currency=currency)
+    markup = (tariff and markups.filter(tariff=tariff).first()) or markups.filter(tariff__is_default=True).first()
+    if markup is None:
+        logger.error("No markup for %s on the customer's or the default tariff", currency)
+        raise PricingConfigurationError(f"no default tariff markup for {currency}")
+    return markup.markup_percent
 
 
 def price_offer(inp, *, customer, currency, part_number, brand, now=None, usd_rate=None):

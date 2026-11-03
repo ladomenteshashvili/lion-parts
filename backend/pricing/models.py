@@ -90,6 +90,14 @@ class CurrencySettings(models.Model):
     def __str__(self):
         return f"{self.currency} (VAT {self.vat_percent}%)"
 
+    def clean(self):
+        from accounts.models import TariffMarkup
+
+        if self.is_active and not TariffMarkup.objects.filter(tariff__is_default=True, currency=self.currency).exists():
+            raise ValidationError({"is_active": _(
+                "Add a %(currency)s markup to the default tariff before activating %(currency)s.")
+                % {"currency": self.currency}})
+
     @classmethod
     def active_codes(cls):
         return list(cls.objects.filter(is_active=True).values_list("currency", flat=True))
