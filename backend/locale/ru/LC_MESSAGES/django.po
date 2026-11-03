@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 11:11+0000\n"
+"POT-Creation-Date: 2026-11-03 11:13+0000\n"
 "Language: ru\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -14,9 +14,41 @@ msgstr ""
 msgid "Make another tariff the default first."
 msgstr "Сначала сделайте другой тариф тарифом по умолчанию."
 
-#: accounts/validators.py:17
+#: accounts/validators.py:19
 msgid "Enter a valid Georgian mobile number."
 msgstr "Введите корректный грузинский номер мобильного телефона."
+
+#: accounts/validators.py:25
+msgid "The personal ID must have 11 digits."
+msgstr "Личный номер должен состоять из 11 цифр."
+
+#: accounts/validators.py:30
+msgid "The company ID must have 9 digits."
+msgstr "Идентификационный код компании должен состоять из 9 цифр."
+
+#: accounts/validators.py:37
+msgid "Enter a valid 17-character VIN."
+msgstr "Введите корректный VIN из 17 символов."
+
+#: accounts/validators.py:50
+msgid "The password must contain an uppercase letter."
+msgstr "Пароль должен содержать заглавную букву."
+
+#: accounts/validators.py:51
+msgid "The password must contain a lowercase letter."
+msgstr "Пароль должен содержать строчную букву."
+
+#: accounts/validators.py:52
+msgid "The password must contain a digit."
+msgstr "Пароль должен содержать цифру."
+
+#: accounts/validators.py:54
+msgid "The password must contain a symbol."
+msgstr "Пароль должен содержать символ."
+
+#: accounts/validators.py:64
+msgid "Use upper- and lower-case letters, a digit and a symbol."
+msgstr "Используйте заглавные и строчные буквы, цифру и символ."
 
 #: api/drf_messages.py:8
 msgid "This field is required."
@@ -240,14 +272,14 @@ msgstr "Метод не разрешён."
 msgid "Malformed request."
 msgstr "Некорректный запрос."
 
-#: config/settings.py:122
+#: config/settings.py:123
 msgid "Georgian"
 msgstr "Грузинский"
 
-#: config/settings.py:122
+#: config/settings.py:123
 msgid "English"
 msgstr "Английский"
 
-#: config/settings.py:122
+#: config/settings.py:123
 msgid "Russian"
 msgstr "Русский"

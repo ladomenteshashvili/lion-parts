@@ -14,7 +14,7 @@ One row per backlog story (76). Status: `done` (committed, tests green), `in pro
 | LP-BE-106 | LPK-101 | Demo endpoints switch & email outbox | 2 | M0 | 101 | done | 8b1b11d, 09338f1 | PR #58, CI green (PostgreSQL 16) |
 | LP-BE-107 | LPK-102 | CI update | 1 | M0 | 101 | done | 0816312 | PR #58, CI green (PostgreSQL 16) |
 | LP-BE-201 | TBD | Account models, fresh migrations, seed | 5 | M1 | 101 | done |  | accounts/test_models.py; legacy accounts views/serializers/urls deleted (routes frozen in api/legacy.py); orders migrations repointed; D4 shim |
-| LP-BE-202 | TBD | Validators & normalizers | 2 | M1 | 201 | todo |  |  |
+| LP-BE-202 | TBD | Validators & normalizers | 2 | M1 | 201 | done |  | accounts/test_validators.py (phone formats incl. AC cases, IDs, VIN, part number, every password code) |
 | LP-BE-203 | TBD | OTP service & SMS wrapper | 5 | M1 | 202 | todo |  |  |
 | LP-BE-204 | TBD | Registration step 1 (data + SMS) and resend | 5 | M1 | 203, 104 | todo |  |  |
 | LP-BE-205 | TBD | Registration step 2 (verify phone → create account → login) | 5 | M1 | 204, 207 | todo |  |  |
