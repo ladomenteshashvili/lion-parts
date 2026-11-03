@@ -47,7 +47,7 @@ backlog; planned with that milestone (master plan G1). Evidence = commit(s) + th
 | LP-BE-601 | LPK-88 / — | Order & OrderItem schema and core services | 5 | M3 | 301, 501 | done |  | orders/test_services.py: every sync_order_status transition, money formulas (cancelled excluded, discount, courier fee, negative balance -> refund_pending), unique order numbers, progress, can_cancel, attention priority + ru plurals (1/2/5), frozen currency/rate guard; LP-BE-213 open-orders check re-tested on the new schema (accounts/test_delete_account.py); admin read-only per D17 |
 | LP-BE-602 | LPK-88 / — | Checkout options | 3 | M3 | 601, 503 | done |  | orders/test_checkout_options.py: split tariff -> split_70_30 (default) + full, full tariff -> only full, 760.00 -> 532.00/228.00, ROUND_HALF_UP, summary = cart summary at the current rate, legal payer, verification_required, empty cart |
 | LP-BE-603 | LPK-88 / — | Create order (checkout) | 8 | M3 | 602, 701 | todo |  |  |
-| LP-BE-604 | LPK-88 / — | Invoice HTML update | 3 | M3 | 601 | todo |  |  |
+| LP-BE-604 | LPK-88 / — | Invoice HTML update | 3 | M3 | 601 | done |  | orders/test_invoice.py: GEL frozen amounts unchanged after a later rate change, USD invoice with $ + legal buyer, ?lang=en/ru labels and seller texts, unknown lang -> request language, delivery comment escaped, owner-only (404/401), browser Accept header |
 | LP-BE-701 | LPK-89 / — | Payment model, provider contract, FakeProvider | 3 | M3 | 601 | todo |  |  |
 | LP-BE-702 | LPK-89 / — | `mark_payment` service | 5 | M3 | 701 | todo |  |  |
 | LP-BE-703 | LPK-89 / — | Start payments & order payment endpoints | 5 | M3 | 702 | todo |  |  |

@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 14:37+0000\n"
+"POT-Creation-Date: 2026-11-03 14:39+0000\n"
 "Language: ru\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -402,6 +402,114 @@ msgstr "Английский"
 msgid "Russian"
 msgstr "Русский"
 
+#: orders/templates/orders/invoice.html:6
+#: orders/templates/orders/invoice.html:20 pricing/admin.py:33
+msgid "Invoice"
+msgstr "Счёт"
+
+#: orders/templates/orders/invoice.html:21
+msgid "Date"
+msgstr "Дата"
+
+#: orders/templates/orders/invoice.html:21
+msgid "Payment reference"
+msgstr "Назначение платежа"
+
+#: orders/templates/orders/invoice.html:25
+msgid "Seller"
+msgstr "Продавец"
+
+#: orders/templates/orders/invoice.html:27
+#: orders/templates/orders/invoice.html:35
+msgid "Identification code"
+msgstr "Идентификационный код"
+
+#: orders/templates/orders/invoice.html:33
+msgid "Buyer"
+msgstr "Покупатель"
+
+#: orders/templates/orders/invoice.html:37
+msgid "Representative"
+msgstr "Представитель"
+
+#: orders/templates/orders/invoice.html:39
+msgid "Personal ID"
+msgstr "Личный номер"
+
+#: orders/templates/orders/invoice.html:46
+msgid "Delivery"
+msgstr "Доставка"
+
+#: orders/templates/orders/invoice.html:47
+msgid "Pickup point"
+msgstr "Пункт выдачи"
+
+#: orders/templates/orders/invoice.html:51
+msgid "Part"
+msgstr "Деталь"
+
+#: orders/templates/orders/invoice.html:51
+msgid "Quantity"
+msgstr "Количество"
+
+#: orders/templates/orders/invoice.html:52
+msgid "List price"
+msgstr "Цена"
+
+#: orders/templates/orders/invoice.html:52
+#: orders/templates/orders/invoice.html:67
+msgid "Discount"
+msgstr "Скидка"
+
+#: orders/templates/orders/invoice.html:53
+msgid "Unit price"
+msgstr "Цена за единицу"
+
+#: orders/templates/orders/invoice.html:53
+msgid "Line total"
+msgstr "Сумма"
+
+#: orders/templates/orders/invoice.html:57
+msgid "cancelled"
+msgstr "отменено"
+
+#: orders/templates/orders/invoice.html:66
+msgid "Items"
+msgstr "Детали"
+
+#: orders/templates/orders/invoice.html:68
+msgid "Delivery fee"
+msgstr "Стоимость доставки"
+
+#: orders/templates/orders/invoice.html:69
+msgid "Total"
+msgstr "Итого"
+
+#: orders/templates/orders/invoice.html:70
+msgid "Paid"
+msgstr "Оплачено"
+
+#: orders/templates/orders/invoice.html:71
+msgid "Balance due"
+msgstr "Остаток к оплате"
+
+#: orders/templates/orders/invoice.html:72
+msgid "Due now"
+msgstr "К оплате сейчас"
+
+#: orders/templates/orders/invoice.html:75
+#, python-format
+msgid "Amounts in GEL, converted from USD at the NBG rate of the order date: %(rate)s GEL per USD. VAT included."
+msgstr "Суммы в GEL, пересчитаны из USD по курсу НБГ на дату заказа: %(rate)s GEL за 1 USD. С НДС."
+
+#: orders/templates/orders/invoice.html:76
+msgid "Amounts in USD. VAT included."
+msgstr "Суммы в USD. С НДС."
+
+#: orders/templates/orders/invoice.html:78
+msgid "Bank details"
+msgstr "Банковские реквизиты"
+
 #: orders/texts.py:15
 msgid "The price is calculated with the estimated weight you entered. The final weight is set when the part arrives at the US warehouse. If it differs, the final amount may change: you may pay extra or get a refund."
 msgstr "Цена рассчитана по указанному вами примерному весу. Окончательный вес определяется при получении детали на складе в США. Если он отличается, итоговая сумма может измениться: возможна доплата или возврат."
@@ -524,10 +632,6 @@ msgstr "Зоны доставки"
 #: pricing/admin.py:29
 msgid "Cities: [{\"code\": \"tbilisi\", \"name\": {\"ka\": \"...\", \"en\": \"...\", \"ru\": \"...\"}}]. Districts also need \"city\" with an existing city code."
 msgstr "Города: [{\"code\": \"tbilisi\", \"name\": {\"ka\": \"...\", \"en\": \"...\", \"ru\": \"...\"}}]. Районам также нужен \"city\" с кодом существующего города."
-
-#: pricing/admin.py:33
-msgid "Invoice"
-msgstr "Счёт"
 
 #: pricing/admin.py:63
 msgid "Fetch today's NBG rate now"

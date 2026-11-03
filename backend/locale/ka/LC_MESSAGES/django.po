@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 14:37+0000\n"
+"POT-Creation-Date: 2026-11-03 14:39+0000\n"
 "Language: ka\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -402,6 +402,114 @@ msgstr "ინგლისური"
 msgid "Russian"
 msgstr "რუსული"
 
+#: orders/templates/orders/invoice.html:6
+#: orders/templates/orders/invoice.html:20 pricing/admin.py:33
+msgid "Invoice"
+msgstr "ინვოისი"
+
+#: orders/templates/orders/invoice.html:21
+msgid "Date"
+msgstr "თარიღი"
+
+#: orders/templates/orders/invoice.html:21
+msgid "Payment reference"
+msgstr "გადახდის დანიშნულება"
+
+#: orders/templates/orders/invoice.html:25
+msgid "Seller"
+msgstr "გამყიდველი"
+
+#: orders/templates/orders/invoice.html:27
+#: orders/templates/orders/invoice.html:35
+msgid "Identification code"
+msgstr "საიდენტიფიკაციო კოდი"
+
+#: orders/templates/orders/invoice.html:33
+msgid "Buyer"
+msgstr "მყიდველი"
+
+#: orders/templates/orders/invoice.html:37
+msgid "Representative"
+msgstr "წარმომადგენელი"
+
+#: orders/templates/orders/invoice.html:39
+msgid "Personal ID"
+msgstr "პირადი ნომერი"
+
+#: orders/templates/orders/invoice.html:46
+msgid "Delivery"
+msgstr "მიწოდება"
+
+#: orders/templates/orders/invoice.html:47
+msgid "Pickup point"
+msgstr "გაცემის პუნქტი"
+
+#: orders/templates/orders/invoice.html:51
+msgid "Part"
+msgstr "ნაწილი"
+
+#: orders/templates/orders/invoice.html:51
+msgid "Quantity"
+msgstr "რაოდენობა"
+
+#: orders/templates/orders/invoice.html:52
+msgid "List price"
+msgstr "ფასი"
+
+#: orders/templates/orders/invoice.html:52
+#: orders/templates/orders/invoice.html:67
+msgid "Discount"
+msgstr "ფასდაკლება"
+
+#: orders/templates/orders/invoice.html:53
+msgid "Unit price"
+msgstr "ერთეულის ფასი"
+
+#: orders/templates/orders/invoice.html:53
+msgid "Line total"
+msgstr "ჯამი"
+
+#: orders/templates/orders/invoice.html:57
+msgid "cancelled"
+msgstr "გაუქმებულია"
+
+#: orders/templates/orders/invoice.html:66
+msgid "Items"
+msgstr "ნაწილები"
+
+#: orders/templates/orders/invoice.html:68
+msgid "Delivery fee"
+msgstr "მიტანის ღირებულება"
+
+#: orders/templates/orders/invoice.html:69
+msgid "Total"
+msgstr "სულ"
+
+#: orders/templates/orders/invoice.html:70
+msgid "Paid"
+msgstr "გადახდილია"
+
+#: orders/templates/orders/invoice.html:71
+msgid "Balance due"
+msgstr "დარჩენილი თანხა"
+
+#: orders/templates/orders/invoice.html:72
+msgid "Due now"
+msgstr "ახლა გადასახდელი"
+
+#: orders/templates/orders/invoice.html:75
+#, python-format
+msgid "Amounts in GEL, converted from USD at the NBG rate of the order date: %(rate)s GEL per USD. VAT included."
+msgstr "თანხები ლარშია, დოლარიდან გადაყვანილი შეკვეთის თარიღის ეროვნული ბანკის კურსით: 1 USD = %(rate)s GEL. დღგ-ს ჩათვლით."
+
+#: orders/templates/orders/invoice.html:76
+msgid "Amounts in USD. VAT included."
+msgstr "თანხები დოლარშია. დღგ-ს ჩათვლით."
+
+#: orders/templates/orders/invoice.html:78
+msgid "Bank details"
+msgstr "საბანკო რეკვიზიტები"
+
 #: orders/texts.py:15
 msgid "The price is calculated with the estimated weight you entered. The final weight is set when the part arrives at the US warehouse. If it differs, the final amount may change: you may pay extra or get a refund."
 msgstr "ფასი დათვლილია თქვენს მიერ შეყვანილი სავარაუდო წონით. საბოლოო წონა დადგინდება აშშ-ის საწყობში მიღების შემდეგ. თუ რეალური წონა განსხვავებული იქნება, საბოლოო თანხა შეიძლება დაკორექტირდეს — შესაძლოა დაემატოს ან დაბრუნდეს თანხა."
@@ -522,10 +630,6 @@ msgstr "მიწოდების არეალები"
 #: pricing/admin.py:29
 msgid "Cities: [{\"code\": \"tbilisi\", \"name\": {\"ka\": \"...\", \"en\": \"...\", \"ru\": \"...\"}}]. Districts also need \"city\" with an existing city code."
 msgstr "ქალაქები: [{\"code\": \"tbilisi\", \"name\": {\"ka\": \"...\", \"en\": \"...\", \"ru\": \"...\"}}]. რაიონებს ასევე სჭირდება \"city\" არსებული ქალაქის კოდით."
-
-#: pricing/admin.py:33
-msgid "Invoice"
-msgstr "ინვოისი"
 
 #: pricing/admin.py:63
 msgid "Fetch today's NBG rate now"

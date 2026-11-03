@@ -1,0 +1,82 @@
+{% load i18n %}<!doctype html>
+<html lang="{{ language }}">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex">
+<title>{% translate "Invoice" %} {{ order.order_number }}</title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 14px; color: #222; margin: 32px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  table { border-collapse: collapse; width: 100%; margin-top: 16px; }
+  th, td { border-bottom: 1px solid #ddd; padding: 6px 8px; text-align: left; vertical-align: top; }
+  .right { text-align: right; }
+  .parties { display: flex; gap: 48px; margin-top: 16px; }
+  .totals td { border: none; }
+  .muted { color: #666; font-size: 12px; }
+  @media print { body { margin: 0; } }
+</style>
+</head>
+<body>
+<h1>{% translate "Invoice" %} {{ order.order_number }}</h1>
+<div class="muted">{% translate "Date" %}: {{ order.created_at|date:"Y-m-d" }} · {% translate "Payment reference" %}: {{ order.order_number }}</div>
+
+<div class="parties">
+  <div>
+    <strong>{% translate "Seller" %}</strong><br>
+    {{ seller.name }}<br>
+    {% if seller.code %}{% translate "Identification code" %}: {{ seller.code }}<br>{% endif %}
+    {% if seller.address %}{{ seller.address|linebreaksbr }}<br>{% endif %}
+    {% if seller.phone %}{{ seller.phone }}<br>{% endif %}
+    {% if seller.email %}{{ seller.email }}{% endif %}
+  </div>
+  <div>
+    <strong>{% translate "Buyer" %}</strong><br>
+    {% if buyer.company_official_name %}{{ buyer.company_official_name }}<br>
+    {% translate "Identification code" %}: {{ buyer.company_identification_code }}<br>
+    {% if buyer.legal_address %}{{ buyer.legal_address }}<br>{% endif %}
+    {% translate "Representative" %}: {{ buyer.first_name }} {{ buyer.last_name }}<br>
+    {% else %}{{ buyer.first_name }} {{ buyer.last_name }}<br>
+    {% if buyer.personal_id %}{% translate "Personal ID" %}: {{ buyer.personal_id }}<br>{% endif %}{% endif %}
+    {% if buyer.phone %}{{ buyer.phone }}<br>{% endif %}
+    {% if buyer.email %}{{ buyer.email }}{% endif %}
+  </div>
+</div>
+
+{% if order.delivery_method == "delivery" %}
+<p><strong>{% translate "Delivery" %}:</strong> {{ delivery_place }}, {{ order.delivery_address }}{% if order.delivery_comment %} ({{ order.delivery_comment }}){% endif %}</p>
+{% elif pickup_point %}<p><strong>{% translate "Pickup point" %}:</strong> {{ pickup_point }}</p>{% endif %}
+
+<table>
+  <thead><tr>
+    <th>{% translate "Part" %}</th><th class="right">{% translate "Quantity" %}</th>
+    <th class="right">{% translate "List price" %}</th><th class="right">{% translate "Discount" %}</th>
+    <th class="right">{% translate "Unit price" %}</th><th class="right">{% translate "Line total" %}</th>
+  </tr></thead>
+  <tbody>
+  {% for line in lines %}<tr>
+    <td>{{ line.item.part_number }} · {{ line.item.name }}{% if line.item.brand %} · {{ line.item.brand }}{% endif %}{% if line.item.item_status == "cancelled" %} ({% translate "cancelled" %}){% endif %}</td>
+    <td class="right">{{ line.item.quantity }}</td>
+    <td class="right">{{ line.list }}</td><td class="right">{{ line.discount }}</td>
+    <td class="right">{{ line.unit }}</td><td class="right">{{ line.total }}</td>
+  </tr>{% endfor %}
+  </tbody>
+</table>
+
+<table class="totals">
+  <tr><td class="right">{% translate "Items" %}</td><td class="right">{{ money.items_total }}</td></tr>
+  <tr><td class="right">{% translate "Discount" %}</td><td class="right">{{ money.discount_total }}</td></tr>
+  {% if order.courier_fee %}<tr><td class="right">{% translate "Delivery fee" %}</td><td class="right">{{ money.courier_fee }}</td></tr>{% endif %}
+  <tr><td class="right"><strong>{% translate "Total" %}</strong></td><td class="right"><strong>{{ money.total }}</strong></td></tr>
+  <tr><td class="right">{% translate "Paid" %}</td><td class="right">{{ money.amount_paid }}</td></tr>
+  <tr><td class="right"><strong>{% translate "Balance due" %}</strong></td><td class="right"><strong>{{ money.balance_due }}</strong></td></tr>
+  {% if order.amount_paid == 0 and order.payment_option == "split_70_30" %}<tr><td class="right">{% translate "Due now" %}</td><td class="right">{{ money.amount_due_now }}</td></tr>{% endif %}
+</table>
+
+{% if order.currency == "GEL" %}<p class="muted">{% blocktranslate with rate=order.exchange_rate %}Amounts in GEL, converted from USD at the NBG rate of the order date: {{ rate }} GEL per USD. VAT included.{% endblocktranslate %}</p>
+{% else %}<p class="muted">{% translate "Amounts in USD. VAT included." %}</p>{% endif %}
+
+{% if seller.bank_details %}<p><strong>{% translate "Bank details" %}</strong><br>{{ seller.bank_details|linebreaksbr }}</p>{% endif %}
+{% if seller.payment_due %}<p>{{ seller.payment_due }}</p>{% endif %}
+{% if seller.footer %}<p class="muted">{{ seller.footer }}</p>{% endif %}
+</body>
+</html>
