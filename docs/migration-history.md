@@ -67,6 +67,15 @@ migrate".
 | parts | `0007_drop_legacy_quote_request`: search log gains customer FK, `kind`, `currency`, `exchange_rate`, `price_valid_until`, `hidden_at`; `session_id` is **renamed** to `session_key` and shortened to 64 chars; phone/name copies dropped; the legacy `PartQuoteRequest` table is **dropped**. `0008_quote_request` recreates it (G§6.3); `PartImage` added. | Search-log rows are kept; on PostgreSQL the shortening fails if any old `session_id` is longer than 64 characters. **Old quote requests are deleted** (they were keyed by session/phone and can't be mapped to customers). |
 | cart | Old `0001`–`0003` **deleted**, a fresh `0001_initial` (G§6.4) | Same silent-mismatch problem as accounts: an old DB records `cart 0001_initial` as applied while its tables have the legacy schema (`session_id`, `final_price_gel`, …). Detection: the `cart_cartitem` table has no `unit_price` column. |
 
+**M2 extension (canonical USD pricing, `f8a0664`):** accounts `0003_tariff_usd_markup` adds
+`CustomerTariff.markup_percent`, copies each tariff's USD markup (the default tariff falls back to 20)
+and drops `TariffMarkup`; on a database that is otherwise compatible this is a normal forward
+migration. pricing `0001`/`0002`, parts `0008` and cart `0001` were regenerated in place (they never
+left this unmerged branch): `CurrencySettings` is gone, `SiteSettings` gains the currency mode, VAT,
+business-day validity and holidays, quote requests store a canonical USD snapshot + validity, cart
+lines store canonical USD and converted amounts. Only CI's throwaway databases ever ran the earlier
+M2 versions.
+
 Conclusion unchanged: **only fresh databases** (CI, a new staging DB) are supported. Never run this
 branch's `migrate` against a database migrated before `befe29b`.
 
