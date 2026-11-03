@@ -1,4 +1,16 @@
 #!/usr/bin/env bash
+# DISABLED (M6, LP-BE-1204 review). This script belongs to the LEGACY installation (/home/lado/lion-parts,
+# api-test.lionparts.ge). It checks out `main` (now the v1 backend) and runs `migrate` against the legacy
+# database, which v1 cannot migrate in place (release blocker B2). It stops here, before any command.
+# A v1 staging is built fresh and isolated: docs/operations.md section 2.
+# Any OLD copy of this script already on a server is still dangerous until an authorized operator disables it.
+echo "ERROR: scripts/deploy-staging.sh is disabled." >&2
+echo "It belongs to the legacy Lion Parts environment and must NOT be used with the v1 backend:" >&2
+echo "it would apply the v1 migrations to the legacy database (release blocker B2)." >&2
+echo "Build an isolated fresh staging instead: see docs/operations.md, section 2." >&2
+exit 1
+
+# ---- legacy script below: unreachable, kept for reference only ----
 set -e
 
 echo "Deploying Lion Parts staging..."

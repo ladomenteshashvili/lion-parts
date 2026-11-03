@@ -127,7 +127,10 @@ class DeployEnvGuardTests(SimpleTestCase):
 
     SAFE_PRODUCTION = {"DEPLOY_ENV": "production", "DEBUG": "False", "ENABLE_DEMO_ENDPOINTS": "False",
                        "SMS_DEMO_MODE": "False", "PARTS_PROVIDER": "amt", "PAYMENT_PROVIDER": "flitt",
-                       "EMAIL_BACKEND": "django.core.mail.backends.smtp.EmailBackend"}
+                       "EMAIL_BACKEND": "django.core.mail.backends.smtp.EmailBackend",
+                       "SECRET_KEY": "k" * 32 + "Qw3rTy-UiOp_AsDf9GhJ", "AMT_VERIFY_SSL": "True",
+                       "FRONTEND_BASE_URL": "https://lionparts.ge", "CSRF_TRUSTED_ORIGINS": "https://lionparts.ge",
+                       "ALLOWED_HOSTS": "api.lionparts.ge"}
 
     def boot(self, **env):
         return run_python("import config.settings as s; print(s.DEPLOY_ENV)", env)
@@ -153,6 +156,11 @@ class DeployEnvGuardTests(SimpleTestCase):
             "SMS_DEMO_MODE": {"SMS_DEMO_MODE": "True"},
             "PARTS_PROVIDER=demo": {"PARTS_PROVIDER": "demo"},
             "PAYMENT_PROVIDER=fake": {"PAYMENT_PROVIDER": "fake"},
+            "SECRET_KEY weak": {"SECRET_KEY": "change-me-to-a-long-random-string"},
+            "AMT_VERIFY_SSL=False": {"AMT_VERIFY_SSL": "False"},
+            "FRONTEND_BASE_URL without https": {"FRONTEND_BASE_URL": "http://lionparts.ge"},
+            "CSRF_TRUSTED_ORIGINS without https": {"CSRF_TRUSTED_ORIGINS": "https://lionparts.ge,http://x.ge"},
+            "ALLOWED_HOSTS=*": {"ALLOWED_HOSTS": "*"},
             "console": {"EMAIL_BACKEND": "django.core.mail.backends.console.EmailBackend"},
             "locmem": {"EMAIL_BACKEND": "django.core.mail.backends.locmem.EmailBackend"},
             "dummy": {"EMAIL_BACKEND": "django.core.mail.backends.dummy.EmailBackend"},
@@ -163,6 +171,15 @@ class DeployEnvGuardTests(SimpleTestCase):
         for name, override in cases.items():
             with self.subTest(name=name):
                 self.assert_refused(self.boot(**{**self.SAFE_PRODUCTION, **override}), name)
+
+    def test_production_cookies_https_and_renderers(self):
+        """LP-BE-1202 (backend-review F10): the values a production boot really ends up with."""
+        code = ("import config.settings as s; print(s.DEBUG, s.SESSION_COOKIE_SECURE, s.CSRF_COOKIE_SECURE, "
+                "s.SESSION_COOKIE_HTTPONLY, s.SECURE_SSL_REDIRECT, s.SECURE_HSTS_SECONDS, "
+                "s.REST_FRAMEWORK['DEFAULT_RENDERER_CLASSES'], s.AMT_VERIFY_SSL)")
+        result = run_python(code, self.SAFE_PRODUCTION)
+        self.assertEqual(result.stdout.strip(), "False True True True True 31536000 "
+                                                "['rest_framework.renderers.JSONRenderer'] True", result.stderr)
 
     def test_staging_keeps_its_demo_setup(self):
         result = self.boot(DEPLOY_ENV="staging", DEBUG="False", ENABLE_DEMO_ENDPOINTS="True", SMS_DEMO_MODE="True",

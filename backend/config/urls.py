@@ -28,7 +28,7 @@ urlpatterns = [
     path("api/", include("cart.urls")),
     path("api/", include("orders.urls")),
     path("api/", include("payments.urls")),
-    # Legacy session_id routes (accounts/parts/cart/orders urls) are not mounted: see api/legacy.py.
+    # The legacy session-token API was removed (G§8.11, LP-BE-1201); api/tests/test_legacy.py keeps it unreachable.
 ]
 
 # Demo routes exist only when enabled (staging/tests); in production they aren't resolvable at all.
