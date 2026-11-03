@@ -4,7 +4,6 @@ from urllib.parse import quote
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from cart.models import Cart
 
 from api.legacy import legacy_endpoint_test
 

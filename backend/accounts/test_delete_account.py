@@ -10,6 +10,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from cart.models import Cart
 from accounts.models import Customer, LegalEntityProfile, PhoneVerificationCode
 from accounts.testing import PASSWORD, make_customer
 from orders.models import Order
@@ -60,6 +61,7 @@ class DeleteAccountTests(TestCase):
         PhoneVerificationCode.objects.create(session_key="x", phone="555123456", purpose="phone_change",
                                              code_hash="h", expires_at=timezone.now())
         log = PartSearchLog.objects.create(provider="demo", part_number="1", customer=self.customer)
+        Cart.objects.create(customer=self.customer)
         PartQuoteRequest.objects.create(customer=self.customer, request_type="weight_price", part_number="1")
         resolved = PartQuoteRequest.objects.create(customer=self.customer, request_type="weight_price",
                                                    part_number="2", status=PartQuoteRequest.STATUS_RESOLVED)
@@ -77,6 +79,7 @@ class DeleteAccountTests(TestCase):
         self.assertFalse(user.has_usable_password())
         self.assertFalse(LegalEntityProfile.objects.exists())
         self.assertFalse(PhoneVerificationCode.objects.exists())
+        self.assertFalse(Cart.objects.exists())
         log.refresh_from_db()
         self.assertEqual(log.customer, None)
         self.assertIsNotNone(log.hidden_at)

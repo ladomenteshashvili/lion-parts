@@ -10,7 +10,6 @@ import unittest
 
 # urlconf module -> prefix it used to be mounted at
 LEGACY_URLCONFS = {
-    "cart.urls": "/api/cart/",
     "orders.urls": "/api/orders/",
 }
 
