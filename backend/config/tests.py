@@ -27,8 +27,9 @@ def env_example_values():
 
 
 def run_python(code, extra_env=None):
-    """Run code in a fresh interpreter whose env holds only .env.example values (+ overrides)."""
+    """Run code in a fresh interpreter whose env holds only .env.example values (+ overrides; None unsets)."""
     env = {"PATH": os.environ.get("PATH", ""), **env_example_values(), **(extra_env or {})}
+    env = {key: value for key, value in env.items() if value is not None}
     env["DJANGO_SETTINGS_MODULE"] = "config.settings"
     return subprocess.run(
         [sys.executable, "-c", code], cwd=BACKEND_DIR, env=env,
@@ -119,3 +120,57 @@ class AdminUrlPathTests(SimpleTestCase):
             self.reload_urls()
             self.assertEqual(self.client.get("/ops-test/").status_code, 302)
             self.assertEqual(self.client.get("/admin/").status_code, 404)
+
+
+class DeployEnvGuardTests(SimpleTestCase):
+    """Master plan D10: DEPLOY_ENV fails closed; production refuses every demo/debug switch."""
+
+    SAFE_PRODUCTION = {"DEPLOY_ENV": "production", "DEBUG": "False", "ENABLE_DEMO_ENDPOINTS": "False",
+                       "SMS_DEMO_MODE": "False", "PARTS_PROVIDER": "amt",
+                       "EMAIL_BACKEND": "django.core.mail.backends.smtp.EmailBackend"}
+
+    def boot(self, **env):
+        return run_python("import config.settings as s; print(s.DEPLOY_ENV)", env)
+
+    def assert_refused(self, result, *names):
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn("ImproperlyConfigured", result.stderr)
+        for name in names:
+            self.assertIn(name, result.stderr)
+
+    def test_clean_production_starts(self):
+        result = self.boot(**self.SAFE_PRODUCTION)
+        self.assertEqual((result.returncode, result.stdout.strip()), (0, "production"), result.stderr)
+
+    def test_unset_means_production(self):
+        self.assertEqual(self.boot(**{**self.SAFE_PRODUCTION, "DEPLOY_ENV": None}).stdout.strip(), "production")
+        self.assert_refused(self.boot(DEPLOY_ENV=None), "DEBUG")  # .env.example has DEBUG=True
+
+    def test_production_refuses_each_unsafe_switch(self):
+        cases = {
+            "DEBUG": {"DEBUG": "True"},
+            "ENABLE_DEMO_ENDPOINTS": {"ENABLE_DEMO_ENDPOINTS": "True"},
+            "SMS_DEMO_MODE": {"SMS_DEMO_MODE": "True"},
+            "PARTS_PROVIDER=demo": {"PARTS_PROVIDER": "demo"},
+            "console": {"EMAIL_BACKEND": "django.core.mail.backends.console.EmailBackend"},
+            "locmem": {"EMAIL_BACKEND": "django.core.mail.backends.locmem.EmailBackend"},
+            "dummy": {"EMAIL_BACKEND": "django.core.mail.backends.dummy.EmailBackend"},
+            "filebased": {"EMAIL_BACKEND": "django.core.mail.backends.filebased.EmailBackend"},
+        }
+        for name, override in cases.items():
+            with self.subTest(name=name):
+                self.assert_refused(self.boot(**{**self.SAFE_PRODUCTION, **override}), name)
+
+    def test_staging_keeps_its_demo_setup(self):
+        result = self.boot(DEPLOY_ENV="staging", DEBUG="False", ENABLE_DEMO_ENDPOINTS="True", SMS_DEMO_MODE="True",
+                           PARTS_PROVIDER="demo", EMAIL_BACKEND="django.core.mail.backends.smtp.EmailBackend")
+        self.assertEqual((result.returncode, result.stdout.strip()), (0, "staging"), result.stderr)
+
+    def test_development_and_test_allow_debug_and_demo(self):
+        for env in ("development", "test"):
+            with self.subTest(env=env):
+                result = self.boot(DEPLOY_ENV=env, DEBUG="True", ENABLE_DEMO_ENDPOINTS="True", SMS_DEMO_MODE="True")
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_unknown_value_is_refused(self):
+        self.assert_refused(self.boot(DEPLOY_ENV="prod"), "DEPLOY_ENV must be one of")

@@ -36,6 +36,7 @@ jobs:
 
     env:
       SECRET_KEY: test-secret-key
+      DEPLOY_ENV: test
       DEBUG: "True"
       ALLOWED_HOSTS: localhost,127.0.0.1
 
