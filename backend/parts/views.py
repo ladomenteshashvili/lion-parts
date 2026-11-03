@@ -1,5 +1,8 @@
 """Parts endpoints (G§8.4). Thin views: validation in serializers, logic in parts.services."""
 
+from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
+from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -10,7 +13,8 @@ from api.permissions import IsPhoneVerified
 from api.throttles import SearchThrottle
 
 from . import services
-from .models import PartQuoteRequest
+from .history import FILTERS, build_history, unseen_ready_quotes
+from .models import PartQuoteRequest, PartSearchLog
 from .serializers import QuoteRequestSerializer, SearchSerializer
 
 
@@ -54,3 +58,24 @@ def public_quote(request, token):
     if qr is None:
         raise ApiError("not_found", status=404)
     return Response(services.public_quote_data(qr))
+
+
+@api_view(["GET", "DELETE"])
+def history(request):
+    customer = request.user.customer
+    if request.method == "DELETE":
+        PartSearchLog.objects.filter(customer=customer, hidden_at__isnull=True).update(hidden_at=timezone.now())
+        return Response(status=204)  # quote requests stay
+    filter_name = request.query_params.get("filter", "all")
+    if filter_name not in FILTERS:
+        raise serializers.ValidationError({"filter": [serializers.ErrorDetail(
+            str(_("Choose one of: all, ready, checking, other.")), code="invalid")]})
+    paginator = Pagination()
+    page = paginator.paginate_queryset(build_history(customer, filter_name), request)
+    return paginator.get_paginated_response(page, new_count=unseen_ready_quotes(customer).count())
+
+
+@api_view(["POST"])
+def history_seen(request):
+    unseen_ready_quotes(request.user.customer).update(seen_at=timezone.now())
+    return Response(status=204)

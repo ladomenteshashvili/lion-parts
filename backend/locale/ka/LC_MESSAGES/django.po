@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 12:49+0000\n"
+"POT-Creation-Date: 2026-11-03 12:52+0000\n"
 "Language: ka\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -450,6 +450,10 @@ msgstr "სურათი არ უნდა აღემატებოდე
 #: parts/serializers.py:16
 msgid "Choose one of the available currencies."
 msgstr "აირჩიეთ ერთ-ერთი ხელმისაწვდომი ვალუტა."
+
+#: parts/views.py:72
+msgid "Choose one of: all, ready, checking, other."
+msgstr "აირჩიეთ ერთ-ერთი: all, ready, checking, other."
 
 #: pricing/admin.py:18
 msgid "Prices"
