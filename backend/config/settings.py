@@ -227,11 +227,6 @@ AMT_API_PASSWORD = config("AMT_API_PASSWORD", default="")
 AMT_VERIFY_SSL = config("AMT_VERIFY_SSL", default=True, cast=bool)
 AMT_TIMEOUT_SECONDS = config("AMT_TIMEOUT_SECONDS", default=15, cast=int)
 
-# Exchange rate provider (replaced by NBG in LP-BE-302)
-KURSI_PUBLIC_CURRENCIES_URL = config(
-    "KURSI_PUBLIC_CURRENCIES_URL",
-    default="https://api-core.kursi.ge/api/public/currencies",
-)
 
 # Temporary pricing defaults (moved to the pricing app in LP-BE-302/303).
 DEFAULT_SHIPPING_USD_PER_KG = config(

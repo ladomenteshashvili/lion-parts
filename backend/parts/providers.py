@@ -5,7 +5,7 @@ from django.conf import settings
 
 from accounts.models import Customer
 from .amt_provider import AMTProviderError, get_price_by_oem
-from .exchange_rates import ExchangeRateError, get_usd_sell_rate
+from pricing.rates import RateUnavailable, get_usd_rate
 from .models import CarrierService, PartSearchLog
 from .pricing import calculate_final_price_gel
 
@@ -278,8 +278,8 @@ def search_amt_parts(
 ) -> dict[str, Any]:
     try:
         rows = get_price_by_oem(part_number)
-        usd_to_gel_rate = get_usd_sell_rate()
-    except (AMTProviderError, ExchangeRateError) as error:
+        usd_to_gel_rate = get_usd_rate()
+    except (AMTProviderError, RateUnavailable) as error:
         raise PartsProviderError(str(error)) from error
 
     results = []
@@ -325,8 +325,8 @@ def calculate_amt_part_price(
 ) -> dict[str, Any]:
     try:
         rows = get_price_by_oem(part_number)
-        usd_to_gel_rate = get_usd_sell_rate()
-    except (AMTProviderError, ExchangeRateError) as error:
+        usd_to_gel_rate = get_usd_rate()
+    except (AMTProviderError, RateUnavailable) as error:
         raise PartsProviderError(str(error)) from error
 
     for index, row in enumerate(rows, start=1):

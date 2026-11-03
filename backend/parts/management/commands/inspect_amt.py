@@ -4,7 +4,7 @@ from pprint import pprint
 from django.core.management.base import BaseCommand, CommandError
 
 from parts.amt_provider import AMTProviderError, get_price_by_oem
-from parts.exchange_rates import ExchangeRateError, get_usd_sell_rate
+from pricing.rates import RateUnavailable, get_usd_rate
 from parts.pricing import calculate_final_price_gel
 
 
@@ -28,13 +28,13 @@ class Command(BaseCommand):
             raise CommandError(f"AMT error: {error}") from error
 
         try:
-            usd_rate = get_usd_sell_rate()
-        except ExchangeRateError as error:
-            raise CommandError(f"Kursi.ge error: {error}") from error
+            usd_rate = get_usd_rate()
+        except RateUnavailable as error:
+            raise CommandError("NBG rate unavailable") from error
 
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS(f"Rows returned: {len(rows)}"))
-        self.stdout.write(self.style.SUCCESS(f"USD sell rate: {usd_rate}"))
+        self.stdout.write(self.style.SUCCESS(f"USD rate (NBG): {usd_rate}"))
         self.stdout.write("")
 
         for index, row in enumerate(rows, start=1):
