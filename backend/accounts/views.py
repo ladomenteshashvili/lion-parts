@@ -18,7 +18,7 @@ from api.throttles import (
 from . import otp, services
 from .serializers import (
     CodeSerializer, CustomerSerializer, EmailChangeSerializer, LoginSerializer, PasswordChangeSerializer, PasswordResetConfirmSerializer,
-    PasswordResetSerializer, ProfileUpdateSerializer, RegisterSerializer, TokenSerializer, check_password_rules,
+    PasswordResetSerializer, PhoneChangeSerializer, ProfileUpdateSerializer, RegisterSerializer, TokenSerializer, check_password_rules,
 )
 
 
@@ -186,3 +186,20 @@ def profile_email_confirm(request):
     serializer.is_valid(raise_exception=True)
     customer = services.confirm_email_change(serializer.validated_data["token"])
     return Response({"email": customer.user.email})
+
+
+@api_view(["POST"])
+@throttle_classes([PhoneThrottle, OtpSendIpThrottle])
+def profile_phone(request):
+    serializer = PhoneChangeSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    return Response(services.start_phone_change(request, request.user.customer, serializer.validated_data["phone"]))
+
+
+@api_view(["POST"])
+@throttle_classes([OtpVerifyThrottle])
+def profile_phone_verify(request):
+    serializer = CodeSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    customer = services.confirm_phone_change(request, request.user.customer, serializer.validated_data["code"])
+    return Response(CustomerSerializer(customer).data)

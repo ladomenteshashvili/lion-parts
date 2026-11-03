@@ -239,3 +239,12 @@ class EmailChangeSerializer(serializers.Serializer):
         if not self.context["user"].check_password(value):
             raise serializers.ValidationError(_("The current password is incorrect."), code="incorrect")
         return value
+
+
+class PhoneChangeSerializer(serializers.Serializer):
+    phone = PhoneField()
+
+    def validate_phone(self, value):
+        if phone_is_taken(value):
+            raise taken("phone")
+        return value

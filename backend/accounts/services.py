@@ -11,6 +11,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+from rest_framework import serializers
 
 from api.errors import ApiError
 from api.mail import frontend_link, send_templated_email
@@ -217,4 +218,32 @@ def confirm_email_change(token):
     language = customer_language(customer)
     send_templated_email(old_email, "email_changed_notice", {"name": customer.first_name, "new_email": new_email},
                          language)
+    return customer
+
+
+# Phone change (G§8.3): the phone changes only after the new number confirms the OTP.
+
+PENDING_PHONE_KEY = "pending_phone"
+
+
+def start_phone_change(request, customer, phone):
+    response = otp.send_code(session_key=ensure_session(request), phone=phone, purpose="phone_change",
+                             customer=customer, language=customer_language(customer))
+    request.session[PENDING_PHONE_KEY] = phone
+    return response
+
+
+def confirm_phone_change(request, customer, code):
+    phone = request.session.get(PENDING_PHONE_KEY)
+    if not phone:
+        raise ApiError("otp_expired")
+    otp.verify_code(session_key=request.session.session_key, phone=phone, purpose="phone_change", code=code)
+    try:
+        with transaction.atomic():
+            customer.phone, customer.is_phone_verified, customer.phone_verified_at = phone, True, timezone.now()
+            customer.save(update_fields=["phone", "is_phone_verified", "phone_verified_at", "updated_at"])
+    except IntegrityError:  # another account took the number after the code was sent
+        from .serializers import taken
+        raise serializers.ValidationError({"phone": [taken("phone").detail[0]]}) from None
+    request.session.pop(PENDING_PHONE_KEY, None)
     return customer
