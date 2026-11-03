@@ -1,9 +1,12 @@
 """Order rules (G§7.8, G§7.13): money, status, progress, attention. Views and admin call these;
 money and status fields are never edited anywhere else."""
 
+from datetime import timedelta
 from decimal import Decimal
 
+from django.db import transaction
 from django.db.models import F, Sum
+from django.utils import timezone
 
 from pricing.discounts import round2
 
@@ -174,3 +177,76 @@ def proposed_courier_fee(order):
     if gel is None or order.currency == "GEL":
         return gel
     return round2(gel / order.exchange_rate)
+
+
+PROPOSED_CLEAR = {"action_required": False, "action_type": "", "action_message": "", "proposed_part_number": "",
+                  "proposed_name": "", "proposed_unit_price": None, "proposed_eta_min_days": None,
+                  "proposed_eta_max_days": None, "proposed_weight_kg": None}
+
+
+def _jsonable(values):
+    return {k: _str(v) for k, v in values.items()}
+
+
+def _set_price(item, unit_price):
+    item.unit_price = unit_price
+    item.list_unit_price = unit_price + item.discount_unit_amount
+
+
+def _apply_change(item):
+    """G§7.9 "on accept/acknowledge" effects (order currency; the checkout USD snapshot stays as it was)."""
+    t = item.action_type
+    if t == "price_change" or (t == "alternative_required" and item.proposed_unit_price is not None):
+        _set_price(item, item.proposed_unit_price)
+    if t == "eta_change":
+        today = timezone.localdate()
+        item.eta_min_days, item.eta_max_days = item.proposed_eta_min_days, item.proposed_eta_max_days
+        item.expected_arrival_from = today + timedelta(days=item.eta_min_days)
+        item.expected_arrival_to = today + timedelta(days=item.eta_max_days)
+    if t == "alternative_required":
+        item.part_number, item.name = item.proposed_part_number, item.proposed_name
+    if t == "weight_change":
+        item.weight_kg, item.weight_source = item.proposed_weight_kg, "operator"
+        _set_price(item, item.proposed_unit_price)
+
+
+def lock_item(customer, item_id):
+    """(order, item) of the customer, both row-locked, order first (the lock order used everywhere)."""
+    from api.errors import ApiError
+
+    order_id = OrderItem.objects.filter(pk=item_id, order__customer=customer).values_list("order_id", flat=True).first()
+    if order_id is None:
+        raise ApiError("not_found", status=404)
+    order = Order.objects.select_for_update().get(pk=order_id)
+    return order, OrderItem.objects.select_for_update().get(pk=item_id)
+
+
+@transaction.atomic
+def decide(customer, item_id, decision, actor_name=""):
+    """POST /api/orders/items/<id>/decision/ (G§7.9). A decision not offered for the pending action (or no
+    action at all, e.g. a repeated submit) -> 409 no_pending_action. -> the order."""
+    from api.errors import ApiError
+
+    order, item = lock_item(customer, item_id)
+    if decision not in decisions(item) or order.status == Order.STATUS_CANCELLED:
+        raise ApiError("no_pending_action", status=409)
+    old, new = action_change(item)
+    before = {"action_type": item.action_type, "item_status": item.item_status, **_jsonable(old)}
+    if decision == "cancel":
+        item.item_status = OrderItem.STATUS_CANCELLED
+        code = "item_cancelled"
+    else:
+        _apply_change(item)
+        if decision == "accept":
+            item.item_status = OrderItem.STATUS_CHECKING
+        code = "action_accepted" if decision == "accept" else "notice_acknowledged"
+    for field, value in PROPOSED_CLEAR.items():
+        setattr(item, field, value)
+    item.save()
+    create_item_event(item, f"decision_{decision}", text_code=code, old=before,
+                      new={"item_status": item.item_status, **_jsonable(new)}, actor=OrderItemEvent.ACTOR_CUSTOMER,
+                      actor_name=actor_name, visible=True)
+    recalculate_order(order)
+    sync_order_status(order)
+    # LP-BE-902: notify operators? (not in G§7.11; the admin list shows the decision)
+    return order

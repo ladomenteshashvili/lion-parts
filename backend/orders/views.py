@@ -14,7 +14,7 @@ from api.permissions import IsFullyVerified
 from payments.models import Payment
 from payments.services import request_payment, start_payment
 
-from . import checkout
+from . import checkout, services
 from .invoices import invoice_language, render_invoice
 from .models import Order, OrderItem
 from .serializers import order_data, order_queryset, orders_data, payment_data
@@ -116,3 +116,18 @@ def order_list(request):
 @api_view(["GET"])
 def order_detail(request, order_number):
     return Response(order_data(request, own_order(request, order_number, order_queryset(detail=True)), detail=True))
+
+
+@api_view(["POST"])
+def item_decision(request, item_id):
+    decision = request.data.get("decision") if isinstance(request.data, dict) else None
+    if decision not in ("accept", "cancel", "acknowledge"):
+        raise serializers.ValidationError({"decision": [serializers.ErrorDetail(
+            str(serializers.ChoiceField.default_error_messages["invalid_choice"]).format(input=decision), "invalid")]})
+    customer = request.user.customer
+    order = services.decide(customer, item_id, decision, actor_name=f"{customer.first_name} {customer.last_name}")
+    return _order_response(request, order)
+
+
+def _order_response(request, order, status=200):
+    return Response(order_data(request, order_queryset(detail=True).get(pk=order.pk), detail=True), status=status)
