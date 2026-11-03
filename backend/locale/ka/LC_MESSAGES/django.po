@@ -3,12 +3,45 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 17:45+0000\n"
+"POT-Creation-Date: 2026-11-03 17:48+0000\n"
 "Language: ka\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: accounts/admin.py:47
+msgid "Email"
+msgstr "ელფოსტა"
+
+#: accounts/admin.py:48
+msgid "Phone"
+msgstr "ტელეფონი"
+
+#: accounts/admin.py:73 accounts/serializers.py:16 api/errors.py:23
+msgid "This email is already linked to another account."
+msgstr "ეს ელფოსტა უკვე დაკავშირებულია სხვა ანგარიშთან."
+
+#: accounts/admin.py:128
+msgid "User account (password reset)"
+msgstr "მომხმარებლის ანგარიში (პაროლის აღდგენა)"
+
+#: accounts/admin.py:133
+msgid "Anonymize (same rules as account deletion)"
+msgstr "ანონიმიზაცია (ანგარიშის წაშლის წესებით)"
+
+#: accounts/admin.py:144
+#, python-format
+msgid "#%(id)s: anonymized."
+msgstr "#%(id)s: ანონიმიზებულია."
+
+#: accounts/admin.py:146
+msgid "Mark email verified"
+msgstr "ელფოსტის დადასტურებულად მონიშვნა"
+
+#: accounts/admin.py:151
+msgid "#%(id)s: email marked verified."
+msgstr "#%(id)s: ელფოსტა მონიშნულია დადასტურებულად."
 
 #: accounts/models.py:38
 msgid "Make another tariff the default first."
@@ -22,10 +55,6 @@ msgstr "ნაგულისხმევ ტარიფს სჭირდე�
 #, python-brace-format
 msgid "Lion Parts code: {code}"
 msgstr "Lion Parts-ის კოდი: {code}"
-
-#: accounts/serializers.py:16 api/errors.py:23
-msgid "This email is already linked to another account."
-msgstr "ეს ელფოსტა უკვე დაკავშირებულია სხვა ანგარიშთან."
 
 #: accounts/serializers.py:17
 msgid "This phone number is already linked to another account."
@@ -586,6 +615,7 @@ msgid "Close"
 msgstr "დახურვა"
 
 #: orders/admin.py:394
+#, python-format
 msgid "%(n)d ticket closed."
 msgid_plural "%(n)d tickets closed."
 msgstr[0] "%(n)d მიმართვა დაიხურა."
@@ -611,7 +641,7 @@ msgstr "აირჩიეთ ქალაქი სიიდან."
 msgid "Choose a district of this city."
 msgstr "აირჩიეთ ამ ქალაქის რაიონი."
 
-#: orders/notifications.py:148
+#: orders/notifications.py:148 orders/test_notify.py:125
 msgid "Lion Parts support replied to your request:"
 msgstr "Lion Parts-ის მხარდაჭერამ გიპასუხათ:"
 
