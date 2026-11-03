@@ -13,7 +13,7 @@ from accounts.services import ensure_session
 from api.errors import ApiError
 from orders.texts import render_text
 from parts.models import PartQuoteRequest
-from parts.services import image_urls, owned_log, request_customer, run_search
+from parts.services import image_urls, owned_log, priced_for, request_customer, run_search
 from pricing.engine import PriceInput, PriceSnapshot, default_shipping_usd_per_kg, price_offer, reprice
 from pricing.models import SiteSettings
 from pricing.rates import get_usd_rate
@@ -98,10 +98,18 @@ def add_item(request, data):
             existing.quantity += data["quantity"]
             existing.save(update_fields=["quantity", "updated_at"])
             return cart
-        if snap.currency != cart.currency:
+        line = CartItem(cart=cart, quantity=data["quantity"], **fields)
+        stale_tariff = fields["source"] == CartItem.SOURCE_SEARCH and \
+            log.normalized_response.get("priced_for", "unknown") != priced_for(customer)
+        if stale_tariff or snap.currency != cart.currency:
+            # Priced for someone else (e.g. a guest search before login) or in another currency:
+            # recalculate for this customer with the current tariff, discounts, VAT and rate.
+            shown = snap
             snap = reprice(snap.to_json() | {"part_number": fields["part_number"], "brand": fields["brand"]},
                            customer=customer, currency=cart.currency)
-        line = CartItem(cart=cart, quantity=data["quantity"], **fields)
+            if shown.currency == snap.currency and shown.unit_price != snap.unit_price:
+                line.previous_unit_price = shown.unit_price
+                line.availability_status = CartItem.STATUS_PRICE_CHANGED
         line.apply_snapshot(snap)
         line.save()
     return cart

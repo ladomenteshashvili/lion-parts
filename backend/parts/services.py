@@ -49,6 +49,11 @@ def mark_quote_price_ready(quote_request):
 
 # Search (G§7.6, G§8.4)
 
+def priced_for(customer):
+    """Who a log's offers were priced for: the customer id, or None for the default (guest) tariff."""
+    return customer.pk if customer else None
+
+
 def request_customer(request):
     """The logged-in customer, or None for guests (and staff sessions)."""
     from accounts.services import can_log_in
@@ -72,7 +77,7 @@ def run_search(request, *, part_number, vin, currency):
         log.save()
         raise
     log.provider, log.raw_response = provider, {"data": raw}
-    log.normalized_response, log.found_count = {"offers": offers}, len(offers)
+    log.normalized_response, log.found_count = {"offers": offers, "priced_for": priced_for(customer)}, len(offers)
     log.exchange_rate = rate
     log.price_valid_until = timezone.now() + timedelta(minutes=SiteSettings.get().price_valid_minutes)
     log.save()
@@ -115,7 +120,7 @@ def calculate_weight_price(request, log, offer_id, weight_kg):
     return PartSearchLog.objects.create(
         kind=PartSearchLog.KIND_WEIGHT_CALC, customer=customer, session_key=request.session.session_key or "",
         provider=provider, part_number=log.part_number, vin=log.vin, found_count=1, raw_response={"data": raw},
-        normalized_response={"offers": offers}, currency=log.currency,
+        normalized_response={"offers": offers, "priced_for": priced_for(customer)}, currency=log.currency,
         exchange_rate=Decimal(offers[0]["snapshot"]["exchange_rate"]),
         price_valid_until=timezone.now() + timedelta(minutes=SiteSettings.get().price_valid_minutes),
     )
