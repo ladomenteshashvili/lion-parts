@@ -18,7 +18,7 @@ from orders.models import Order, OrderItem
 from payments.models import Payment
 from payments.providers import PaymentInitError
 from pricing.models import ExchangeRate, SiteSettings
-from pricing.rates import RateUnavailable
+from pricing.rates import RateUnavailable, get_usd_rate
 
 D = Decimal
 PICKUP = {"delivery_method": "pickup", "pickup_point_id": None, "payment_option": "full", "payment_method": "invoice",
@@ -199,6 +199,24 @@ class CheckoutTests(CheckoutMixin, TestCase):
         line_usd = OrderItem.objects.get().unit_price_usd
         self.assertEqual((Order.objects.get().exchange_rate, body["order"]["items"][0]["unit_price"]),
                          (D("2.7000"), f"{(line_usd * D('2.7')).quantize(D('0.01'))}"))
+
+    def test_rate_update_during_checkout_freezes_the_rate_used_for_the_amounts(self):
+        """M3 audit fix 2: fetch_nbg_rates stores a new rate right after checkout read the rate."""
+        self.fill_cart(0, 1)
+
+        def read_then_update():
+            rate = get_usd_rate()  # the real read (pricing.currency's name is patched)
+            ExchangeRate.objects.filter(pk=self.rate.pk).update(rate=D("2.9000"))
+            return rate
+
+        with mock.patch("pricing.currency.get_usd_rate", side_effect=read_then_update) as reads:
+            body = self.checkout().json()
+        order = Order.objects.get()
+        self.assertEqual((reads.call_count, order.exchange_rate), (1, D("2.6000")))
+        for item in order.items.all():
+            self.assertEqual(item.list_unit_price, (item.list_price_usd * D("2.6")).quantize(D("0.01")))
+        self.assertEqual(body["payment"]["amount"], f"{order.total:.2f}")
+        self.assertEqual(order.total, sum(i.unit_price * i.quantity for i in order.items.all()))
 
     def test_multi_currency_usd_order(self):
         SiteSettings.objects.update(multi_currency_enabled=True)

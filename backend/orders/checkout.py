@@ -12,7 +12,6 @@ from api.errors import ApiError
 from cart.models import Cart
 from cart.services import cart_data, get_cart, line_status, sync_prices
 from payments.services import create_payment
-from pricing.currency import display_rate
 from pricing.discounts import round2
 from pricing.models import PickupPoint, SiteSettings
 from pricing.services import meta_pricing
@@ -129,8 +128,9 @@ def create_order(customer, data):
         cart = Cart.objects.select_for_update().filter(customer=customer).first()
         if cart is None or not cart.items.exists():
             raise ApiError("cart_empty", status=409)
-        sync_prices(cart)  # allowed currency + current NBG rate on every line (502 without a rate)
-        rate = display_rate(cart.currency)
+        # allowed currency + current NBG rate on every line (502 without a rate); the one rate read here is
+        # the rate frozen on the order, even if fetch_nbg_rates stores a new one meanwhile (D16)
+        rate = sync_prices(cart)
         now = timezone.now()
         lines = list(cart.items.all())
         reasons = [{"item_id": line.pk, "code": status} for line in lines

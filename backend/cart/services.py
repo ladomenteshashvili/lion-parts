@@ -58,7 +58,8 @@ def _sync_line(line, currency, rate):
 
 def sync_prices(cart):
     """Bring the cart to an allowed currency and the current rate (FX never changes the USD prices).
-    Raises RateUnavailable for GEL without a current rate: an outdated GEL amount is never shown."""
+    Raises RateUnavailable for GEL without a current rate: an outdated GEL amount is never shown.
+    -> the rate used (read once, so callers can freeze exactly that rate)."""
     if cart.currency not in allowed_currencies():  # e.g. multi-currency was switched off
         cart.currency = default_currency()
         cart.save(update_fields=["currency", "updated_at"])
@@ -66,7 +67,7 @@ def sync_prices(cart):
     for line in cart.items.all():
         if _sync_line(line, cart.currency, rate):
             line.save(update_fields=[*CONVERTED_FIELDS, "updated_at"])
-    return cart
+    return rate
 
 
 def refresh_gel_prices(rate):
