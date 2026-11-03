@@ -131,3 +131,50 @@ def confirm_manual_payment(payment, user):
             return "overpayment"
         mark_payment(payment, Payment.STATUS_PAID, confirmed_by=user)
     return None
+
+
+def refundable(payment):
+    from django.db.models import Sum
+
+    return payment.amount - (payment.refunds.aggregate(s=Sum("amount"))["s"] or 0)
+
+
+def _lock_paid(order_id):
+    """Paid payments then the order, row-locked (mark_payment's lock order); money recalculated."""
+    payments = list(Payment.objects.select_for_update().filter(order_id=order_id, status=Payment.STATUS_PAID)
+                    .order_by("-paid_at", "-id"))
+    order = Order.objects.select_for_update().get(pk=order_id)
+    recalculate_order(order)
+    return payments, order
+
+
+def record_refund(order_id, user, reason=""):
+    """Admin "refund the amount owed" (D20): records refunds of exactly what the order owes back
+    (-balance_due, e.g. after cancelling an item or the order), taken from the latest paid payments and
+    never more than any payment still holds. Idempotent: nothing owed -> nothing recorded. -> amount."""
+    from .models import Refund
+
+    with transaction.atomic():
+        payments, order = _lock_paid(order_id)
+        owed, total = -order.balance_due, 0
+        for payment in payments:
+            take = min(refundable(payment), owed - total)
+            if take > 0:
+                Refund.objects.create(payment=payment, amount=take, reason=reason, created_by=user)
+                total += take
+        recalculate_order(order)
+    return total
+
+
+def refund_whole_payment(payment, user):
+    """Admin "mark refunded": only when the whole remaining amount of this payment is owed back (D20).
+    -> None when refunded, else a reason code: not_paid / exceeds_owed."""
+    with transaction.atomic():
+        payments, order = _lock_paid(payment.order_id)
+        payment = next((p for p in payments if p.pk == payment.pk), None)
+        if payment is None:
+            return "not_paid"
+        if refundable(payment) > -order.balance_due:
+            return "exceeds_owed"
+        mark_payment(payment, Payment.STATUS_REFUNDED, payload={**payment.provider_payload, "refunded_by": user.pk})
+    return None

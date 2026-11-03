@@ -14,9 +14,11 @@ from .models import PartImage, PartQuoteRequest, PartSearchLog
 from .providers import build_offers, fetch_rows, public_offer
 
 
-def image_urls(request, part_number, brand):
-    """Absolute image URLs for a part: brand-specific images first, then generic ones (G§7.6)."""
-    images = PartImage.objects.filter(part_number=normalize_part_number(part_number))
+def image_urls(request, part_number, brand, images=None):
+    """Absolute image URLs for a part: brand-specific images first, then generic ones (G§7.6).
+    `images`: this part's PartImage rows when the caller loaded them already (no query)."""
+    if images is None:
+        images = PartImage.objects.filter(part_number=normalize_part_number(part_number))
     brand = (brand or "").lower()
     ranked = sorted((img for img in images if not img.brand or img.brand.lower() == brand),
                     key=lambda img: (not img.brand, img.sort_order, img.id))
@@ -42,6 +44,41 @@ def mark_quote_price_ready(quote_request):
     quote_request.save()
     # LP-BE-1104/903: notify(price_ready) once notifications exist.
     return quote_request
+
+
+def mark_quote_ready(quote_request_id, weight_kg, message="", *, supplier_price_usd=None):
+    """Operator "price ready" (G§7.6, LP-BE-1104), used by the admin and the demo endpoint. The supplier price
+    S: `supplier_price_usd` when the operator enters it; for a request made from a search offer, the
+    supplier is asked again (that offer must still exist); otherwise the price stored on the request.
+    Raises OperatorError (nothing changes) or RateUnavailable. -> the quote request."""
+    from django.db import transaction
+    from django.utils.translation import gettext as _
+
+    from orders.services import OperatorError
+
+    from .providers import PartsProviderError, fetch_rows
+
+    if weight_kg is None or weight_kg <= 0:
+        raise OperatorError("weight_kg", _("Enter a weight greater than zero."))
+    with transaction.atomic():
+        qr = PartQuoteRequest.objects.select_for_update().select_related("customer").get(pk=quote_request_id)
+        if qr.status == PartQuoteRequest.STATUS_CANCELLED:
+            raise OperatorError("weight_kg", _("The request is cancelled."))
+        if supplier_price_usd is None and qr.offer_id:
+            try:
+                rows = fetch_rows(qr.part_number)[2]
+            except PartsProviderError:
+                raise OperatorError("supplier_price_usd", _("The supplier is unavailable; enter the supplier price."))
+            row = next((r for r in rows if r["offer_id"] == qr.offer_id), None)
+            if row is None:
+                raise OperatorError("supplier_price_usd", _("The supplier no longer offers this part; enter the "
+                                                            "supplier price."))
+            supplier_price_usd = row["supplier_price_usd"]
+        supplier_price_usd = supplier_price_usd if supplier_price_usd is not None else qr.supplier_price_usd
+        if supplier_price_usd is None or supplier_price_usd <= 0:
+            raise OperatorError("supplier_price_usd", _("Enter the supplier price."))
+        qr.prepared_weight_kg, qr.supplier_price_usd, qr.operator_message = weight_kg, supplier_price_usd, message
+        return mark_quote_price_ready(qr)
 
 
 # Search (G§7.6, G§8.4)

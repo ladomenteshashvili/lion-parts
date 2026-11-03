@@ -12,6 +12,8 @@ from accounts.models import CustomerTariff
 from accounts.testing import make_customer
 from parts.models import PartQuoteRequest
 from pricing.models import ExchangeRate
+from orders.services import OperatorError
+from parts.services import mark_quote_ready
 from pricing.rates import RateUnavailable
 
 D = Decimal
@@ -31,7 +33,7 @@ class PriceReadyActionTests(TestCase):
 
     def run_action(self, *requests):
         return self.client.post(URL, {"action": "mark_price_ready", "_selected_action": [r.pk for r in requests]},
-                                follow=True)
+                                follow=True, headers={"accept-language": "en"})
 
     def test_weight_and_manual_requests_are_priced_for_their_customer(self):
         weight, manual = self.request_(), self.request_(request_type="manual_search", currency="USD")
@@ -62,7 +64,8 @@ class PriceReadyActionTests(TestCase):
             qr.refresh_from_db()
             self.assertIsNone(qr.price_ready_at)
         warnings = [str(m) for m in response.context["messages"]]
-        self.assertTrue(any(str(no_weight.pk) in m and str(no_price.pk) in m for m in warnings), warnings)
+        self.assertIn(f"#{no_weight.pk}: Enter a weight greater than zero.", warnings)  # one message per row
+        self.assertIn(f"#{no_price.pk}: Enter the supplier price.", warnings)
 
     def test_rate_failure_leaves_the_request_unpriced(self):
         qr = self.request_()
@@ -76,3 +79,47 @@ class PriceReadyActionTests(TestCase):
         self.assertEqual(self.client.get(f"{URL}{qr.pk}/change/").status_code, 200)
         self.assertEqual(self.client.get(f"{URL}?q=P-1").status_code, 200)
         self.assertEqual(self.client.get("/admin/parts/partsearchlog/?q=x").status_code, 200)
+
+
+class MarkQuoteReadyServiceTests(TestCase):
+    """LP-BE-1104: mark_quote_ready re-queries the supplier for requests made from a search offer."""
+
+    def setUp(self):
+        ExchangeRate.objects.create(date=timezone.localdate(), rate=D("2.6000"))
+        self.customer = make_customer()
+
+    def offer_request(self, offer_id="AMT-1"):
+        return PartQuoteRequest.objects.create(customer=self.customer, request_type="weight_price", part_number="P-1",
+                                               brand="OEM", offer_id=offer_id, supplier_price_usd=D("90.00"))
+
+    def rows(self, price=D("100.00"), offer_id="AMT-1"):
+        return ("amt", {}, [{"offer_id": offer_id, "supplier_price_usd": price}])
+
+    def test_supplier_is_asked_again_for_a_search_offer(self):
+        qr = self.offer_request()
+        with mock.patch("parts.providers.fetch_rows", return_value=self.rows()):
+            mark_quote_ready(qr.pk, D("2.00"), "Checked")
+        qr.refresh_from_db()
+        self.assertEqual((qr.supplier_price_usd, qr.prepared_weight_kg, qr.operator_message, qr.unit_price_usd,
+                          qr.status), (D("100.00"), D("2.00"), "Checked", D("164.26"), "resolved"))
+        public = self.client.get(f"/api/public/q/{qr.notification_token}/").json()
+        self.assertEqual((public["unit_price"], public["weight_kg"]), ("427.08", "2.00"))  # 164.26 x 2.6
+
+    def test_offer_gone_or_supplier_down_changes_nothing(self):
+        qr = self.offer_request()
+        from parts.providers import PartsProviderError
+        for patch in ({"return_value": self.rows(offer_id="OTHER")}, {"side_effect": PartsProviderError()}):
+            with self.subTest(patch=patch), mock.patch("parts.providers.fetch_rows", **patch), \
+                    self.assertRaises(OperatorError):
+                mark_quote_ready(qr.pk, D("2.00"))
+        qr.refresh_from_db()
+        self.assertIsNone(qr.price_ready_at)
+
+    def test_manual_supplier_price_wins_and_cancelled_requests_are_refused(self):
+        qr = self.offer_request()
+        with mock.patch("parts.providers.fetch_rows") as fetch:
+            mark_quote_ready(qr.pk, D("2.00"), supplier_price_usd=D("100.00"))
+        fetch.assert_not_called()
+        PartQuoteRequest.objects.filter(pk=qr.pk).update(status="cancelled")
+        with self.assertRaises(OperatorError):
+            mark_quote_ready(qr.pk, D("2.00"), supplier_price_usd=D("100.00"))

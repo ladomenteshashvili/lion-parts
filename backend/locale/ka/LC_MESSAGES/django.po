@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 15:00+0000\n"
+"POT-Creation-Date: 2026-11-03 15:58+0000\n"
 "Language: ka\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -402,69 +402,272 @@ msgstr "ინგლისური"
 msgid "Russian"
 msgstr "რუსული"
 
-#: orders/admin.py:32
+#: orders/admin.py:45
 #, python-format
 msgid "%(payment)s: card payments are confirmed by the payment provider."
 msgstr "%(payment)s: ბარათით გადახდას გადახდის პროვაიდერი ადასტურებს."
 
-#: orders/admin.py:33
+#: orders/admin.py:46
 #, python-format
 msgid "%(payment)s: the payment is not pending."
 msgstr "%(payment)s: გადახდა მოლოდინის სტატუსში არ არის."
 
-#: orders/admin.py:34
+#: orders/admin.py:47
 #, python-format
 msgid "%(payment)s: not confirmed, the order no longer owes this amount (already paid or cancelled)."
 msgstr "%(payment)s: არ დადასტურდა — შეკვეთაზე ეს თანხა აღარ არის გადასახდელი (უკვე გადახდილია ან გაუქმებულია)."
 
-#: orders/admin.py:45
+#: orders/admin.py:58
+#, python-format
 msgid "%(payment)s: payment confirmed."
 msgstr "%(payment)s: გადახდა დადასტურდა."
 
-#: orders/admin.py:83 payments/admin.py:22
+#: orders/admin.py:72
+msgid "Reason (shown to the customer)"
+msgstr "მიზეზი (ჩანს მომხმარებლისთვის)"
+
+#: orders/admin.py:76
+msgid "Courier fee (GEL)"
+msgstr "კურიერის საფასური (GEL)"
+
+#: orders/admin.py:77 orders/admin.py:86
+msgid "Message to the customer"
+msgstr "შეტყობინება მომხმარებელს"
+
+#: orders/admin.py:81 orders/admin.py:236 orders/admin.py:246
+msgid "Reply to the customer"
+msgstr "მომხმარებლისთვის პასუხი"
+
+#: orders/admin.py:85
+msgid "Decision type"
+msgstr "გადაწყვეტილების ტიპი"
+
+#: orders/admin.py:87
+msgid "Proposed unit price (order currency)"
+msgstr "შემოთავაზებული ერთეულის ფასი (შეკვეთის ვალუტა)"
+
+#: orders/admin.py:89
+msgid "Proposed delivery days, from"
+msgstr "შემოთავაზებული მიწოდების დღეები, დან"
+
+#: orders/admin.py:90
+msgid "Proposed delivery days, to"
+msgstr "შემოთავაზებული მიწოდების დღეები, მდე"
+
+#: orders/admin.py:91
+msgid "Alternative part number"
+msgstr "ალტერნატიული ნაწილის ნომერი"
+
+#: orders/admin.py:92
+msgid "Alternative part name"
+msgstr "ალტერნატიული ნაწილის დასახელება"
+
+#: orders/admin.py:93
+msgid "Proposed weight (kg)"
+msgstr "შემოთავაზებული წონა (კგ)"
+
+#: orders/admin.py:98
+msgid "New status"
+msgstr "ახალი სტატუსი"
+
+#: orders/admin.py:99
+msgid "Reason (required to cancel; shown to the customer)"
+msgstr "მიზეზი (სავალდებულოა გაუქმებისთვის; ჩანს მომხმარებლისთვის)"
+
+#: orders/admin.py:149
+msgid "Money (order currency, read-only)"
+msgstr "თანხები (შეკვეთის ვალუტა, მხოლოდ წასაკითხად)"
+
+#: orders/admin.py:152 orders/templates/orders/invoice.html:46
+msgid "Delivery"
+msgstr "მიწოდება"
+
+#: orders/admin.py:156
+msgid "Billing snapshot"
+msgstr "გადამხდელის მონაცემები (შეკვეთის დროს)"
+
+#: orders/admin.py:176 orders/templates/orders/invoice.html:6
+#: orders/templates/orders/invoice.html:20 pricing/admin.py:33
+msgid "Invoice"
+msgstr "ინვოისი"
+
+#: orders/admin.py:179
+msgid "Print invoice"
+msgstr "ინვოისის ბეჭდვა"
+
+#: orders/admin.py:181
+msgid "Refunds"
+msgstr "დაბრუნებები"
+
+#: orders/admin.py:187 payments/admin.py:30
 msgid "Payment received"
 msgstr "თანხა მიღებულია"
 
-#: orders/admin.py:93
+#: orders/admin.py:197
 #, python-format
 msgid "%(order)s: %(n)d pending invoice payment; choose it in Payments."
 msgid_plural "%(order)s: %(n)d pending invoice payments; choose one in Payments."
 msgstr[0] "%(order)s: მოლოდინშია %(n)d ინვოისის გადახდა; აირჩიეთ ის გადახდების განყოფილებაში."
 msgstr[1] "%(order)s: მოლოდინშია %(n)d ინვოისის გადახდა; აირჩიეთ ერთი გადახდების განყოფილებაში."
 
-#: orders/admin.py:97
+#: orders/admin.py:201
 msgid "Create balance invoice"
 msgstr "დარჩენილი თანხის ინვოისის შექმნა"
 
-#: orders/admin.py:106
+#: orders/admin.py:210
 #, python-format
 msgid "%(order)s: invoice created."
 msgstr "%(order)s: ინვოისი შეიქმნა."
 
-#: orders/checkout.py:78
+#: orders/admin.py:212 orders/admin.py:215
+msgid "Record refund of the amount owed"
+msgstr "დასაბრუნებელი თანხის დაბრუნების აღრიცხვა"
+
+#: orders/admin.py:216
+#, python-format
+msgid "refunded %(amount)s %(currency)s"
+msgstr "დაბრუნდა %(amount)s %(currency)s"
+
+#: orders/admin.py:220 orders/admin.py:225
+msgid "Propose courier fee"
+msgstr "კურიერის საფასურის შეთავაზება"
+
+#: orders/admin.py:224
+#, python-format
+msgid "proposed %(amount)s %(currency)s"
+msgstr "შემოთავაზებულია %(amount)s %(currency)s"
+
+#: orders/admin.py:227 orders/admin.py:234
+msgid "Cancel order"
+msgstr "შეკვეთის გაუქმება"
+
+#: orders/admin.py:233 orders/templates/orders/invoice.html:57
+msgid "cancelled"
+msgstr "გაუქმებულია"
+
+#: orders/admin.py:245
+msgid "reply sent"
+msgstr "პასუხი გაიგზავნა"
+
+#: orders/admin.py:248
+msgid "Invoice CSV export"
+msgstr "ინვოისების CSV ექსპორტი"
+
+#: orders/admin.py:288 orders/admin.py:293
+msgid "Request a customer decision"
+msgstr "მომხმარებლის გადაწყვეტილების მოთხოვნა"
+
+#: orders/admin.py:292
+msgid "decision requested"
+msgstr "გადაწყვეტილება მოთხოვნილია"
+
+#: orders/admin.py:295 orders/admin.py:301
+msgid "Change status"
+msgstr "სტატუსის შეცვლა"
+
+#: orders/admin.py:300
+msgid "status changed"
+msgstr "სტატუსი შეიცვალა"
+
+#: orders/admin.py:300
+msgid "already in this status"
+msgstr "უკვე ამ სტატუსშია"
+
+#: orders/admin.py:319
+msgid "Mark read"
+msgstr "წაკითხულად მონიშვნა"
+
+#: orders/checkout.py:77
 msgid "You must accept the terms to place an order."
 msgstr "შეკვეთისთვის საჭიროა პირობებზე თანხმობა."
 
-#: orders/checkout.py:83
+#: orders/checkout.py:82
 msgid "This payment option is not available for your account."
 msgstr "გადახდის ეს ვარიანტი თქვენს ანგარიშზე არ არის ხელმისაწვდომი."
 
-#: orders/checkout.py:93
+#: orders/checkout.py:92
 msgid "Choose an available pickup point."
 msgstr "აირჩიეთ ხელმისაწვდომი გაცემის პუნქტი."
 
-#: orders/checkout.py:105
+#: orders/checkout.py:104
 msgid "Choose a city from the list."
 msgstr "აირჩიეთ ქალაქი სიიდან."
 
-#: orders/checkout.py:107
+#: orders/checkout.py:106
 msgid "Choose a district of this city."
 msgstr "აირჩიეთ ამ ქალაქის რაიონი."
 
-#: orders/templates/orders/invoice.html:6
-#: orders/templates/orders/invoice.html:20 pricing/admin.py:33
-msgid "Invoice"
-msgstr "ინვოისი"
+#: orders/services.py:206
+msgid "Courier fees can be proposed for open delivery orders only."
+msgstr "კურიერის საფასურის შეთავაზება შესაძლებელია მხოლოდ მიტანით აქტიურ შეკვეთებზე."
+
+#: orders/services.py:208
+msgid "The courier fee must be zero or more."
+msgstr "კურიერის საფასური უნდა იყოს ნული ან მეტი."
+
+#: orders/services.py:309 orders/services.py:478
+msgid "A cancellation reason is required."
+msgstr "გაუქმების მიზეზის მითითება სავალდებულოა."
+
+#: orders/services.py:395
+msgid "Enter a value greater than zero."
+msgstr "შეიყვანეთ ნულზე მეტი მნიშვნელობა."
+
+#: orders/services.py:406
+msgid "Unknown action type."
+msgstr "უცნობი მოქმედების ტიპი."
+
+#: orders/services.py:408
+msgid "Customer decisions can be requested on paid, open orders only."
+msgstr "მომხმარებლის გადაწყვეტილების მოთხოვნა შესაძლებელია მხოლოდ გადახდილ, აქტიურ შეკვეთებზე."
+
+#: orders/services.py:410
+msgid "This item is already cancelled or completed."
+msgstr "ეს ნაწილი უკვე გაუქმებული ან დასრულებულია."
+
+#: orders/services.py:415
+msgid "The proposed price equals the current price."
+msgstr "შემოთავაზებული ფასი მიმდინარე ფასის ტოლია."
+
+#: orders/services.py:420
+msgid "The maximum can't be less than the minimum."
+msgstr "მაქსიმუმი მინიმუმზე ნაკლები ვერ იქნება."
+
+#: orders/services.py:422
+msgid "The proposed delivery time equals the current one."
+msgstr "შემოთავაზებული მიწოდების ვადა მიმდინარეს ემთხვევა."
+
+#: orders/services.py:425
+msgid "Enter the alternative part number and name."
+msgstr "შეიყვანეთ ალტერნატიული ნაწილის ნომერი და დასახელება."
+
+#: orders/services.py:427
+msgid "The alternative is the same part number."
+msgstr "ალტერნატივას იგივე ნაწილის ნომერი აქვს."
+
+#: orders/services.py:431
+msgid "Write a message for the customer."
+msgstr "დაწერეთ შეტყობინება მომხმარებლისთვის."
+
+#: orders/services.py:467
+msgid "This status can't be set here."
+msgstr "ამ სტატუსის აქ დაყენება შეუძლებელია."
+
+#: orders/services.py:470
+msgid "The order or item is already closed."
+msgstr "შეკვეთა ან ნაწილი უკვე დახურულია."
+
+#: orders/services.py:472
+msgid "The order is not paid yet."
+msgstr "შეკვეთა ჯერ არ არის გადახდილი."
+
+#: orders/services.py:476
+msgid "The order still has a balance due."
+msgstr "შეკვეთაზე ჯერ კიდევ არის დარჩენილი გადასახდელი თანხა."
+
+#: orders/templates/admin/orders/action_form.html:10
+msgid "Apply"
+msgstr "გამოყენება"
 
 #: orders/templates/orders/invoice.html:21
 msgid "Date"
@@ -495,10 +698,6 @@ msgstr "წარმომადგენელი"
 msgid "Personal ID"
 msgstr "პირადი ნომერი"
 
-#: orders/templates/orders/invoice.html:46
-msgid "Delivery"
-msgstr "მიწოდება"
-
 #: orders/templates/orders/invoice.html:47
 msgid "Pickup point"
 msgstr "გაცემის პუნქტი"
@@ -527,10 +726,6 @@ msgstr "ერთეულის ფასი"
 #: orders/templates/orders/invoice.html:53
 msgid "Line total"
 msgstr "ჯამი"
-
-#: orders/templates/orders/invoice.html:57
-msgid "cancelled"
-msgstr "გაუქმებულია"
 
 #: orders/templates/orders/invoice.html:66
 msgid "Items"
@@ -727,24 +922,12 @@ msgstr "მომხმარებლის ბმული"
 msgid "Price ready: calculate the price and create the customer link"
 msgstr "ფასი მზადაა: ფასის დათვლა და მომხმარებლის ბმულის შექმნა"
 
-#: parts/admin.py:94
+#: parts/admin.py:92
 #, python-format
-msgid "%(n)d request priced; its customer link is active."
-msgid_plural "%(n)d requests priced; their customer links are active."
-msgstr[0] "%(n)d მოთხოვნაზე ფასი დაითვალა; მომხმარებლის ბმული აქტიურია."
-msgstr[1] "%(n)d მოთხოვნაზე ფასი დაითვალა; მომხმარებლების ბმულები აქტიურია."
+msgid "#%(id)s: priced; the customer link is active."
+msgstr "#%(id)s: ფასი გამოთვლილია; მომხმარებლის ბმული აქტიურია."
 
-#: parts/admin.py:98
-#, python-format
-msgid "Skipped (enter a positive weight and supplier price): %(ids)s"
-msgstr "გამოტოვებულია (შეიყვანეთ დადებითი წონა და მომწოდებლის ფასი): %(ids)s"
-
-#: parts/admin.py:101
-#, python-format
-msgid "Not priced, the exchange rate is unavailable: %(ids)s"
-msgstr "ფასი ვერ დაითვალა, ვალუტის კურსი მიუწვდომელია: %(ids)s"
-
-#: parts/admin.py:112
+#: parts/admin.py:103
 msgid "Preview"
 msgstr "გადახედვა"
 
@@ -764,30 +947,59 @@ msgstr "შეიყვანეთ წონა 0-ზე მეტი და �
 msgid "Confirm that the price may change with the actual weight."
 msgstr "დაადასტურეთ, რომ ფასი შეიძლება შეიცვალოს რეალური წონის მიხედვით."
 
+#: parts/services.py:62
+msgid "Enter a weight greater than zero."
+msgstr "შეიყვანეთ ნულზე მეტი წონა."
+
+#: parts/services.py:66
+msgid "The request is cancelled."
+msgstr "მოთხოვნა გაუქმებულია."
+
+#: parts/services.py:71
+msgid "The supplier is unavailable; enter the supplier price."
+msgstr "მომწოდებელი მიუწვდომელია; შეიყვანეთ მომწოდებლის ფასი."
+
+#: parts/services.py:74
+msgid "The supplier no longer offers this part; enter the supplier price."
+msgstr "მომწოდებელი ამ ნაწილს აღარ სთავაზობს; შეიყვანეთ მომწოდებლის ფასი."
+
+#: parts/services.py:79
+msgid "Enter the supplier price."
+msgstr "შეიყვანეთ მომწოდებლის ფასი."
+
 #: parts/views.py:73
 msgid "Choose one of: all, ready, checking, other."
 msgstr "აირჩიეთ ერთ-ერთი: all, ready, checking, other."
 
-#: payments/admin.py:26
+#: payments/admin.py:34
 msgid "Cancel invoice"
 msgstr "ინვოისის გაუქმება"
 
-#: payments/admin.py:32
+#: payments/admin.py:40
+#, python-format
 msgid "%(n)d invoice cancelled."
 msgid_plural "%(n)d invoices cancelled."
 msgstr[0] "%(n)d ინვოისი გაუქმდა."
 msgstr[1] "%(n)d ინვოისი გაუქმდა."
 
-#: payments/admin.py:35
+#: payments/admin.py:43
 msgid "Mark refunded"
 msgstr "მონიშვნა: თანხა დაბრუნებულია"
 
-#: payments/admin.py:39
+#: payments/admin.py:50
 #, python-format
-msgid "%(n)d payment marked refunded."
-msgid_plural "%(n)d payments marked refunded."
-msgstr[0] "%(n)d გადახდა მოინიშნა დაბრუნებულად."
-msgstr[1] "%(n)d გადახდა მოინიშნა დაბრუნებულად."
+msgid "%(payment)s: only a paid payment can be refunded."
+msgstr "%(payment)s: დაბრუნება შესაძლებელია მხოლოდ გადახდილი გადახდისთვის."
+
+#: payments/admin.py:53
+#, python-format
+msgid "%(payment)s: not refunded, the order owes back less than this payment; record the amount owed on the order instead."
+msgstr "%(payment)s: არ დაბრუნდა — შეკვეთაზე დასაბრუნებელი თანხა ამ გადახდაზე ნაკლებია; აღრიცხეთ დასაბრუნებელი თანხა შეკვეთაზე."
+
+#: payments/admin.py:57
+#, python-format
+msgid "%(payment)s: marked refunded."
+msgstr "%(payment)s: მონიშნულია დაბრუნებულად."
 
 #: pricing/admin.py:18
 msgid "Currency"

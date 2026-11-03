@@ -124,6 +124,8 @@ class CheckoutTests(CheckoutMixin, TestCase):
         body = self.checkout(payment_option="split_70_30").json()
         due = (total * D("0.7")).quantize(D("0.01"))
         self.assertEqual((body["order"]["amount_due_now"], body["payment"]["amount"]), (f"{due:.2f}",) * 2)
+        CustomerTariff.objects.filter(is_default=True).update(split_upfront_percent=D("50"))
+        self.assertEqual(Order.objects.get().split_upfront_percent, D("70.00"))  # frozen at checkout
 
     def test_split_on_a_full_tariff_is_not_allowed(self):
         self.fill_cart()
