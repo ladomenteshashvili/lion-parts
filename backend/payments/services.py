@@ -76,3 +76,31 @@ def start_payment(payment):
     Payment.objects.filter(pk=payment.pk).update(checkout_url=url, updated_at=timezone.now())
     mark_payment(payment, Payment.STATUS_PENDING)
     return True
+
+
+PAYMENT_IN_PROGRESS_MINUTES = 30
+
+
+def request_payment(order_id, method):
+    """POST /api/orders/<n>/payments/ under an order row lock (no duplicate payments in parallel).
+    While the order still waits for its first payment, the retry is an `initial` payment for
+    amount_due_now (so the order can move to processing); afterwards a `balance` payment for balance_due.
+    Raises nothing_to_pay / payment_in_progress (+payment)."""
+    from datetime import timedelta
+
+    from api.errors import ApiError
+    from orders.models import Order
+    from orders.serializers import payment_data
+
+    with transaction.atomic():
+        order = Order.objects.select_for_update().get(pk=order_id)
+        if order.status == Order.STATUS_CANCELLED or order.balance_due <= 0:
+            raise ApiError("nothing_to_pay", status=409)
+        recent = order.payments.filter(status=Payment.STATUS_PENDING,
+                                       created_at__gt=timezone.now() - timedelta(minutes=PAYMENT_IN_PROGRESS_MINUTES)
+                                       ).order_by("-created_at").first()
+        if recent:
+            raise ApiError("payment_in_progress", status=409, payment=payment_data(recent))
+        initial = order.status == Order.STATUS_PAYMENT_PENDING
+        return create_payment(order, method, Payment.KIND_INITIAL if initial else Payment.KIND_BALANCE,
+                              amount=order.amount_due_now if initial else order.balance_due)

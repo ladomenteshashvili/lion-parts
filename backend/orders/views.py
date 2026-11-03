@@ -2,13 +2,15 @@
 
 from django.http import HttpResponse
 from django.utils.translation import get_language
+from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
 from api.errors import MESSAGES, ApiError
 from api.permissions import IsFullyVerified
 
-from payments.services import start_payment
+from payments.models import Payment
+from payments.services import request_payment, start_payment
 
 from . import checkout
 from .invoices import invoice_language, render_invoice
@@ -53,3 +55,27 @@ def checkout_create(request):
     payment.refresh_from_db()
     order.refresh_from_db()
     return Response({"order": order_data(request, order), "payment": payment_data(payment), **body}, status=201)
+
+
+@api_view(["POST"])
+@permission_classes([IsFullyVerified])
+def order_payments(request, order_number):
+    order = own_order(request, order_number)
+    method = request.data.get("method") if isinstance(request.data, dict) else None
+    if method not in ("card", "invoice"):
+        raise serializers.ValidationError({"method": [serializers.ErrorDetail(
+            str(serializers.ChoiceField.default_error_messages["invalid_choice"]).format(input=method), "invalid")]})
+    payment = request_payment(order.pk, method)
+    if payment.provider != "invoice":
+        start_payment(payment)  # after commit; a failure shows as status "failed"
+    payment.refresh_from_db()
+    return Response(payment_data(payment), status=201)
+
+
+@api_view(["GET"])
+def order_payment(request, order_number, payment_id):
+    order = own_order(request, order_number)
+    payment = Payment.objects.filter(pk=payment_id, order=order).first()
+    if payment is None:
+        raise ApiError("not_found", status=404)
+    return Response(payment_data(payment))
