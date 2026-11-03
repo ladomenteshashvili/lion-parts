@@ -1,5 +1,7 @@
 # Legacy test map (126 skipped tests → replacement stories)
 
+**Final status (LP-BE-1201, M6): no legacy test is skipped any more.** Every scenario below was rewritten against the new contract or removed with its endpoint (G§8.11); the skip helper (`api/legacy.py::legacy_endpoint_test`) and the last empty legacy test module (`parts/tests.py`) were deleted. The table is kept as the audit trail from legacy test to replacement.
+
 Generated on 2026-11-03 from the skip reasons (`api/legacy.py::legacy_endpoint_test`) with
 `DJANGO_SETTINGS_MODULE=config.e2e_settings python manage.py test -v 2`. Each story that replaces a
 legacy endpoint rewrites these scenarios against the new contract (G§8) and removes the legacy test

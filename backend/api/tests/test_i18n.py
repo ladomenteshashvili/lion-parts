@@ -25,9 +25,6 @@ TRANSLATED_REGISTRIES = [MESSAGES, DEFAULT_MESSAGES, DRF_MESSAGES, EVENT_TEXTS]
 # Codes deliberately left untranslated (provider-facing, never shown to users; G§9 "—").
 UNTRANSLATED_CODES = set()
 
-# shortcut: legacy files that still contain Georgian literals; each is cleaned up by the named story.
-# The test fails once a listed file has none left, so this list only shrinks.
-LEGACY_GEORGIAN_FILES = {}
 GEORGIAN = re.compile(r"[\u10a0-\u10ff]")  # Georgian script block (U+10A0-U+10FF)
 
 
@@ -140,13 +137,6 @@ class NoGeorgianLiteralsTests(SimpleTestCase):
                 continue
             yield rel, file
 
-    def test_no_georgian_literals_outside_legacy_files(self):
-        offenders = [rel for rel, file in self.python_files()
-                     if rel not in LEGACY_GEORGIAN_FILES and GEORGIAN.search(file.read_text("utf-8"))]
+    def test_no_georgian_literals_in_python(self):
+        offenders = [rel for rel, file in self.python_files() if GEORGIAN.search(file.read_text("utf-8"))]
         self.assertEqual(offenders, [], "Use gettext_lazy with English msgids (G§5.8)")
-
-    def test_legacy_allowlist_only_shrinks(self):
-        files = dict(self.python_files())
-        stale = [rel for rel in LEGACY_GEORGIAN_FILES
-                 if rel not in files or not GEORGIAN.search(files[rel].read_text("utf-8"))]
-        self.assertEqual(stale, [], "No Georgian left: remove these from LEGACY_GEORGIAN_FILES")

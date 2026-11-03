@@ -1,17 +1,16 @@
 # Disabled legacy endpoints
 
-Since **LPK-98 / LP-BE-103** the legacy `session_id` API is **not routed**. It identified customers by a
-client-generated `session_id` (backend-review F1–F4, F6) and cannot pass the new
-`CsrfSessionAuthentication` + `IsCustomer` defaults. No authentication bypass was added: every route
-below now returns 404. The legacy browser frontend in `frontend/` therefore no longer works against
-this backend; the external frontend builds against the new contract (AI_IMPLEMENTATION_GUIDE §8).
+Since **LPK-98 / LP-BE-103** the legacy `session_id` API was **not routed**; **LP-BE-1201 (M6)** finished its
+removal. It identified customers by a client-generated session token (backend-review F1–F4, F6) and could
+not pass the new `CsrfSessionAuthentication` + `IsCustomer` defaults. No authentication bypass was ever added.
 
-**LP-BE-201** deleted the accounts views, serializers and URLs (their routes are frozen in
-`api.legacy.REMOVED_ROUTES` and still asserted unreachable). The other view modules stay in the tree (the Django admin imports helpers from `orders/views.py`; AMT,
-pricing and invoice logic are reused) and are deleted by **LP-BE-1201**. Their tests are kept but
-skipped with the replacing story in the skip reason (`api/legacy.py::legacy_endpoint_test`).
-`api/tests/test_legacy.py` asserts that every route of the modules in `api.legacy.LEGACY_URLCONFS`
-is unreachable.
+All legacy views, serializers, URL modules and their skipped tests are deleted (accounts in LP-BE-201,
+parts in LP-BE-402, cart in LP-BE-502/503, orders in LP-BE-601); LP-BE-1201 removed the last shims
+(`accounts/customer_sessions.py`, `api/legacy.py`, the empty legacy `parts/tests.py`). The routes that the
+new contract does not serve again are frozen in `api/tests/test_legacy.py::REMOVED_ROUTES` and asserted to
+return the JSON 404 for every method. `grep -rn "session_id" backend --include=*.py | grep -v migrations`
+is empty. The legacy browser frontend in `frontend/` does not work against this backend; the external
+frontend builds against the new contract (AI_IMPLEMENTATION_GUIDE §8).
 
 | Method | Legacy route | Replaced by | New endpoint (G§8) |
 |---|---|---|---|
