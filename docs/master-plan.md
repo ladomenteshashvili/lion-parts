@@ -8,7 +8,7 @@ source of truth for contracts), `JIRA_BACKLOG.md` (76 stories, 13 epics, 6 miles
 `backend-review.md` (historical audit), `CLAUDE.md` (agent rules). This file restates only what is
 needed to plan; it never overrides the Guide.
 
-Last updated: 2026-11-03.
+Last updated: 2026-11-03 (M1 checkpoint review applied).
 
 ---
 
@@ -18,10 +18,15 @@ Last updated: 2026-11-03.
 |---|---|
 | Epic LP-BE-1 (101–107) + LP-BE-1301 | Done on `feature/lpk-83-platform-foundation` (PR #58, CI green on PostgreSQL 16, not merged) |
 | Demo outbox hardening | Done, `09338f1`: staff only + boot guard (decision D1) |
-| Next milestone | **M1**: Epic 2 (201–213) + LP-BE-1302, 1303, on `feature/m1-accounts-auth` (branched from the PR #58 head) |
+| M1 | Epic 2 (201–213) + LP-BE-1302, 1303 done on `feature/m1-accounts-auth` (branched from the PR #58 head); approved for push and CI, not for merge |
+| Next milestone | **M2**, not started (waits for the owner) |
 | Legacy API | Unrouted since LP-BE-103; 126 tests skipped and mapped (`legacy-test-map.md`) |
 
 ## 2. Milestones and story order
+
+† LP-BE-1102, 1104 and 1105 are **not assigned to a milestone in the backlog**; they stay in the plan and
+are built where their dependencies allow (sprint plan: 1104 in sprint 6, 1102/1105 in sprint 7). All 76
+stories are planned; `progress.md` has one row each.
 
 Order inside each milestone is a valid topological order of the backlog's "Depends on" fields
 (checked: no cycles, every dependency is in the same or an earlier milestone, except the items in §3).
@@ -31,8 +36,8 @@ Order inside each milestone is a valid topological order of the backlog's "Depen
 | **M1** | 201 → 1303 → 202 → 203 → 1302 → 207 → 204 → 206 → 205 → 208 → 209 → 210 → 211 → 212 → 213 | registration, login, verification, reset, profile, language |
 | **M2** | 301 → 304 → 302 → 303 → 401 → 1101 → 402 → 403 → 406 → 404 → 405 → 407 → 501 → 502 → 503 → 504 → 505 → 506 | search, history, weight/quote, cart, currency |
 | **M3** | 601 → 602 → 604 → 701 → 702 → 603 → 703 → 704 → 705 → 706 → 1304 | checkout, payment result, invoice |
-| **M4** | 801 → 802 → 803 → 804 → 805 → 806 → 1103 → 1104 → 807 | orders, tracking, decisions, cancel, courier fee |
-| **M5** | 901 → 1305 → 902 → 903 → 904 → 1001 → 1002 → 1102 → 1105 | notifications, badges, magic links, support |
+| **M4** | 801 → 802 → 803 → 804 → 805 → 806 → 1103 → 1104† → 807 | orders, tracking, decisions, cancel, courier fee |
+| **M5** | 901 → 1305 → 902 → 903 → 904 → 1001 → 1002 → 1102† → 1105† | notifications, badges, magic links, support |
 | **M6** | 1201 → 1202 → 1203 → 1204 → 1205 → 1306 | final contract, ka/ru QA, production readiness |
 
 ### Dependency graph (all 76 stories)
@@ -74,22 +79,24 @@ all functional epics ─ 1201 ─┬─ 1202 ─ 1204 ─ 1205 (1203)
 
 | # | Decision | Status |
 |---|---|---|
-| **D1** | `GET /api/demo/outbox/` requires a **staff** session (`IsAdminUser`), although G§8.10 lists no auth. Reason: email bodies hold verification and password-reset links. Settings also refuse `ENABLE_DEMO_ENDPOINTS` with `SENDER_GE_ENABLED=True` or a non-`fake` `PAYMENT_PROVIDER`. Commit `09338f1`. | **Accepted by the owner (2026-11-03).** Guide §8.10 row should read "S (staff)"; add a G§16 change-log line. Guide edit pending (owner). |
-| D2 | Django 6.1 forbids the `EMAIL_*` settings next to `MAILERS`. The G§12 env names are read into a `MAILERS` dict. | Implemented (LP-BE-101). Guide §5.2/§12 wording update pending. |
-| D3 | The other demo routes (G§8.10 order status/action/courier fee/quote ready; G§7.10 `POST /api/payments/fake/<id>/complete/`) **change orders and payments** and have no auth in the Guide either. Proposal: the same staff-only rule as D1. | **Open**, decide before 703/807. |
+| **D1** | `GET /api/demo/outbox/` requires a **staff** session (`IsAdminUser`). Reason: email bodies hold verification and password-reset links. Settings also refuse `ENABLE_DEMO_ENDPOINTS` with `SENDER_GE_ENABLED=True` or a non-`fake` `PAYMENT_PROVIDER`. Commit `09338f1`. | **Accepted (2026-11-03).** Local Guide updated: §4.10, §8.10 (Auth column), §12 note, §16 change log. |
+| D2 | Django 6.1 forbids the `EMAIL_*` settings next to `MAILERS`. The G§12 env names are read into a `MAILERS` dict. | **Accepted (2026-11-03).** Implemented (LP-BE-101); local Guide §5.2 and §16 updated. |
+| **D3** | No demo endpoint may change an order or a payment without authentication. Operator-side demo mutations (G§8.10 item status/action, courier fee, quote ready) require a **staff** session. The customer-facing `POST /api/payments/fake/<id>/complete/` requires the **logged-in owner** of the order (foreign → 404) and a **pending** payment (else 409). | **Accepted (2026-11-03).** Local Guide §4.10/§8.8/§8.10/§16 updated. Built in LP-BE-704 (fake complete) and LP-BE-807 (demo order routes); each needs anonymous, wrong-customer, non-staff and wrong-state tests. |
 | D4 | LP-BE-201 deletes `CustomerSession` and `customer_sessions.py`, but the unrouted legacy views in `parts/`, `orders/`, `cart/` and the live admin still import from them until 1201. Plan: delete the legacy **accounts** views, serializers, URLs and their tests (all replaced inside M1). Keep `get_customer_for_session()` as a shim that returns `None` (legacy `session_id`s identify nobody) until 1201. Update live callers (admin, AMT/pricing code) to the new `Customer` fields. | Chosen for M1 (follows the backlog's "keep the imports compiling until then"). |
-| D5 | Fresh `accounts/0001_initial` (G§6, LP-BE-201) means orders migrations 0014–0016 must point at the new accounts migration. Any database already migrated with the old accounts migrations (e.g. `lion_parts_v2`, if migrated) must be **recreated**. | Code change in M1. **DB reset needs the owner's explicit approval**; this agent doesn't touch any database. |
+| D5 | Fresh `accounts/0001_initial` (G§6, LP-BE-201); orders 0014/0016 point at it. A database migrated before `befe29b` is **not upgradable** and the mismatch is silent: see [`migration-history.md`](migration-history.md). | Done in M1. **Owner: do not recreate, reset or migrate `lion_parts_v2`** (2026-11-03). PostgreSQL is tested only on ephemeral CI databases. |
 | D6 | Until LP-BE-303, the legacy price code needs a markup. `TariffMarkup` replaces `CustomerTariff.markup_percent`: legacy code reads the tariff's **GEL** markup (seeded at 20). | M1. |
-| D7 | The Jira keys (LPK-…) of Epics 2–13 aren't known in this repo, and Jira isn't reachable from the agent session. Known: LP-BE-101..107 = LPK-96..102, LP-BE-1301 = LPK-166, epic LPK-83. | Commits and the tracker use LP-BE keys; LPK keys are filled in by the owner. |
+| D7 | Jira epic keys (verified by the owner, 2026-11-03): Epic 1 LPK-83, Epic 2 LPK-84, Epic 3 LPK-85, Epic 4 LPK-86, Epic 5 LPK-87, Epic 6 LPK-88, Epic 7 LPK-89, Epic 8 LPK-90, Epic 9 LPK-91, Epic 10 LPK-92, Epic 11 LPK-93, Epic 12 LPK-94, Epic 13 LPK-95. Story keys known: LP-BE-101..107 = LPK-96..102, LP-BE-1301 = LPK-166. | Commits use LP-BE keys; `progress.md` shows the epic key for each story and the story key where known (never guessed). |
 | D8 | The legacy `send-code` returned `demo_code` whenever `SENDER_GE_ENABLED=False`. | LP-BE-203 uses the Guide rule only: `SMS_DEMO_MODE and (DEBUG or ENABLE_DEMO_ENDPOINTS)`. |
+| **D10** | Fail-closed `DEPLOY_ENV` (`production` / `staging` / `development` / `test`; unset = production). Production refuses `DEBUG`, `ENABLE_DEMO_ENDPOINTS`, `SMS_DEMO_MODE`, `PARTS_PROVIDER=demo` and console/locmem/dummy/filebased mail backends. CI and test settings use `test`. | **Accepted and implemented (2026-11-03)**, `52ab640`, tests in `config/tests.py`. |
+| D11 | Disabled SMS delivery is never silent: `send_sms` logs a warning when `SENDER_GE_ENABLED=False`; OTP sending returns `502 sms_failed` when delivery is off and demo codes are off. Expired registration drafts are deleted when found. | **Accepted (M1 audit fixes)**, `2c7781b`. |
 | D9 | Legacy tests replaced by a story are rewritten for the new contract and the legacy test is removed **in the same commit** as the code it tested (G§8.11: "delete together with their views, serializers and tests"). Scenarios are tracked in `legacy-test-map.md`; a legacy test is never deleted without its replacement. | Policy for all milestones. |
 
 ## 5. Security risk register
 
 | # | Risk | Mitigation / story |
 |---|---|---|
-| S1 | Demo endpoints leak links or let anyone change orders and payments | D1 done; D3 open; production guard §6 |
-| S2 | Production started with demo settings | Current guard covers only "real SMS or payments on"; stronger guard proposed in §6 |
+| S1 | Demo endpoints leak links or let anyone change orders and payments | D1 done; D3 accepted (built in 704/807); D10 production guard |
+| S2 | Production started with demo settings | D10 (fail-closed `DEPLOY_ENV`) + the D1 real-SMS/payments guard |
 | S3 | OTP brute force | 6 digits, hashed, 5 attempts, `select_for_update`, attempts counted **before** the check, `otp_verify` throttle (203) |
 | S4 | SMS bombing / cost | `otp_send_phone` + `otp_send_ip` throttles, 60 s cooldown (203/204/212) |
 | S5 | Account enumeration | Login and password reset: identical bodies (206/209). Registration returns `taken` by contract (G§8.2); limited by the `register` throttle. **Accepted by the contract.** Residual: password-reset response time is longer for known emails (synchronous SMTP); bounded by the `password_reset` throttle; closing it needs async sending (G§7.11 shortcut). |
@@ -103,7 +110,7 @@ all functional epics ─ 1201 ─┬─ 1202 ─ 1204 ─ 1205 (1203)
 | S13 | `X-Forwarded-For` spoofing bypasses IP throttles | `NUM_PROXIES` from the environment (done, 104); verify the staging proxy config (1204) |
 | S14 | Dead legacy code | Unrouted (test enforced) until 1201 removes it |
 
-## 6. Proposal: stronger production guard (needs approval)
+## 6. Production guard (D10, approved and implemented 2026-11-03)
 
 The current guard (D1) catches production only when real SMS or real payments are on. A production
 host with both off (e.g. before Flitt exists) could still start with demo endpoints.
@@ -122,10 +129,9 @@ host with both off (e.g. before Flitt exists) could still start with demo endpoi
 5. Tests: boot `production` + each demo flag → refused; `staging` + demo → starts; unset → behaves as
    production.
 
-Costs: one env var (Guide §12 and `.env.example`), about 10 lines in settings, a few boot tests.
-Local `.env` files without `DEPLOY_ENV` must add it. Suggested home: a small story before M1
-staging, or LP-BE-1202. **Not implemented until the owner approves** (it adds a contract-level
-configuration variable).
+Implemented as proposed, except point 3: settings refuse to start in production with demo endpoints
+on, so the URL-level second check would be dead code. **Operators: every existing `.env` must add
+`DEPLOY_ENV`** (without it the app treats the host as production and refuses `DEBUG=True`).
 
 ## 7. Per-story definition of done (agent workflow)
 
@@ -143,8 +149,7 @@ configuration variable).
 
 ## 8. Owner actions outside the agent's scope
 
-- Update the Guide for D1, D2 (and D3 once decided); add G§16 change-log lines.
-- Approve or reject the production guard (§6).
-- Recreate `lion_parts_v2` after M1's fresh accounts migrations (D5), if it was migrated before.
-- Fill in the LPK keys (D7).
+- Done 2026-11-03: Guide updated locally for D1, D2, D3, D10 (the Guide stays untracked); D10 approved; epic keys provided (D7).
+- Decide how the development database is replaced (D5, `migration-history.md`); the agent never touches it.
+- Add `DEPLOY_ENV` to every existing `.env` (D10).
 - Merge order: PR #58 (Epic 1) first, then the M1 branch.
