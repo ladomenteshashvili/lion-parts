@@ -9,6 +9,15 @@ in the same commit. Progress: see `docs/progress.md`.
 lost `accounts.test_legal_entity_mobile_verification.LegalEntityMobileVerificationApiTests.test_already_verified_mobile_returns_without_sending_new_code`
 (LP-BE-204/205): in verbose output it shared a line with the `Applying sessions.0001_initial...` log.
 
+## Progress
+
+| Milestone | Legacy tests replaced | Still skipped |
+|---|---|---|
+| M1 (accounts) | 36: all of `accounts/tests.py` (21; `demo_login_*` removed by G§8.11, route asserted unreachable) and the three legacy legal-entity modules (16, API removed by G§8.11; company data is captured at registration) | 90 |
+
+The three `accounts.test_regressions` order-access tests were retagged from LP-BE-206/210 to **LP-BE-801**:
+their account half is covered by LP-BE-206/212, the order-access half needs the new orders API.
+
 ## Refinement of the two range-mapped groups
 
 **`LP-BE-203..212` (21, `accounts.tests.AccountsApiTests`)**
