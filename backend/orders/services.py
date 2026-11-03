@@ -6,7 +6,7 @@ from decimal import Decimal
 from django.db.models import F, Sum
 
 from .models import Order, OrderItem, OrderItemEvent
-from .texts import format_money, render_plural, render_text
+from .texts import render_plural, render_text
 
 PROGRESS = {
     OrderItem.STATUS_CREATED: 0, OrderItem.STATUS_PAYMENT_CONFIRMED: 1, OrderItem.STATUS_CHECKING: 1,
@@ -106,7 +106,8 @@ def attention(order):
         return {"kind": "courier_fee", "message": render_text("attention_courier_fee")}
     if order.balance_due > 0:
         return {"kind": "balance_due",
-                "message": render_text("attention_balance_due", amount=format_money(order.balance_due, order.currency))}
+                "message": render_text("attention_balance_due", amount=order.balance_due,
+                                       currency=order.currency)}
     if any(s == OrderItem.STATUS_READY_FOR_PICKUP for s, _ in items):
         return {"kind": "ready_for_pickup", "message": render_text("attention_ready_for_pickup")}
     return None

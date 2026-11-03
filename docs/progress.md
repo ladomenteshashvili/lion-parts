@@ -80,7 +80,7 @@ backlog; planned with that milestone (master plan G1). Evidence = commit(s) + th
 | LP-BE-1301 | LPK-95 / LPK-166 | i18n foundation: languages, middleware, catalogs | 3 | M0 | 101 | done | 24ebd86 | PR #58, CI green (PostgreSQL 16) |
 | LP-BE-1302 | LPK-95 / — | Translated content fields & admin widget | 5 | M1 | 1301 | done | c146b63, 1e462aa | api/tests/test_translated_fields.py (tr fallback, +1 language -> +1 input, default required); cities/districts editor ships with SiteSettings in LP-BE-301/1101 (plan G4) |
 | LP-BE-1303 | LPK-95 / — | Customer preferred language | 2 | M1 | 201, 1301 | done | 40adde6 | customer_language() (accounts/test_services.py); Accept-Language en at registration -> en (test_register_verify.py); PATCH xx -> invalid (test_profile.py) |
-| LP-BE-1304 | LPK-95 / — | Localized system texts (events, timeline, banners, system messages) | 5 | M3 | 601, 1301 | todo |  |  |
+| LP-BE-1304 | LPK-95 / — | Localized system texts (events, timeline, banners, system messages) | 5 | M3 | 601, 1301 | done |  | orders/texts.py full EVENT_TEXTS catalog (item events, status_*, action_requested_*, courier fee system messages, banners, timeline titles); money from amount+currency params; unknown code/missing param logged, never raises; orders/test_texts.py (placeholders per language, ka/en/ru rendering, no stored rendered text). Timeline/order detail rendering itself ships with LP-BE-801 |
 | LP-BE-1305 | LPK-95 / — | Notification & SMS templates per language | 3 | M5 | 901, 1303 | todo |  |  |
 | LP-BE-1306 | LPK-95 / — | Translation pass & language QA | 3 | M6 | 1201 | todo |  |  |
 
