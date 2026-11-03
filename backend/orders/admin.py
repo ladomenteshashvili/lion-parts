@@ -20,7 +20,8 @@ from payments.services import MANUAL_PROVIDERS, confirm_manual_payment, record_r
 from . import services
 from .admin_actions import OperatePermissionMixin, form_action
 from .invoices import invoice_language, render_invoice
-from .models import (CourierFeeProposal, Notification, NotificationChannelSetting, NotificationTemplate, Order,
+from .models import (CourierFeeProposal, Notification, NotificationChannelSetting, NotificationDelivery,
+                     NotificationTemplate, Order,
                      OrderItem, OrderItemEvent, OrderSupportMessage, SupportTicket)
 
 
@@ -393,3 +394,33 @@ class SupportTicketAdmin(OperatePermissionMixin, ReadOnlyAdminMixin, admin.Model
         done = queryset.exclude(status=SupportTicket.STATUS_CLOSED).update(status=SupportTicket.STATUS_CLOSED)
         self.message_user(request, ngettext("%(n)d ticket closed.", "%(n)d tickets closed.", done) % {"n": done},
                           messages.SUCCESS)
+
+
+@admin.register(NotificationDelivery)
+class NotificationDeliveryAdmin(OperatePermissionMixin, ReadOnlyAdminMixin, admin.ModelAdmin):
+    """LP-BE-1105: the delivery log is read-only; "resend" writes a new row and never edits an old one."""
+
+    list_display = ("id", "notification", "channel", "recipient", "status", "created_at")
+    list_filter = ("channel", "status", "notification__event_type")
+    search_fields = ("recipient", "notification__order__order_number")
+    list_select_related = ("notification",)
+    actions = ["resend"]
+
+    @admin.action(description=_("Resend"), permissions=["operate"])
+    def resend(self, request, queryset):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from .notifications import resend
+
+        for delivery in queryset.select_related("notification"):
+            if NotificationDelivery.objects.filter(notification=delivery.notification, channel=delivery.channel,
+                                                   created_at__gte=timezone.now() - timedelta(seconds=60),
+                                                   pk__gt=delivery.pk).exists():
+                self.message_user(request, _("#%(id)s: already resent in the last minute.") % {"id": delivery.pk},
+                                  messages.WARNING)
+                continue
+            resend(delivery)
+            self.log_change(request, delivery, "Resent")
+            self.message_user(request, _("#%(id)s: resent.") % {"id": delivery.pk}, messages.SUCCESS)

@@ -2,6 +2,7 @@
 which go through mark_payment."""
 
 from django.contrib import admin, messages
+from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _, ngettext
 
 from orders.admin import OperatorActionsMixin, ReadOnlyAdminMixin, confirm_received
@@ -19,13 +20,20 @@ class RefundInline(ReadOnlyAdminMixin, admin.TabularInline):
 
 @admin.register(Payment)
 class PaymentAdmin(OperatorActionsMixin, ReadOnlyAdminMixin, admin.ModelAdmin):
-    list_display = ("id", "order", "kind", "provider", "amount", "currency", "status", "paid_at", "confirmed_by",
-                    "created_at")
+    list_display = ("id", "order", "kind", "provider", "amount", "currency", "status_display", "paid_at",
+                    "confirmed_by", "created_at")
     list_filter = ("status", "provider", "kind", "currency")
     search_fields = ("order__order_number", "provider_order_id", "provider_payment_id")
     list_select_related = ("order", "confirmed_by")
     inlines = [RefundInline]
     actions = ["payment_received", "cancel_invoice", "mark_refunded"]
+
+    @admin.display(description=_("Status"), ordering="status")
+    def status_display(self, obj):
+        """`unknown` (reconciliation gave up, G§7.10) stands out for the operator."""
+        if obj.status == Payment.STATUS_UNKNOWN:
+            return format_html('<strong style="color:#ba2121">{}</strong>', obj.status)
+        return obj.status
 
     @admin.action(description=_("Payment received"), permissions=["operate"])
     def payment_received(self, request, queryset):
