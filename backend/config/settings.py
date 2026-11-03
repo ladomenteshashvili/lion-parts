@@ -265,7 +265,7 @@ if DEPLOY_ENV == "production":
         ("ENABLE_DEMO_ENDPOINTS", ENABLE_DEMO_ENDPOINTS),
         ("SMS_DEMO_MODE", SMS_DEMO_MODE),
         ("PARTS_PROVIDER=demo", PARTS_PROVIDER == "demo"),
-        (f"EMAIL_BACKEND={email_backend}", email_backend.rsplit(".", 2)[-2] in {"locmem", "console", "dummy", "filebased"}),
+        (f"EMAIL_BACKEND={email_backend}", bool({"locmem", "console", "dummy", "filebased"} & set(email_backend.split(".")))),
     ) if is_set]
     if _forbidden:
         raise ImproperlyConfigured(f"DEPLOY_ENV=production forbids: {', '.join(_forbidden)}.")

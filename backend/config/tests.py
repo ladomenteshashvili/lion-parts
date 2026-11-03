@@ -157,6 +157,8 @@ class DeployEnvGuardTests(SimpleTestCase):
             "dummy": {"EMAIL_BACKEND": "django.core.mail.backends.dummy.EmailBackend"},
             "filebased": {"EMAIL_BACKEND": "django.core.mail.backends.filebased.EmailBackend"},
         }
+        result = self.boot(**{**self.SAFE_PRODUCTION, "EMAIL_BACKEND": "nodots"})  # the guard must not crash
+        self.assertEqual(result.returncode, 0, result.stderr)
         for name, override in cases.items():
             with self.subTest(name=name):
                 self.assert_refused(self.boot(**{**self.SAFE_PRODUCTION, **override}), name)
