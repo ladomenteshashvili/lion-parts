@@ -84,14 +84,15 @@ MANUAL_PROVIDERS = ("invoice", "manual")
 
 def open_payment(order):
     """The payment that still blocks a new one: any pending invoice/manual payment (it never expires by
-    itself: the customer may still be paying it), or a card payment pending for < 30 min."""
+    itself: the customer may still be paying it), or a card payment created/pending for < 30 min (a created
+    one is being started with the provider right now)."""
     from datetime import timedelta
 
     from django.db.models import Q
 
     recent = timezone.now() - timedelta(minutes=PAYMENT_IN_PROGRESS_MINUTES)
     return order.payments.filter(Q(provider__in=MANUAL_PROVIDERS) | Q(created_at__gt=recent),
-                                 status=Payment.STATUS_PENDING).order_by("-created_at").first()
+                                 status__in=Payment.OPEN_STATUSES).order_by("-created_at").first()
 
 
 def request_payment(order_id, method):

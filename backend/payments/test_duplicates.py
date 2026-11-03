@@ -53,6 +53,12 @@ class DuplicateRequestTests(TestCase):
         age(card, 31)
         self.assertEqual(self.pay("card").status_code, 201)
 
+    def test_a_card_payment_still_being_started_blocks(self):
+        starting = create_payment(self.order, "card")  # status created until the provider call returns
+        self.assertEqual(starting.status, "created")
+        response = self.pay("card")
+        self.assertEqual((response.status_code, response.json()["payment"]["id"]), (409, starting.pk))
+
     def test_a_cancelled_invoice_unblocks_the_customer(self):
         invoice = create_payment(self.order, "invoice")
         mark_payment(invoice, "expired")  # admin "Cancel invoice"
