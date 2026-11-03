@@ -98,6 +98,11 @@ def add_item(request, data):
             existing.quantity += data["quantity"]
             existing.save(update_fields=["quantity", "updated_at"])
             return cart
+        if fields["source"] == CartItem.SOURCE_PREPARED_QUOTE and snap.currency != cart.currency:
+            # An operator-approved price is never recalculated silently (owner decision, M2 review).
+            raise serializers.ValidationError({"quote_request_id": [serializers.ErrorDetail(str(_(
+                "This price was prepared in %(currency)s. Switch the cart to %(currency)s to add it.")
+                % {"currency": snap.currency}), code="not_allowed")]})
         line = CartItem(cart=cart, quantity=data["quantity"], **fields)
         stale_tariff = fields["source"] == CartItem.SOURCE_SEARCH and \
             log.normalized_response.get("priced_for", "unknown") != priced_for(customer)
@@ -250,7 +255,7 @@ def refresh_line(request, line):
 
 def merge_guest_cart(old_session_key, customer):
     """G§7.7 merge, in one transaction with both carts locked: move or sum the guest lines (cap 99),
-    reprice every customer line, delete the guest cart, store merge_summary (returned once).
+    reprice every customer line except operator-approved prepared quotes, delete the guest cart, store merge_summary (returned once).
     Never breaks a login: without a rate the lines keep their prices and are listed as problems."""
     with transaction.atomic():
         guest = Cart.objects.select_for_update().filter(session_key=old_session_key, customer__isnull=True).first()
@@ -276,7 +281,7 @@ def merge_guest_cart(old_session_key, customer):
             rate = get_usd_rate()
         except ApiError:
             rate = None
-        for line in cart.items.all():
+        for line in cart.items.exclude(source=CartItem.SOURCE_PREPARED_QUOTE):  # approved prices stay
             if rate is None:
                 summary["problems"].append({"item_id": line.pk, "code": "rate_unavailable"})
                 continue
