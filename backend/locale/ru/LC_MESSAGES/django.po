@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 11:16+0000\n"
+"POT-Creation-Date: 2026-11-03 11:17+0000\n"
 "Language: ru\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -280,6 +280,75 @@ msgstr "Метод не разрешён."
 #: api/exceptions.py:20
 msgid "Malformed request."
 msgstr "Некорректный запрос."
+
+#: api/mail.py:15
+msgid "Confirm your email address"
+msgstr "Подтвердите адрес электронной почты"
+
+#: api/mail.py:16
+msgid "Reset your password"
+msgstr "Сброс пароля"
+
+#: api/mail.py:17
+msgid "Confirm your new email address"
+msgstr "Подтвердите новый адрес электронной почты"
+
+#: api/mail.py:18
+msgid "Your email address was changed"
+msgstr "Ваш адрес электронной почты изменён"
+
+#: api/templates/emails/email_change_confirm.html:2
+#: api/templates/emails/email_change_confirm.txt:1
+#: api/templates/emails/email_changed_notice.html:2
+#: api/templates/emails/email_changed_notice.txt:1
+#: api/templates/emails/password_reset.html:2
+#: api/templates/emails/password_reset.txt:1
+#: api/templates/emails/verify_email.html:2
+#: api/templates/emails/verify_email.txt:1
+#, python-format
+msgid "Hello, %(name)s!"
+msgstr "Здравствуйте, %(name)s!"
+
+#: api/templates/emails/email_change_confirm.html:3
+#: api/templates/emails/email_change_confirm.txt:3
+msgid "To use this address for your Lion Parts account, open this link:"
+msgstr "Чтобы использовать этот адрес для аккаунта Lion Parts, откройте ссылку:"
+
+#: api/templates/emails/email_change_confirm.html:5
+#: api/templates/emails/email_change_confirm.txt:6
+msgid "The link is valid for 48 hours. Until you confirm, your old address stays active."
+msgstr "Ссылка действительна 48 часов. До подтверждения старый адрес остаётся активным."
+
+#: api/templates/emails/email_changed_notice.html:3
+#: api/templates/emails/email_changed_notice.txt:3
+#, python-format
+msgid "The email address of your Lion Parts account was changed to %(new_email)s."
+msgstr "Адрес электронной почты вашего аккаунта Lion Parts изменён на %(new_email)s."
+
+#: api/templates/emails/email_changed_notice.html:4
+#: api/templates/emails/email_changed_notice.txt:5
+msgid "If you didn't make this change, contact Lion Parts support right away."
+msgstr "Если вы не вносили это изменение, сразу свяжитесь со службой поддержки Lion Parts."
+
+#: api/templates/emails/password_reset.html:3
+#: api/templates/emails/password_reset.txt:3
+msgid "To set a new password, open this link:"
+msgstr "Чтобы задать новый пароль, откройте ссылку:"
+
+#: api/templates/emails/password_reset.html:5
+#: api/templates/emails/password_reset.txt:6
+msgid "The link is valid for 1 hour and works once. If you didn't ask to reset your password, ignore this email."
+msgstr "Ссылка действительна 1 час и работает один раз. Если вы не запрашивали сброс пароля, проигнорируйте это письмо."
+
+#: api/templates/emails/verify_email.html:3
+#: api/templates/emails/verify_email.txt:3
+msgid "Please confirm your email address by opening this link:"
+msgstr "Подтвердите адрес электронной почты, открыв ссылку:"
+
+#: api/templates/emails/verify_email.html:5
+#: api/templates/emails/verify_email.txt:6
+msgid "The link is valid for 48 hours. If you didn't create a Lion Parts account, ignore this email."
+msgstr "Ссылка действительна 48 часов. Если вы не создавали аккаунт Lion Parts, проигнорируйте это письмо."
 
 #: config/settings.py:123
 msgid "Georgian"

@@ -19,7 +19,7 @@ One row per backlog story (76). Status: `done` (committed, tests green), `in pro
 | LP-BE-204 | TBD | Registration step 1 (data + SMS) and resend | 5 | M1 | 203, 104 | todo |  |  |
 | LP-BE-205 | TBD | Registration step 2 (verify phone → create account → login) | 5 | M1 | 204, 207 | todo |  |  |
 | LP-BE-206 | TBD | Login, logout, me, csrf | 3 | M1 | 103, 201 | todo |  |  |
-| LP-BE-207 | TBD | Email infrastructure | 2 | M1 | 101, 1301, 1303 | todo |  |  |
+| LP-BE-207 | TBD | Email infrastructure | 2 | M1 | 101, 1301, 1303 | done |  | api/tests/test_mail.py: 4 templates reach the outbox with links; ru email + lang=ru; SMTP failure -> False + log; every template translated ka/ru |
 | LP-BE-208 | TBD | Email verification (send & verify) | 3 | M1 | 207, 206 | todo |  |  |
 | LP-BE-209 | TBD | Password reset (request & confirm) | 3 | M1 | 207 | todo |  |  |
 | LP-BE-210 | TBD | Profile: read, update, change password | 2 | M1 | 206 | todo |  |  |

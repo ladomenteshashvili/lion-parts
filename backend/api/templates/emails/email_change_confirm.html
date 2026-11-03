@@ -1,0 +1,6 @@
+{% extends "emails/_base.html" %}{% load i18n %}{% block content %}
+<p>{% blocktranslate %}Hello, {{ name }}!{% endblocktranslate %}</p>
+<p>{% translate "To use this address for your Lion Parts account, open this link:" %}</p>
+<p><a href="{{ link }}">{{ link }}</a></p>
+<p>{% translate "The link is valid for 48 hours. Until you confirm, your old address stays active." %}</p>
+{% endblock %}

@@ -1,0 +1,6 @@
+{% extends "emails/_base.html" %}{% load i18n %}{% block content %}
+<p>{% blocktranslate %}Hello, {{ name }}!{% endblocktranslate %}</p>
+<p>{% translate "Please confirm your email address by opening this link:" %}</p>
+<p><a href="{{ link }}">{{ link }}</a></p>
+<p>{% translate "The link is valid for 48 hours. If you didn't create a Lion Parts account, ignore this email." %}</p>
+{% endblock %}

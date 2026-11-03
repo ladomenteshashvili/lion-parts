@@ -1,6 +1,7 @@
 """LP-BE-1302: translated content fields, tr() and the admin widget (G§5.8)."""
 
 from django.contrib.admin.sites import site
+from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import translation
@@ -39,9 +40,9 @@ class TranslatedJSONFieldTests(SimpleTestCase):
         field = TranslatedJSONField(required=False)
         self.assertEqual(field.clean(["Vake-ka", " Vake ", ""]), {"ka": "Vake-ka", "en": "Vake"})
         self.assertEqual(field.clean(["", "", ""]), {})  # optional field may stay empty
-        with self.assertRaises(Exception) as ctx:
+        with self.assertRaises(ValidationError) as ctx:
             field.clean(["", "Vake", ""])  # something entered, default language missing
-        self.assertIn("default-language", str(ctx.exception))
+        self.assertEqual(ctx.exception.messages, [str(field.fields[0].error_messages["incomplete"])])
         with self.assertRaises(Exception):
             TranslatedJSONField(required=True).clean(["", "", ""])
 

@@ -1,0 +1,9 @@
+{% load i18n %}{% autoescape off %}{% blocktranslate %}Hello, {{ name }}!{% endblocktranslate %}
+
+{% translate "Please confirm your email address by opening this link:" %}
+{{ link }}
+
+{% translate "The link is valid for 48 hours. If you didn't create a Lion Parts account, ignore this email." %}
+
+Lion Parts
+{% endautoescape %}
