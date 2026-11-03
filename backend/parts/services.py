@@ -89,3 +89,63 @@ def search_response(request, log):
 def present_offer(request, offer, part_number):
     """Public offer with the request-dependent parts: cart quantity (LP-BE-501) and image URLs."""
     return public_offer(offer, in_cart_quantity=0, image_urls=image_urls(request, part_number, offer.get("brand")))
+
+
+def owned_log(request, search_id):
+    """A search log the requester owns (G§7.6): theirs, or a guest log of this browser session.
+    Anything else is 404 (never reveal that it exists)."""
+    customer = request_customer(request)
+    log = PartSearchLog.objects.filter(pk=search_id).first() if str(search_id).isdigit() else None
+    if log is None or log.status != PartSearchLog.STATUS_SUCCESS:
+        raise ApiError("not_found", status=404)
+    if customer is not None and log.customer_id == customer.pk:
+        return log
+    session_key = request.session.session_key
+    if log.customer_id is None and session_key and log.session_key == session_key:
+        return log
+    raise ApiError("not_found", status=404)
+
+
+# Quote requests (G§7.6, G§8.4)
+
+def create_quote_request(customer, data, log=None):
+    """-> (quote_request, created). An open request for the same customer, part, offer and type is
+    returned instead of a duplicate."""
+    if data["request_type"] == PartQuoteRequest.REQUEST_TYPE_WEIGHT_PRICE:
+        offer = log.offer(data["offer_id"])
+        if offer is None:
+            raise ApiError("not_found", status=404)
+        fields = {"search_log": log, "part_number": log.part_number, "vin": log.vin, "offer_id": offer["offer_id"],
+                  "quote_id": f"LOG-{log.pk}", "name": offer["name"], "brand": offer["brand"],
+                  "condition": offer["condition"], "eta_min_days": offer["eta_min_days"],
+                  "eta_max_days": offer["eta_max_days"], "currency": log.currency,
+                  "supplier_price_usd": offer.get("supplier_price_usd")}
+    else:
+        fields = {"part_number": data["part_number"], "vin": data.get("vin", ""), "offer_id": "",
+                  "currency": data.get("currency", "GEL")}
+    existing = next((qr for qr in PartQuoteRequest.objects.filter(
+        customer=customer, request_type=data["request_type"], offer_id=fields["offer_id"],
+        status__in=PartQuoteRequest.OPEN_STATUSES,
+    ) if normalize_part_number(qr.part_number) == normalize_part_number(fields["part_number"])), None)
+    if existing:
+        return existing, False
+    return PartQuoteRequest.objects.create(customer=customer, request_type=data["request_type"],
+                                           comment=data.get("comment", ""), **fields), True
+
+
+def quote_request_data(qr):
+    """The G§8.0 QuoteRequest."""
+    return {"id": qr.pk, "request_type": qr.request_type, "part_number": qr.part_number, "vin": qr.vin,
+            "name": qr.name, "brand": qr.brand, "status": qr.status, "is_price_ready": qr.is_price_ready,
+            "unit_price": f"{qr.unit_price:.2f}" if qr.is_price_ready else None, "currency": qr.currency,
+            "weight_kg": f"{qr.prepared_weight_kg:.2f}" if qr.prepared_weight_kg is not None else None,
+            "operator_message": qr.operator_message, "created_at": qr.created_at}
+
+
+def public_quote_data(qr):
+    """GET /api/public/q/<token>/: the prepared price only, never customer data."""
+    return {"quote_request_id": qr.pk, "part_number": qr.part_number, "name": qr.name, "brand": qr.brand,
+            "unit_price": f"{qr.unit_price:.2f}", "currency": qr.currency, "eta_min_days": qr.eta_min_days,
+            "eta_max_days": qr.eta_max_days,
+            "weight_kg": f"{qr.prepared_weight_kg:.2f}" if qr.prepared_weight_kg is not None else None,
+            "operator_message": qr.operator_message, "requires_login": True}

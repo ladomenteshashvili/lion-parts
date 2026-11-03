@@ -36,7 +36,7 @@ backlog; planned with that milestone (master plan G1). Evidence = commit(s) + th
 | LP-BE-403 | LPK-86 / — | Search endpoint | 3 | M2 | 402, 104 | done |  | parts/test_search.py: exact G§8.4 keys incl. search_id/price_valid_until, partner vs guest prices, log owned by customer or session, validation (required/invalid_vin/inactive currency), 502 supplier (logged as failed)/rate, CSRF, throttle; 6 legacy search_* tests replaced |
 | LP-BE-404 | LPK-86 / — | Search history, seen, clear | 8 | M2 | 403, 406 | todo |  |  |
 | LP-BE-405 | LPK-86 / — | Weight price calculation | 3 | M2 | 403 | todo |  |  |
-| LP-BE-406 | LPK-86 / — | Quote requests & public prepared-quote link | 3 | M2 | 403 | todo |  |  |
+| LP-BE-406 | LPK-86 / — | Quote requests & public prepared-quote link | 3 | M2 | 403 | done |  | parts/test_quote_requests.py: duplicate open request returns the existing one (200), foreign/unknown search or offer 404, PV/IsCustomer, manual needs can_request_quote (403), per-type required fields, own list paginated, public /q/ only when ready and without customer data; 10 legacy tests replaced |
 | LP-BE-407 | LPK-86 / — | Attach guest search logs on login | 1 | M2 | 205, 403 | todo |  |  |
 | LP-BE-501 | LPK-87 / — | Cart models & cart resolution | 3 | M2 | 303, 401 | todo |  |  |
 | LP-BE-502 | LPK-87 / — | Add to cart by reference (never by price) | 5 | M2 | 501, 403, 406 | todo |  |  |
