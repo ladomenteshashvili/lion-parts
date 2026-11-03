@@ -114,6 +114,19 @@ class GuestReplyTests(TestCase):
         self.assertEqual(mail.outbox[-1].subject, "Lion Parts: Support reply")
         self.assertIn("We found your part.", mail.outbox[-1].body)
 
+    def test_georgian_guest_reply_text(self):
+        from django.utils import translation
+        from django.utils.translation import gettext
+
+        channel("support_reply", "email")
+        ticket = SupportTicket.objects.create(contact="x@y.ge", language="ka", context="general", message="?")
+        notify_contact(ticket, "Found it.")
+        with translation.override("ka"):
+            intro = gettext("Lion Parts support replied to your request:")
+        self.assertNotEqual(intro, "Lion Parts support replied to your request:")
+        self.assertNotIn("%(", intro)
+        self.assertEqual(mail.outbox[-1].body, f"{intro}\n\nFound it.")  # the translation exactly once
+
     def test_phone_contact_gets_an_sms_only_when_the_channel_has_sms(self):
         ticket = SupportTicket.objects.create(contact="555123456", language="ka", context="general", message="?")
         channel("support_reply", "email")

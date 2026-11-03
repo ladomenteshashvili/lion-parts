@@ -60,3 +60,32 @@ def ticket_data(ticket):
     return {"id": ticket.pk, "context": ticket.context, "part_number": ticket.part_number, "vin": ticket.vin,
             "message": ticket.message, "status": ticket.status, "operator_reply": ticket.operator_reply,
             "replied_at": ticket.replied_at, "created_at": ticket.created_at}
+
+
+def reply_to_ticket(ticket_id, reply, user):
+    """Admin "send reply" (G§7.16, LP-BE-1002): answered + replied_at/by, then notify the customer or deliver
+    to the guest's contact after commit. A closed ticket, an empty reply or the same reply again is refused
+    (OperatorError), so a repeated action sends nothing. -> the ticket."""
+    from django.db import transaction
+
+    from .notifications import notify, notify_contact
+    from .services import OperatorError
+
+    reply = reply.strip()
+    if not reply:
+        raise OperatorError("reply", _("Write a reply."))
+    with transaction.atomic():
+        ticket = SupportTicket.objects.select_for_update().select_related("customer").get(pk=ticket_id)
+        if ticket.status == SupportTicket.STATUS_CLOSED:
+            raise OperatorError("reply", _("The ticket is closed."))
+        if ticket.status == SupportTicket.STATUS_ANSWERED and ticket.operator_reply == reply:
+            raise OperatorError("reply", _("This reply was already sent."))
+        ticket.operator_reply, ticket.status = reply, SupportTicket.STATUS_ANSWERED
+        ticket.replied_at, ticket.replied_by = timezone.now(), user
+        ticket.save()
+        if ticket.customer_id:
+            transaction.on_commit(lambda: notify(ticket.customer, "support_reply", support_ticket=ticket,
+                                                 message=reply), robust=True)
+        elif ticket.contact:
+            transaction.on_commit(lambda: notify_contact(ticket, reply), robust=True)
+    return ticket

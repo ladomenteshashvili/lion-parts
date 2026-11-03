@@ -377,3 +377,19 @@ class SupportTicketAdmin(OperatePermissionMixin, ReadOnlyAdminMixin, admin.Model
     search_fields = ("message", "part_number", "vin", "contact", "customer__user__email", "customer__phone")
     list_select_related = ("customer",)
     exclude = ("session_key",)
+    actions = ["send_reply", "close_ticket"]
+
+    @admin.action(description=_("Send reply"), permissions=["operate"])
+    def send_reply(self, request, queryset):
+        from .support import reply_to_ticket
+
+        def run(ticket, data):
+            reply_to_ticket(ticket.pk, data["message"], request.user)
+            return _("reply sent")
+        return form_action(self, request, queryset, ReplyForm, _("Send reply"), run)
+
+    @admin.action(description=_("Close"), permissions=["operate"])
+    def close_ticket(self, request, queryset):
+        done = queryset.exclude(status=SupportTicket.STATUS_CLOSED).update(status=SupportTicket.STATUS_CLOSED)
+        self.message_user(request, ngettext("%(n)d ticket closed.", "%(n)d tickets closed.", done) % {"n": done},
+                          messages.SUCCESS)
