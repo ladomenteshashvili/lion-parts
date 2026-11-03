@@ -1,97 +1,11 @@
 from django.urls import path
 
-from .views import (
-    acknowledge_order_item_action,
-    cancel_order_item_action,
-    acknowledge_customer_notification,
-    acknowledge_order_support_messages,
-    checkout,
-    create_order_support_message,
-    demo_confirm_payment,
-    demo_request_item_change,
-    resolve_item_action,
-    resolve_courier_delivery_fee,
-    decline_courier_delivery_fee,
-    demo_update_item_status,
-    get_customer_notification,
-    get_order_detail,
-    get_order_invoice,
-    list_orders,
-    verify_payment,
-)
+from . import views
 
 urlpatterns = [
-    path("", list_orders, name="orders-list"),
-    path(
-        "public/notifications/<uuid:token>/",
-        get_customer_notification,
-        name="orders-public-notification",
-    ),
-    path(
-        "public/notifications/<uuid:token>/acknowledge/",
-        acknowledge_customer_notification,
-        name="orders-public-notification-acknowledge",
-    ),
-    path("checkout/", checkout, name="orders-checkout"),
-    path(
-        "<str:order_number>/verify-payment/",
-        verify_payment,
-        name="orders-verify-payment",
-    ),
-    path(
-        "<str:order_number>/demo-confirm-payment/",
-        demo_confirm_payment,
-        name="orders-demo-confirm-payment",
-    ),
-    path(
-        "<str:order_number>/support/messages/",
-        create_order_support_message,
-        name="orders-support-message-create",
-    ),
-    path(
-        "<str:order_number>/support/acknowledge/",
-        acknowledge_order_support_messages,
-        name="orders-support-acknowledge",
-    ),
-    path(
-        "<str:order_number>/resolve-courier-fee/",
-        resolve_courier_delivery_fee,
-        name="orders-resolve-courier-fee",
-    ),
-    path(
-        "<str:order_number>/decline-courier-fee/",
-        decline_courier_delivery_fee,
-        name="orders-decline-courier-fee",
-    ),
-    path(
-        "<str:order_number>/invoice/",
-        get_order_invoice,
-        name="orders-invoice",
-    ),
-    path("<str:order_number>/", get_order_detail, name="orders-detail"),
-    path(
-        "items/<int:item_id>/resolve-action/",
-        resolve_item_action,
-        name="orders-item-resolve-action",
-    ),
-    path(
-        "items/<int:item_id>/cancel-action/",
-        cancel_order_item_action,
-        name="orders-item-cancel-action",
-    ),
-    path(
-        "items/<int:item_id>/acknowledge-action/",
-        acknowledge_order_item_action,
-        name="orders-item-acknowledge-action",
-    ),
-    path(
-        "items/<int:item_id>/demo-request-change/",
-        demo_request_item_change,
-        name="orders-item-demo-request-change",
-    ),
-    path(
-        "items/<int:item_id>/demo-update-status/",
-        demo_update_item_status,
-        name="orders-item-demo-update-status",
-    ),
+    path("checkout/options/", views.checkout_options, name="checkout-options"),
+    path("orders/checkout/", views.checkout_create, name="checkout"),
+    path("orders/<str:order_number>/payments/", views.order_payments, name="order-payments"),
+    path("orders/<str:order_number>/payments/<int:payment_id>/", views.order_payment, name="order-payment"),
+    path("orders/<str:order_number>/invoice/", views.invoice, name="order-invoice"),
 ]

@@ -10,14 +10,6 @@ from orders.models import Order
 
 RETENTION_DAYS = 5 * 365 + 2  # 5 years including leap days
 
-# shortcut: until LP-BE-601 adds Order.billing_snapshot, the legacy snapshot fields are blanked;
-# LP-BE-601 switches this to billing_snapshot={"anonymized": true}.
-BILLING_FIELDS = {
-    "customer_name": "", "customer_phone": "",
-    "legal_entity_company_identification_code": "", "legal_entity_company_official_name": "",
-    "legal_entity_legal_address": "", "legal_entity_contact_first_name": "", "legal_entity_contact_last_name": "",
-    "legal_entity_email": "", "legal_entity_mobile_phone": "",
-}
 
 
 class Command(BaseCommand):
@@ -25,5 +17,5 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         cutoff = timezone.now() - timedelta(days=RETENTION_DAYS)
-        count = Order.objects.filter(customer__anonymized_at__isnull=False, created_at__lt=cutoff).update(**BILLING_FIELDS)
+        count = Order.objects.filter(customer__anonymized_at__isnull=False, created_at__lt=cutoff).update(billing_snapshot={"anonymized": True})
         self.stdout.write(f"{count} order(s) anonymized")

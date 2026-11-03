@@ -14,14 +14,12 @@ from cart.models import Cart
 from accounts.models import Customer, LegalEntityProfile, PhoneVerificationCode
 from accounts.testing import PASSWORD, make_customer
 from orders.models import Order
+from orders.testing import make_order as _make_order
 from parts.models import PartQuoteRequest, PartSearchLog
 
 
-def make_order(customer, status=Order.STATUS_COMPLETED, number="LP-2026-00001"):
-    return Order.objects.create(
-        order_number=number, session_id="s", customer=customer, customer_name=customer.full_name,
-        customer_phone=customer.phone or "", payment_type=Order.PAYMENT_FULL, status=status, total_gel=Decimal("10.00"),
-    )
+def make_order(customer, status=Order.STATUS_COMPLETED, number=None):
+    return _make_order(customer, status=status)
 
 
 def login(email="nino@example.com", password=PASSWORD):
@@ -47,6 +45,12 @@ class DeleteAccountTests(TestCase):
         self.assertIsNone(self.customer.anonymized_at)
 
     def test_open_order_blocks_deletion(self):
+        for status in (Order.STATUS_PAYMENT_PENDING, Order.STATUS_ACTION_REQUIRED):
+            order = make_order(self.customer, status)
+            response = self.delete()
+            self.assertEqual((response.status_code, response.json()["code"]), (409, "account_has_open_orders"))
+            order.items.all().delete()
+            order.delete()
         make_order(self.customer, Order.STATUS_PROCESSING)
         response = self.delete()
         self.assertEqual((response.status_code, response.json()["code"]), (409, "account_has_open_orders"))
@@ -86,8 +90,8 @@ class DeleteAccountTests(TestCase):
         self.assertEqual(list(PartQuoteRequest.objects.all()), [resolved])
 
         order.refresh_from_db()
-        self.assertEqual((order.customer_id, order.customer_name, order.customer_phone),
-                         (self.customer.pk, "Nino Beridze", "555123456"))  # snapshot kept (5-year retention)
+        self.assertEqual((order.customer_id, order.billing_snapshot),
+                         (self.customer.pk, {"first_name": "Nino", "last_name": "Beridze"}))  # kept (5-year retention)
 
         self.assertFalse(self.client.get("/api/auth/me/").json()["authenticated"])
         self.assertFalse(other_device.get("/api/auth/me/").json()["authenticated"])
@@ -124,13 +128,14 @@ class PurgeExpiredBillingTests(TestCase):
 
     def test_only_old_orders_of_anonymized_customers(self):
         self.assertIn("1 order(s)", self.run_command())
-        names = {o.pk: o.customer_name for o in Order.objects.all()}
-        self.assertEqual(names[self.old_gone.pk], "")
-        self.assertEqual(names[self.new_gone.pk], "Nino Beridze")
-        self.assertEqual(names[self.old_active.pk], "Nino Beridze")
-        self.assertEqual(Order.objects.get(pk=self.old_gone.pk).customer_phone, "")
+        snapshots = {o.pk: o.billing_snapshot for o in Order.objects.all()}
+        self.assertEqual(snapshots[self.old_gone.pk], {"anonymized": True})
+        self.assertEqual(snapshots[self.new_gone.pk]["first_name"], "Nino")
+        self.assertEqual(snapshots[self.old_active.pk]["first_name"], "Nino")
+        old = Order.objects.get(pk=self.old_gone.pk)
+        self.assertEqual((old.total, old.currency), (self.old_gone.total, "GEL"))  # money is never touched
 
     def test_idempotent(self):
         self.run_command()
         self.run_command()
-        self.assertEqual(Order.objects.get(pk=self.old_gone.pk).customer_name, "")
+        self.assertEqual(Order.objects.get(pk=self.old_gone.pk).billing_snapshot, {"anonymized": True})

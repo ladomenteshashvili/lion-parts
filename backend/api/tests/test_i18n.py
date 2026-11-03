@@ -27,17 +27,7 @@ UNTRANSLATED_CODES = set()
 
 # shortcut: legacy files that still contain Georgian literals; each is cleaned up by the named story.
 # The test fails once a listed file has none left, so this list only shrinks.
-LEGACY_GEORGIAN_FILES = {
-    "orders/views.py": "LP-BE-1304 / LP-BE-1201",
-    "orders/admin.py": "LP-BE-1103 / LP-BE-1304",
-    "orders/invoices.py": "LP-BE-604",
-    "orders/signals.py": "LP-BE-806",
-    "orders/tests.py": "LP-BE-1201 (legacy endpoint tests)",
-    "orders/test_regressions.py": "LP-BE-1201",
-    "orders/test_checkout_payment_regressions.py": "LP-BE-1201",
-    "orders/test_courier_fee_confirmation.py": "LP-BE-1201",
-    "orders/test_admin_invoice_print_view.py": "LP-BE-604",
-}
+LEGACY_GEORGIAN_FILES = {}
 GEORGIAN = re.compile(r"[\u10a0-\u10ff]")  # Georgian script block (U+10A0-U+10FF)
 
 

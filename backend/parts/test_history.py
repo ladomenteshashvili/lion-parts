@@ -10,7 +10,8 @@ from rest_framework.test import APIClient
 
 from accounts.models import CustomerTariff
 from accounts.testing import make_customer
-from orders.models import Order, OrderItem
+from orders.models import Order
+from orders.testing import make_order
 from parts.models import PartQuoteRequest, PartSearchLog
 from parts.services import mark_quote_price_ready
 from pricing.models import ExchangeRate
@@ -65,13 +66,9 @@ class HistoryTests(TestCase):
 
     def test_a_part_later_ordered_shows_purchased(self):
         self.search("17940-25020")
-        order = Order.objects.create(order_number="LP-2026-00042", session_id="s", customer=self.customer,
-                                     customer_name="Nino", customer_phone="555123456", payment_type=Order.PAYMENT_FULL,
-                                     status=Order.STATUS_PROCESSING, total_gel=D("10"))
-        OrderItem.objects.create(order=order, cart_item_id="c", quote_id="q", part_option_id="o",
-                                 part_number="17940 25020", name="Hose", final_price_gel=D("10"), quantity=1)
+        order = make_order(self.customer, status=Order.STATUS_PROCESSING, items=(("17940 25020", D("10"), 1),))
         item = self.history()["results"][0]
-        self.assertEqual((item["status"], item["purchased_order_number"]), ("purchased", "LP-2026-00042"))
+        self.assertEqual((item["status"], item["purchased_order_number"]), ("purchased", order.order_number))
 
     def test_statuses_and_filters(self):
         self.search("READY-1")

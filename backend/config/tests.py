@@ -126,7 +126,7 @@ class DeployEnvGuardTests(SimpleTestCase):
     """Master plan D10: DEPLOY_ENV fails closed; production refuses every demo/debug switch."""
 
     SAFE_PRODUCTION = {"DEPLOY_ENV": "production", "DEBUG": "False", "ENABLE_DEMO_ENDPOINTS": "False",
-                       "SMS_DEMO_MODE": "False", "PARTS_PROVIDER": "amt",
+                       "SMS_DEMO_MODE": "False", "PARTS_PROVIDER": "amt", "PAYMENT_PROVIDER": "flitt",
                        "EMAIL_BACKEND": "django.core.mail.backends.smtp.EmailBackend"}
 
     def boot(self, **env):
@@ -152,6 +152,7 @@ class DeployEnvGuardTests(SimpleTestCase):
             "ENABLE_DEMO_ENDPOINTS": {"ENABLE_DEMO_ENDPOINTS": "True"},
             "SMS_DEMO_MODE": {"SMS_DEMO_MODE": "True"},
             "PARTS_PROVIDER=demo": {"PARTS_PROVIDER": "demo"},
+            "PAYMENT_PROVIDER=fake": {"PAYMENT_PROVIDER": "fake"},
             "console": {"EMAIL_BACKEND": "django.core.mail.backends.console.EmailBackend"},
             "locmem": {"EMAIL_BACKEND": "django.core.mail.backends.locmem.EmailBackend"},
             "dummy": {"EMAIL_BACKEND": "django.core.mail.backends.dummy.EmailBackend"},

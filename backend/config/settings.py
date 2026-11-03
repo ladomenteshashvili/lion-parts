@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     "parts",
     "cart",
     "orders.apps.OrdersConfig",
+    "payments",
     "accounts",
 ]
 
@@ -250,6 +251,8 @@ if DEPLOY_ENV == "production":
         ("ENABLE_DEMO_ENDPOINTS", ENABLE_DEMO_ENDPOINTS),
         ("SMS_DEMO_MODE", SMS_DEMO_MODE),
         ("PARTS_PROVIDER=demo", PARTS_PROVIDER == "demo"),
+        # FakeProvider never takes money; production needs a real adapter (M3 audit fix 3)
+        ("PAYMENT_PROVIDER=fake", PAYMENT_PROVIDER == "fake"),
         (f"EMAIL_BACKEND={email_backend}", bool({"locmem", "console", "dummy", "filebased"} & set(email_backend.split(".")))),
     ) if is_set]
     if _forbidden:
@@ -279,51 +282,3 @@ PHONE_VERIFICATION_MAX_ATTEMPTS = config(
 )
 
 
-# Invoice seller settings
-INVOICE_SELLER_NAME = config("INVOICE_SELLER_NAME", default="Lion Parts")
-INVOICE_SELLER_IDENTIFICATION_CODE = config(
-    "INVOICE_SELLER_IDENTIFICATION_CODE",
-    default="",
-)
-INVOICE_SELLER_ADDRESS = config("INVOICE_SELLER_ADDRESS", default="Tbilisi, Georgia")
-INVOICE_SELLER_PHONE = config("INVOICE_SELLER_PHONE", default="")
-INVOICE_SELLER_EMAIL = config("INVOICE_SELLER_EMAIL", default="")
-INVOICE_SELLER_BANK_DETAILS = config("INVOICE_SELLER_BANK_DETAILS", default="")
-INVOICE_FOOTER_TEXT = config(
-    "INVOICE_FOOTER_TEXT",
-    default="This invoice was generated from Lion Parts admin order data.",
-)
-
-
-# Invoice document display settings
-INVOICE_DOCUMENT_TITLE = config("INVOICE_DOCUMENT_TITLE", default="INVOICE")
-INVOICE_DOCUMENT_SUBTITLE = config("INVOICE_DOCUMENT_SUBTITLE", default="")
-INVOICE_SHOW_DRAFT_WATERMARK = config(
-    "INVOICE_SHOW_DRAFT_WATERMARK",
-    default=False,
-    cast=bool,
-)
-INVOICE_DRAFT_WATERMARK_TEXT = config(
-    "INVOICE_DRAFT_WATERMARK_TEXT",
-    default="DRAFT",
-)
-
-
-# Invoice number and payment display settings
-INVOICE_NUMBER_PREFIX = config("INVOICE_NUMBER_PREFIX", default="INV")
-INVOICE_PAYMENT_DUE_TEXT = config(
-    "INVOICE_PAYMENT_DUE_TEXT",
-    default="Payment due upon receipt.",
-)
-
-
-# Invoice amount display settings
-INVOICE_AMOUNT_NOTE = config(
-    "INVOICE_AMOUNT_NOTE",
-    default="All amounts are in GEL and include VAT unless otherwise noted.",
-)
-INVOICE_SHOW_PAYMENT_BADGE = config(
-    "INVOICE_SHOW_PAYMENT_BADGE",
-    default=True,
-    cast=bool,
-)

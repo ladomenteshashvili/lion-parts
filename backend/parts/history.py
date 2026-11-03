@@ -55,7 +55,7 @@ def _shown(usd_amount, currency, rates):
 
 def _purchased_orders(customer):
     """normalized part number -> latest order number, over the customer's non-cancelled items."""
-    from orders.models import OrderItem  # shortcut: legacy OrderItem until LP-BE-601's schema
+    from orders.models import OrderItem
 
     rows = (OrderItem.objects.filter(order__customer=customer).exclude(item_status="cancelled")
             .order_by("order__created_at").values_list("part_number", "order__order_number"))

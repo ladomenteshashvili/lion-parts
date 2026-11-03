@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 14:07+0000\n"
+"POT-Creation-Date: 2026-11-03 15:00+0000\n"
 "Language: ru\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -390,21 +390,312 @@ msgstr "Ссылка действительна 48 часов. Если вы н�
 msgid "The quantity must be between 1 and 99."
 msgstr "Количество должно быть от 1 до 99."
 
-#: config/settings.py:124
+#: config/settings.py:125
 msgid "Georgian"
 msgstr "Грузинский"
 
-#: config/settings.py:124
+#: config/settings.py:125
 msgid "English"
 msgstr "Английский"
 
-#: config/settings.py:124
+#: config/settings.py:125
 msgid "Russian"
 msgstr "Русский"
 
-#: orders/texts.py:8
+#: orders/admin.py:32
+#, python-format
+msgid "%(payment)s: card payments are confirmed by the payment provider."
+msgstr "%(payment)s: оплату картой подтверждает платёжный провайдер."
+
+#: orders/admin.py:33
+#, python-format
+msgid "%(payment)s: the payment is not pending."
+msgstr "%(payment)s: платёж не находится в ожидании."
+
+#: orders/admin.py:34
+#, python-format
+msgid "%(payment)s: not confirmed, the order no longer owes this amount (already paid or cancelled)."
+msgstr "%(payment)s: не подтверждено — по заказу эта сумма уже не причитается (уже оплачен или отменён)."
+
+#: orders/admin.py:45
+msgid "%(payment)s: payment confirmed."
+msgstr "%(payment)s: оплата подтверждена."
+
+#: orders/admin.py:83 payments/admin.py:22
+msgid "Payment received"
+msgstr "Оплата получена"
+
+#: orders/admin.py:93
+#, python-format
+msgid "%(order)s: %(n)d pending invoice payment; choose it in Payments."
+msgid_plural "%(order)s: %(n)d pending invoice payments; choose one in Payments."
+msgstr[0] "%(order)s: %(n)d ожидающий платёж по счёту; выберите его в разделе «Платежи»."
+msgstr[1] "%(order)s: %(n)d ожидающих платежа по счёту; выберите один в разделе «Платежи»."
+msgstr[2] "%(order)s: %(n)d ожидающих платежей по счёту; выберите один в разделе «Платежи»."
+
+#: orders/admin.py:97
+msgid "Create balance invoice"
+msgstr "Создать счёт на остаток"
+
+#: orders/admin.py:106
+#, python-format
+msgid "%(order)s: invoice created."
+msgstr "%(order)s: счёт создан."
+
+#: orders/checkout.py:78
+msgid "You must accept the terms to place an order."
+msgstr "Для оформления заказа необходимо принять условия."
+
+#: orders/checkout.py:83
+msgid "This payment option is not available for your account."
+msgstr "Этот вариант оплаты недоступен для вашего аккаунта."
+
+#: orders/checkout.py:93
+msgid "Choose an available pickup point."
+msgstr "Выберите доступный пункт выдачи."
+
+#: orders/checkout.py:105
+msgid "Choose a city from the list."
+msgstr "Выберите город из списка."
+
+#: orders/checkout.py:107
+msgid "Choose a district of this city."
+msgstr "Выберите район этого города."
+
+#: orders/templates/orders/invoice.html:6
+#: orders/templates/orders/invoice.html:20 pricing/admin.py:33
+msgid "Invoice"
+msgstr "Счёт"
+
+#: orders/templates/orders/invoice.html:21
+msgid "Date"
+msgstr "Дата"
+
+#: orders/templates/orders/invoice.html:21
+msgid "Payment reference"
+msgstr "Назначение платежа"
+
+#: orders/templates/orders/invoice.html:25
+msgid "Seller"
+msgstr "Продавец"
+
+#: orders/templates/orders/invoice.html:27
+#: orders/templates/orders/invoice.html:35
+msgid "Identification code"
+msgstr "Идентификационный код"
+
+#: orders/templates/orders/invoice.html:33
+msgid "Buyer"
+msgstr "Покупатель"
+
+#: orders/templates/orders/invoice.html:37
+msgid "Representative"
+msgstr "Представитель"
+
+#: orders/templates/orders/invoice.html:39
+msgid "Personal ID"
+msgstr "Личный номер"
+
+#: orders/templates/orders/invoice.html:46
+msgid "Delivery"
+msgstr "Доставка"
+
+#: orders/templates/orders/invoice.html:47
+msgid "Pickup point"
+msgstr "Пункт выдачи"
+
+#: orders/templates/orders/invoice.html:51
+msgid "Part"
+msgstr "Деталь"
+
+#: orders/templates/orders/invoice.html:51
+msgid "Quantity"
+msgstr "Количество"
+
+#: orders/templates/orders/invoice.html:52
+msgid "List price"
+msgstr "Цена"
+
+#: orders/templates/orders/invoice.html:52
+#: orders/templates/orders/invoice.html:67
+msgid "Discount"
+msgstr "Скидка"
+
+#: orders/templates/orders/invoice.html:53
+msgid "Unit price"
+msgstr "Цена за единицу"
+
+#: orders/templates/orders/invoice.html:53
+msgid "Line total"
+msgstr "Сумма"
+
+#: orders/templates/orders/invoice.html:57
+msgid "cancelled"
+msgstr "отменено"
+
+#: orders/templates/orders/invoice.html:66
+msgid "Items"
+msgstr "Детали"
+
+#: orders/templates/orders/invoice.html:68
+msgid "Delivery fee"
+msgstr "Стоимость доставки"
+
+#: orders/templates/orders/invoice.html:69
+msgid "Total"
+msgstr "Итого"
+
+#: orders/templates/orders/invoice.html:70
+msgid "Paid"
+msgstr "Оплачено"
+
+#: orders/templates/orders/invoice.html:71
+msgid "Balance due"
+msgstr "Остаток к оплате"
+
+#: orders/templates/orders/invoice.html:72
+msgid "Due now"
+msgstr "К оплате сейчас"
+
+#: orders/templates/orders/invoice.html:75
+#, python-format
+msgid "Amounts in GEL, converted from USD at the NBG rate of the order date: %(rate)s GEL per USD. VAT included."
+msgstr "Суммы в GEL, пересчитаны из USD по курсу НБГ на дату заказа: %(rate)s GEL за 1 USD. С НДС."
+
+#: orders/templates/orders/invoice.html:76
+msgid "Amounts in USD. VAT included."
+msgstr "Суммы в USD. С НДС."
+
+#: orders/templates/orders/invoice.html:78
+msgid "Bank details"
+msgstr "Банковские реквизиты"
+
+#: orders/texts.py:16
 msgid "The price is calculated with the estimated weight you entered. The final weight is set when the part arrives at the US warehouse. If it differs, the final amount may change: you may pay extra or get a refund."
 msgstr "Цена рассчитана по указанному вами примерному весу. Окончательный вес определяется при получении детали на складе в США. Если он отличается, итоговая сумма может измениться: возможна доплата или возврат."
+
+#: orders/texts.py:20
+msgid "The part was added to the order."
+msgstr "Деталь добавлена в заказ."
+
+#: orders/texts.py:21 orders/texts.py:23
+msgid "Payment confirmed."
+msgstr "Оплата подтверждена."
+
+#: orders/texts.py:22 orders/texts.py:50
+msgid "Order placed."
+msgstr "Заказ оформлен."
+
+#: orders/texts.py:24
+msgid "We are checking the part with the supplier."
+msgstr "Проверяем деталь у поставщика."
+
+#: orders/texts.py:25
+msgid "Your confirmation is needed."
+msgstr "Требуется ваше подтверждение."
+
+#: orders/texts.py:26
+msgid "The part was purchased."
+msgstr "Деталь закуплена."
+
+#: orders/texts.py:27
+msgid "The part arrived at the US warehouse."
+msgstr "Деталь прибыла на склад в США."
+
+#: orders/texts.py:28
+msgid "The part was shipped to Georgia."
+msgstr "Деталь отправлена в Грузию."
+
+#: orders/texts.py:29
+msgid "The part arrived in Georgia."
+msgstr "Деталь прибыла в Грузию."
+
+#: orders/texts.py:30
+msgid "The part is ready for pickup."
+msgstr "Деталь готова к выдаче."
+
+#: orders/texts.py:31
+msgid "The part was handed over."
+msgstr "Деталь выдана."
+
+#: orders/texts.py:32 orders/texts.py:40
+msgid "The part was cancelled."
+msgstr "Деталь отменена."
+
+#: orders/texts.py:33
+#, python-brace-format
+msgid "The price changed. New price: {amount}."
+msgstr "Цена изменилась. Новая цена: {amount}."
+
+#: orders/texts.py:34
+#, python-brace-format
+msgid "The delivery time changed: {eta_min_days}-{eta_max_days} days."
+msgstr "Срок доставки изменился: {eta_min_days}-{eta_max_days} дн."
+
+#: orders/texts.py:35
+#, python-brace-format
+msgid "An alternative part is proposed: {part_number}."
+msgstr "Предложена альтернативная деталь: {part_number}."
+
+#: orders/texts.py:36
+msgid "The part may not fit your vehicle. Please confirm."
+msgstr "Деталь может не подойти к вашему автомобилю. Пожалуйста, подтвердите."
+
+#: orders/texts.py:37
+#, python-brace-format
+msgid "The weight changed to {weight_kg} kg. New price: {amount}."
+msgstr "Вес изменился: {weight_kg} кг. Новая цена: {amount}."
+
+#: orders/texts.py:38
+msgid "Please review the message from our team."
+msgstr "Пожалуйста, ознакомьтесь с сообщением нашей команды."
+
+#: orders/texts.py:39
+msgid "You accepted the change."
+msgstr "Вы приняли изменение."
+
+#: orders/texts.py:41
+msgid "You acknowledged the notice."
+msgstr "Вы ознакомились с уведомлением."
+
+#: orders/texts.py:43
+#, python-brace-format
+msgid "Customer accepted the courier fee: {amount}."
+msgstr "Клиент согласился со стоимостью курьера: {amount}."
+
+#: orders/texts.py:44
+msgid "Customer declined the courier fee."
+msgstr "Клиент отказался от стоимости курьера."
+
+#: orders/texts.py:46
+msgid "Please confirm the delivery fee."
+msgstr "Подтвердите стоимость доставки."
+
+#: orders/texts.py:47
+#, python-brace-format
+msgid "Remaining amount: {amount}."
+msgstr "Остаток к оплате: {amount}."
+
+#: orders/texts.py:48
+msgid "Your parts are ready for pickup."
+msgstr "Ваши детали готовы к выдаче."
+
+#: orders/texts.py:51
+#, python-brace-format
+msgid "Payment confirmed ({percent}%)."
+msgstr "Оплата подтверждена ({percent}%)."
+
+#: orders/texts.py:52
+msgid "Order cancelled."
+msgstr "Заказ отменён."
+
+#: orders/texts.py:87
+#, python-brace-format
+msgid "{n} item needs your confirmation."
+msgid_plural "{n} items need your confirmation."
+msgstr[0] "{n} деталь требует вашего подтверждения."
+msgstr[1] "{n} детали требуют вашего подтверждения."
+msgstr[2] "{n} деталей требуют вашего подтверждения."
 
 #: parts/admin.py:55
 msgid "Request"
@@ -480,6 +771,29 @@ msgstr "Подтвердите, что цена может измениться 
 msgid "Choose one of: all, ready, checking, other."
 msgstr "Выберите одно из: all, ready, checking, other."
 
+#: payments/admin.py:26
+msgid "Cancel invoice"
+msgstr "Отменить счёт"
+
+#: payments/admin.py:32
+msgid "%(n)d invoice cancelled."
+msgid_plural "%(n)d invoices cancelled."
+msgstr[0] "%(n)d счёт отменён."
+msgstr[1] "%(n)d счёта отменены."
+msgstr[2] "%(n)d счетов отменены."
+
+#: payments/admin.py:35
+msgid "Mark refunded"
+msgstr "Отметить как возвращённый"
+
+#: payments/admin.py:39
+#, python-format
+msgid "%(n)d payment marked refunded."
+msgid_plural "%(n)d payments marked refunded."
+msgstr[0] "%(n)d платёж отмечен как возвращённый."
+msgstr[1] "%(n)d платежа отмечены как возвращённые."
+msgstr[2] "%(n)d платежей отмечены как возвращённые."
+
 #: pricing/admin.py:18
 msgid "Currency"
 msgstr "Валюта"
@@ -503,10 +817,6 @@ msgstr "Зоны доставки"
 #: pricing/admin.py:29
 msgid "Cities: [{\"code\": \"tbilisi\", \"name\": {\"ka\": \"...\", \"en\": \"...\", \"ru\": \"...\"}}]. Districts also need \"city\" with an existing city code."
 msgstr "Города: [{\"code\": \"tbilisi\", \"name\": {\"ka\": \"...\", \"en\": \"...\", \"ru\": \"...\"}}]. Районам также нужен \"city\" с кодом существующего города."
-
-#: pricing/admin.py:33
-msgid "Invoice"
-msgstr "Счёт"
 
 #: pricing/admin.py:63
 msgid "Fetch today's NBG rate now"

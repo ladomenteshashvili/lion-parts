@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 14:07+0000\n"
+"POT-Creation-Date: 2026-11-03 15:00+0000\n"
 "Language: ka\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -390,21 +390,310 @@ msgstr "ბმული მოქმედებს 48 საათის გა
 msgid "The quantity must be between 1 and 99."
 msgstr "რაოდენობა უნდა იყოს 1-დან 99-მდე."
 
-#: config/settings.py:124
+#: config/settings.py:125
 msgid "Georgian"
 msgstr "ქართული"
 
-#: config/settings.py:124
+#: config/settings.py:125
 msgid "English"
 msgstr "ინგლისური"
 
-#: config/settings.py:124
+#: config/settings.py:125
 msgid "Russian"
 msgstr "რუსული"
 
-#: orders/texts.py:8
+#: orders/admin.py:32
+#, python-format
+msgid "%(payment)s: card payments are confirmed by the payment provider."
+msgstr "%(payment)s: ბარათით გადახდას გადახდის პროვაიდერი ადასტურებს."
+
+#: orders/admin.py:33
+#, python-format
+msgid "%(payment)s: the payment is not pending."
+msgstr "%(payment)s: გადახდა მოლოდინის სტატუსში არ არის."
+
+#: orders/admin.py:34
+#, python-format
+msgid "%(payment)s: not confirmed, the order no longer owes this amount (already paid or cancelled)."
+msgstr "%(payment)s: არ დადასტურდა — შეკვეთაზე ეს თანხა აღარ არის გადასახდელი (უკვე გადახდილია ან გაუქმებულია)."
+
+#: orders/admin.py:45
+msgid "%(payment)s: payment confirmed."
+msgstr "%(payment)s: გადახდა დადასტურდა."
+
+#: orders/admin.py:83 payments/admin.py:22
+msgid "Payment received"
+msgstr "თანხა მიღებულია"
+
+#: orders/admin.py:93
+#, python-format
+msgid "%(order)s: %(n)d pending invoice payment; choose it in Payments."
+msgid_plural "%(order)s: %(n)d pending invoice payments; choose one in Payments."
+msgstr[0] "%(order)s: მოლოდინშია %(n)d ინვოისის გადახდა; აირჩიეთ ის გადახდების განყოფილებაში."
+msgstr[1] "%(order)s: მოლოდინშია %(n)d ინვოისის გადახდა; აირჩიეთ ერთი გადახდების განყოფილებაში."
+
+#: orders/admin.py:97
+msgid "Create balance invoice"
+msgstr "დარჩენილი თანხის ინვოისის შექმნა"
+
+#: orders/admin.py:106
+#, python-format
+msgid "%(order)s: invoice created."
+msgstr "%(order)s: ინვოისი შეიქმნა."
+
+#: orders/checkout.py:78
+msgid "You must accept the terms to place an order."
+msgstr "შეკვეთისთვის საჭიროა პირობებზე თანხმობა."
+
+#: orders/checkout.py:83
+msgid "This payment option is not available for your account."
+msgstr "გადახდის ეს ვარიანტი თქვენს ანგარიშზე არ არის ხელმისაწვდომი."
+
+#: orders/checkout.py:93
+msgid "Choose an available pickup point."
+msgstr "აირჩიეთ ხელმისაწვდომი გაცემის პუნქტი."
+
+#: orders/checkout.py:105
+msgid "Choose a city from the list."
+msgstr "აირჩიეთ ქალაქი სიიდან."
+
+#: orders/checkout.py:107
+msgid "Choose a district of this city."
+msgstr "აირჩიეთ ამ ქალაქის რაიონი."
+
+#: orders/templates/orders/invoice.html:6
+#: orders/templates/orders/invoice.html:20 pricing/admin.py:33
+msgid "Invoice"
+msgstr "ინვოისი"
+
+#: orders/templates/orders/invoice.html:21
+msgid "Date"
+msgstr "თარიღი"
+
+#: orders/templates/orders/invoice.html:21
+msgid "Payment reference"
+msgstr "გადახდის დანიშნულება"
+
+#: orders/templates/orders/invoice.html:25
+msgid "Seller"
+msgstr "გამყიდველი"
+
+#: orders/templates/orders/invoice.html:27
+#: orders/templates/orders/invoice.html:35
+msgid "Identification code"
+msgstr "საიდენტიფიკაციო კოდი"
+
+#: orders/templates/orders/invoice.html:33
+msgid "Buyer"
+msgstr "მყიდველი"
+
+#: orders/templates/orders/invoice.html:37
+msgid "Representative"
+msgstr "წარმომადგენელი"
+
+#: orders/templates/orders/invoice.html:39
+msgid "Personal ID"
+msgstr "პირადი ნომერი"
+
+#: orders/templates/orders/invoice.html:46
+msgid "Delivery"
+msgstr "მიწოდება"
+
+#: orders/templates/orders/invoice.html:47
+msgid "Pickup point"
+msgstr "გაცემის პუნქტი"
+
+#: orders/templates/orders/invoice.html:51
+msgid "Part"
+msgstr "ნაწილი"
+
+#: orders/templates/orders/invoice.html:51
+msgid "Quantity"
+msgstr "რაოდენობა"
+
+#: orders/templates/orders/invoice.html:52
+msgid "List price"
+msgstr "ფასი"
+
+#: orders/templates/orders/invoice.html:52
+#: orders/templates/orders/invoice.html:67
+msgid "Discount"
+msgstr "ფასდაკლება"
+
+#: orders/templates/orders/invoice.html:53
+msgid "Unit price"
+msgstr "ერთეულის ფასი"
+
+#: orders/templates/orders/invoice.html:53
+msgid "Line total"
+msgstr "ჯამი"
+
+#: orders/templates/orders/invoice.html:57
+msgid "cancelled"
+msgstr "გაუქმებულია"
+
+#: orders/templates/orders/invoice.html:66
+msgid "Items"
+msgstr "ნაწილები"
+
+#: orders/templates/orders/invoice.html:68
+msgid "Delivery fee"
+msgstr "მიტანის ღირებულება"
+
+#: orders/templates/orders/invoice.html:69
+msgid "Total"
+msgstr "სულ"
+
+#: orders/templates/orders/invoice.html:70
+msgid "Paid"
+msgstr "გადახდილია"
+
+#: orders/templates/orders/invoice.html:71
+msgid "Balance due"
+msgstr "დარჩენილი თანხა"
+
+#: orders/templates/orders/invoice.html:72
+msgid "Due now"
+msgstr "ახლა გადასახდელი"
+
+#: orders/templates/orders/invoice.html:75
+#, python-format
+msgid "Amounts in GEL, converted from USD at the NBG rate of the order date: %(rate)s GEL per USD. VAT included."
+msgstr "თანხები ლარშია, დოლარიდან გადაყვანილი შეკვეთის თარიღის ეროვნული ბანკის კურსით: 1 USD = %(rate)s GEL. დღგ-ს ჩათვლით."
+
+#: orders/templates/orders/invoice.html:76
+msgid "Amounts in USD. VAT included."
+msgstr "თანხები დოლარშია. დღგ-ს ჩათვლით."
+
+#: orders/templates/orders/invoice.html:78
+msgid "Bank details"
+msgstr "საბანკო რეკვიზიტები"
+
+#: orders/texts.py:16
 msgid "The price is calculated with the estimated weight you entered. The final weight is set when the part arrives at the US warehouse. If it differs, the final amount may change: you may pay extra or get a refund."
 msgstr "ფასი დათვლილია თქვენს მიერ შეყვანილი სავარაუდო წონით. საბოლოო წონა დადგინდება აშშ-ის საწყობში მიღების შემდეგ. თუ რეალური წონა განსხვავებული იქნება, საბოლოო თანხა შეიძლება დაკორექტირდეს — შესაძლოა დაემატოს ან დაბრუნდეს თანხა."
+
+#: orders/texts.py:20
+msgid "The part was added to the order."
+msgstr "ნაწილი შეკვეთაში დაემატა."
+
+#: orders/texts.py:21 orders/texts.py:23
+msgid "Payment confirmed."
+msgstr "გადახდა დადასტურებულია."
+
+#: orders/texts.py:22 orders/texts.py:50
+msgid "Order placed."
+msgstr "შეკვეთა გაფორმდა."
+
+#: orders/texts.py:24
+msgid "We are checking the part with the supplier."
+msgstr "ნაწილს მომწოდებელთან ვამოწმებთ."
+
+#: orders/texts.py:25
+msgid "Your confirmation is needed."
+msgstr "საჭიროა თქვენი დადასტურება."
+
+#: orders/texts.py:26
+msgid "The part was purchased."
+msgstr "ნაწილი შეძენილია."
+
+#: orders/texts.py:27
+msgid "The part arrived at the US warehouse."
+msgstr "ნაწილი აშშ-ის საწყობში მივიდა."
+
+#: orders/texts.py:28
+msgid "The part was shipped to Georgia."
+msgstr "ნაწილი საქართველოში გამოიგზავნა."
+
+#: orders/texts.py:29
+msgid "The part arrived in Georgia."
+msgstr "ნაწილი საქართველოში ჩამოვიდა."
+
+#: orders/texts.py:30
+msgid "The part is ready for pickup."
+msgstr "ნაწილი მზადაა გასატანად."
+
+#: orders/texts.py:31
+msgid "The part was handed over."
+msgstr "ნაწილი გადაცემულია."
+
+#: orders/texts.py:32 orders/texts.py:40
+msgid "The part was cancelled."
+msgstr "ნაწილი გაუქმდა."
+
+#: orders/texts.py:33
+#, python-brace-format
+msgid "The price changed. New price: {amount}."
+msgstr "ფასი შეიცვალა. ახალი ფასი: {amount}."
+
+#: orders/texts.py:34
+#, python-brace-format
+msgid "The delivery time changed: {eta_min_days}-{eta_max_days} days."
+msgstr "მიწოდების ვადა შეიცვალა: {eta_min_days}-{eta_max_days} დღე."
+
+#: orders/texts.py:35
+#, python-brace-format
+msgid "An alternative part is proposed: {part_number}."
+msgstr "შემოთავაზებულია ალტერნატიული ნაწილი: {part_number}."
+
+#: orders/texts.py:36
+msgid "The part may not fit your vehicle. Please confirm."
+msgstr "ნაწილი შესაძლოა არ მოერგოს თქვენს ავტომობილს. გთხოვთ, დაადასტუროთ."
+
+#: orders/texts.py:37
+#, python-brace-format
+msgid "The weight changed to {weight_kg} kg. New price: {amount}."
+msgstr "წონა შეიცვალა: {weight_kg} კგ. ახალი ფასი: {amount}."
+
+#: orders/texts.py:38
+msgid "Please review the message from our team."
+msgstr "გთხოვთ, გაეცნოთ ჩვენი გუნდის შეტყობინებას."
+
+#: orders/texts.py:39
+msgid "You accepted the change."
+msgstr "თქვენ დაეთანხმეთ ცვლილებას."
+
+#: orders/texts.py:41
+msgid "You acknowledged the notice."
+msgstr "თქვენ გაეცანით შეტყობინებას."
+
+#: orders/texts.py:43
+#, python-brace-format
+msgid "Customer accepted the courier fee: {amount}."
+msgstr "მომხმარებელი დაეთანხმა კურიერის საფასურს: {amount}."
+
+#: orders/texts.py:44
+msgid "Customer declined the courier fee."
+msgstr "მომხმარებელმა უარი თქვა კურიერის საფასურზე."
+
+#: orders/texts.py:46
+msgid "Please confirm the delivery fee."
+msgstr "დაადასტურეთ მიტანის ღირებულება."
+
+#: orders/texts.py:47
+#, python-brace-format
+msgid "Remaining amount: {amount}."
+msgstr "დარჩენილი თანხა: {amount}."
+
+#: orders/texts.py:48
+msgid "Your parts are ready for pickup."
+msgstr "ნაწილები მზადაა გასატანად."
+
+#: orders/texts.py:51
+#, python-brace-format
+msgid "Payment confirmed ({percent}%)."
+msgstr "გადახდა დადასტურებულია ({percent}%)."
+
+#: orders/texts.py:52
+msgid "Order cancelled."
+msgstr "შეკვეთა გაუქმდა."
+
+#: orders/texts.py:87
+#, python-brace-format
+msgid "{n} item needs your confirmation."
+msgid_plural "{n} items need your confirmation."
+msgstr[0] "{n} ნაწილზე საჭიროა თქვენი დადასტურება."
+msgstr[1] "{n} ნაწილზე საჭიროა თქვენი დადასტურება."
 
 #: parts/admin.py:55
 msgid "Request"
@@ -479,6 +768,27 @@ msgstr "დაადასტურეთ, რომ ფასი შეიძ�
 msgid "Choose one of: all, ready, checking, other."
 msgstr "აირჩიეთ ერთ-ერთი: all, ready, checking, other."
 
+#: payments/admin.py:26
+msgid "Cancel invoice"
+msgstr "ინვოისის გაუქმება"
+
+#: payments/admin.py:32
+msgid "%(n)d invoice cancelled."
+msgid_plural "%(n)d invoices cancelled."
+msgstr[0] "%(n)d ინვოისი გაუქმდა."
+msgstr[1] "%(n)d ინვოისი გაუქმდა."
+
+#: payments/admin.py:35
+msgid "Mark refunded"
+msgstr "მონიშვნა: თანხა დაბრუნებულია"
+
+#: payments/admin.py:39
+#, python-format
+msgid "%(n)d payment marked refunded."
+msgid_plural "%(n)d payments marked refunded."
+msgstr[0] "%(n)d გადახდა მოინიშნა დაბრუნებულად."
+msgstr[1] "%(n)d გადახდა მოინიშნა დაბრუნებულად."
+
 #: pricing/admin.py:18
 msgid "Currency"
 msgstr "ვალუტა"
@@ -502,10 +812,6 @@ msgstr "მიწოდების არეალები"
 #: pricing/admin.py:29
 msgid "Cities: [{\"code\": \"tbilisi\", \"name\": {\"ka\": \"...\", \"en\": \"...\", \"ru\": \"...\"}}]. Districts also need \"city\" with an existing city code."
 msgstr "ქალაქები: [{\"code\": \"tbilisi\", \"name\": {\"ka\": \"...\", \"en\": \"...\", \"ru\": \"...\"}}]. რაიონებს ასევე სჭირდება \"city\" არსებული ქალაქის კოდით."
-
-#: pricing/admin.py:33
-msgid "Invoice"
-msgstr "ინვოისი"
 
 #: pricing/admin.py:63
 msgid "Fetch today's NBG rate now"

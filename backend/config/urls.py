@@ -26,12 +26,18 @@ urlpatterns = [
     path("api/", include("accounts.urls")),
     path("api/", include("parts.urls")),
     path("api/", include("cart.urls")),
+    path("api/", include("orders.urls")),
+    path("api/", include("payments.urls")),
     # Legacy session_id routes (accounts/parts/cart/orders urls) are not mounted: see api/legacy.py.
 ]
 
 # Demo routes exist only when enabled (staging/tests); in production they aren't resolvable at all.
 if settings.ENABLE_DEMO_ENDPOINTS:
+    from payments.views import fake_complete
+
     urlpatterns.append(path("api/demo/", include("api.demo_urls")))
+    # G§8.8 path; demo/test only, owner + pending payment only (master plan D3)
+    urlpatterns.append(path("api/payments/fake/<int:payment_id>/complete/", fake_complete, name="payment-fake-complete"))
 
 # static() returns no patterns unless DEBUG is on; in production nginx serves /media/.
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
