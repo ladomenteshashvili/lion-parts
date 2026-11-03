@@ -14,9 +14,11 @@ from .models import PartImage, PartQuoteRequest, PartSearchLog
 from .providers import build_offers, fetch_rows, public_offer
 
 
-def image_urls(request, part_number, brand):
-    """Absolute image URLs for a part: brand-specific images first, then generic ones (G§7.6)."""
-    images = PartImage.objects.filter(part_number=normalize_part_number(part_number))
+def image_urls(request, part_number, brand, images=None):
+    """Absolute image URLs for a part: brand-specific images first, then generic ones (G§7.6).
+    `images`: this part's PartImage rows when the caller loaded them already (no query)."""
+    if images is None:
+        images = PartImage.objects.filter(part_number=normalize_part_number(part_number))
     brand = (brand or "").lower()
     ranked = sorted((img for img in images if not img.brand or img.brand.lower() == brand),
                     key=lambda img: (not img.brand, img.sort_order, img.id))

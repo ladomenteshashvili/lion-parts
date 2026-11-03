@@ -7,6 +7,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
 from api.errors import MESSAGES, ApiError
+from api.pagination import Pagination
 from api.permissions import IsFullyVerified
 
 from payments.models import Payment
@@ -15,12 +16,13 @@ from payments.services import request_payment, start_payment
 from . import checkout
 from .invoices import invoice_language, render_invoice
 from .models import Order
-from .serializers import order_data, payment_data
+from .serializers import order_data, order_queryset, orders_data, payment_data
 
 
-def own_order(request, order_number):
+def own_order(request, order_number, queryset=None):
     """The customer's own order, else 404 (never reveal that it exists)."""
-    order = Order.objects.filter(order_number=order_number, customer=request.user.customer).first()
+    queryset = Order.objects if queryset is None else queryset
+    order = queryset.filter(order_number=order_number, customer=request.user.customer).first()
     if order is None:
         raise ApiError("not_found", status=404)
     return order
@@ -79,3 +81,16 @@ def order_payment(request, order_number, payment_id):
     if payment is None:
         raise ApiError("not_found", status=404)
     return Response(payment_data(payment))
+
+
+@api_view(["GET"])
+def order_list(request):
+    orders = order_queryset().filter(customer=request.user.customer)
+    paginator = Pagination()
+    page = paginator.paginate_queryset(orders, request)
+    return paginator.get_paginated_response(orders_data(request, page))
+
+
+@api_view(["GET"])
+def order_detail(request, order_number):
+    return Response(order_data(request, own_order(request, order_number, order_queryset(detail=True)), detail=True))

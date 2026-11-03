@@ -5,6 +5,8 @@ from decimal import Decimal
 
 from django.db.models import F, Sum
 
+from pricing.discounts import round2
+
 from .models import Order, OrderItem, OrderItemEvent
 from .texts import render_plural, render_text
 
@@ -83,23 +85,32 @@ def payment_status(order):
     return "paid" if order.balance_due == 0 else "partially_paid"
 
 
+def _loaded_live_items(order):
+    """Non-cancelled items via order.items.all(), so a prefetched order costs no extra query (LP-BE-801)."""
+    return [i for i in order.items.all() if i.item_status != OrderItem.STATUS_CANCELLED]
+
+
 def progress(order):
-    steps = [PROGRESS[s] for s in _live_items(order).values_list("item_status", flat=True)]
+    steps = [PROGRESS[i.item_status] for i in _loaded_live_items(order)]
     return {"step": min(steps) if steps else 0, "of": 6}
 
 
 def can_cancel(order):
     if order.status not in Order.OPEN_STATUSES:
         return False
-    return all(s in CANCELLABLE_ITEM_STATUSES for s in _live_items(order).values_list("item_status", flat=True))
+    return all(i.item_status in CANCELLABLE_ITEM_STATUSES for i in _loaded_live_items(order))
+
+
+def _needs_decision(item):
+    return item.action_required or item.item_status == OrderItem.STATUS_ACTION_REQUIRED
 
 
 def attention(order):
     """The single most important banner (G§7.8), in the request language; None when nothing to do."""
     if order.status == Order.STATUS_CANCELLED:
         return None
-    items = list(_live_items(order).values_list("item_status", "action_required"))
-    pending = sum(1 for s, a in items if a or s == OrderItem.STATUS_ACTION_REQUIRED)
+    items = _loaded_live_items(order)
+    pending = sum(1 for i in items if _needs_decision(i))
     if pending:
         return {"kind": "action_required", "message": render_plural("attention_action_required", pending)}
     if order.courier_fee_action_required:
@@ -108,6 +119,58 @@ def attention(order):
         return {"kind": "balance_due",
                 "message": render_text("attention_balance_due", amount=order.balance_due,
                                        currency=order.currency)}
-    if any(s == OrderItem.STATUS_READY_FOR_PICKUP for s, _ in items):
+    if any(i.item_status == OrderItem.STATUS_READY_FOR_PICKUP for i in items):
         return {"kind": "ready_for_pickup", "message": render_text("attention_ready_for_pickup")}
     return None
+
+
+def _str(value):
+    return None if value is None else (f"{value:.2f}" if isinstance(value, Decimal) else value)
+
+
+def action_change(item):
+    """G§7.9 (old, new) for the pending action, as shown to the customer."""
+    t = item.action_type
+    if t == "price_change":
+        return {"unit_price": item.unit_price}, {"unit_price": item.proposed_unit_price}
+    if t == "eta_change":
+        return ({"eta_min_days": item.eta_min_days, "eta_max_days": item.eta_max_days},
+                {"eta_min_days": item.proposed_eta_min_days, "eta_max_days": item.proposed_eta_max_days})
+    if t == "alternative_required":
+        old, new = ({"part_number": item.part_number, "name": item.name},
+                    {"part_number": item.proposed_part_number, "name": item.proposed_name})
+        if item.proposed_unit_price is not None:
+            old["unit_price"], new["unit_price"] = item.unit_price, item.proposed_unit_price
+        return old, new
+    if t == "fitment_issue":
+        return {"vin": item.vin}, {}
+    if t == "weight_change":
+        return ({"weight_kg": item.weight_kg, "unit_price": item.unit_price},
+                {"weight_kg": item.proposed_weight_kg, "unit_price": item.proposed_unit_price})
+    return {}, {}
+
+
+def decisions(item):
+    """acknowledge only for a weight change after purchase (notice only); accept/cancel otherwise."""
+    if not item.action_required:
+        return []
+    if item.action_type == "weight_change" and item.purchased_at is not None:
+        return ["acknowledge"]
+    return ["accept", "cancel"]
+
+
+def action_data(item):
+    if not item.action_required:
+        return None
+    old, new = action_change(item)
+    return {"type": item.action_type, "message": item.action_message,
+            "old": {k: _str(v) for k, v in old.items()}, "new": {k: _str(v) for k, v in new.items()},
+            "decisions": decisions(item)}
+
+
+def proposed_courier_fee(order):
+    """The proposed GEL courier fee in the order currency at the order's frozen rate (G§7.14)."""
+    gel = order.proposed_courier_fee_gel
+    if gel is None or order.currency == "GEL":
+        return gel
+    return round2(gel / order.exchange_rate)

@@ -163,9 +163,12 @@ def create_order(customer, data):
             create_item_event(item, "created", text_code="order_item_added", visible=True)
         recalculate_order(order)
         tariff = customer.get_tariff()
-        order.amount_due_now = round2(order.total * tariff.split_upfront_percent / 100) \
-            if order.payment_option == "split_70_30" else order.total
-        order.save(update_fields=["amount_due_now", "updated_at"])
+        if order.payment_option == "split_70_30":
+            order.split_upfront_percent = tariff.split_upfront_percent
+            order.amount_due_now = round2(order.total * tariff.split_upfront_percent / 100)
+        else:
+            order.amount_due_now = order.total
+        order.save(update_fields=["amount_due_now", "split_upfront_percent", "updated_at"])
         cart.items.all().delete()
         payment = create_payment(order, order.payment_method)
     return order, payment

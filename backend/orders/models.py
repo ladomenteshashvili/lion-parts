@@ -39,6 +39,7 @@ class Order(models.Model):
     courier_fee_declined_at = models.DateTimeField(null=True, blank=True)
     payment_method = models.CharField(max_length=10, choices=[("card", "Card"), ("invoice", "Invoice")])
     payment_option = models.CharField(max_length=20, choices=[("full", "Full"), ("split_70_30", "70/30")])
+    split_upfront_percent = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)  # frozen (split)
     items_total = models.DecimalField(default=0, **MONEY)
     discount_total = models.DecimalField(default=0, **MONEY)
     total = models.DecimalField(default=0, **MONEY)
