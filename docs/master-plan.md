@@ -92,7 +92,7 @@ all functional epics ─ 1201 ─┬─ 1202 ─ 1204 ─ 1205 (1203)
 | S2 | Production started with demo settings | Current guard covers only "real SMS or payments on"; stronger guard proposed in §6 |
 | S3 | OTP brute force | 6 digits, hashed, 5 attempts, `select_for_update`, attempts counted **before** the check, `otp_verify` throttle (203) |
 | S4 | SMS bombing / cost | `otp_send_phone` + `otp_send_ip` throttles, 60 s cooldown (203/204/212) |
-| S5 | Account enumeration | Login and password reset: identical bodies (206/209). Registration returns `taken` by contract (G§8.2); limited by the `register` throttle. **Accepted by the contract.** |
+| S5 | Account enumeration | Login and password reset: identical bodies (206/209). Registration returns `taken` by contract (G§8.2); limited by the `register` throttle. **Accepted by the contract.** Residual: password-reset response time is longer for known emails (synchronous SMTP); bounded by the `password_reset` throttle; closing it needs async sending (G§7.11 shortcut). |
 | S6 | Session fixation / stale sessions | `login()` rotates the key (205/206 test); password reset and change rotate the auth hash (209/210); deletion removes sessions (213) |
 | S7 | Email-link replay | `signing` with salt and `max_age`; the token embeds the email, so it dies after an email change (208/211) |
 | S8 | Secrets in logs or DB | Never log OTP codes, API keys or tokens; drop `apikey` from stored SMS payloads (203) |

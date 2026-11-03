@@ -21,7 +21,7 @@ One row per backlog story (76). Status: `done` (committed, tests green), `in pro
 | LP-BE-206 | TBD | Login, logout, me, csrf | 3 | M1 | 103, 201 | done |  | accounts/test_login.py: identical body for unknown/wrong/staff/inactive/anonymized, old sessionid rejected after logout, staff can't log in, session key rotates, CSRF required + rotated, login_ip/login_email throttles; 2 legacy login tests replaced |
 | LP-BE-207 | TBD | Email infrastructure | 2 | M1 | 101, 1301, 1303 | done |  | api/tests/test_mail.py: 4 templates reach the outbox with links; ru email + lang=ru; SMTP failure -> False + log; every template translated ka/ru |
 | LP-BE-208 | TBD | Email verification (send & verify) | 3 | M1 | 207, 206 | done |  | accounts/test_email_verification.py: tampered/48h+/pre-email-change/inactive/anonymized -> token_invalid, idempotent, customer only for own session, already_verified 409, email_send throttle |
-| LP-BE-209 | TBD | Password reset (request & confirm) | 3 | M1 | 207 | todo |  |  |
+| LP-BE-209 | TBD | Password reset (request & confirm) | 3 | M1 | 207 | done |  | accounts/test_password_reset.py: identical body known/unknown, no email for unknown/inactive/anonymized, single-use token, other sessions end, no login, new_password field errors, throttle; legacy reset test replaced |
 | LP-BE-210 | TBD | Profile: read, update, change password | 2 | M1 | 206 | todo |  |  |
 | LP-BE-211 | TBD | Email change | 3 | M1 | 207 | todo |  |  |
 | LP-BE-212 | TBD | Phone change | 3 | M1 | 203 | todo |  |  |

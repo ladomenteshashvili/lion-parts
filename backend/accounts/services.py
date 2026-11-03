@@ -5,9 +5,12 @@ from datetime import datetime, timedelta
 from django.conf import settings
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.hashers import make_password
+from django.contrib.auth.tokens import default_token_generator
 from django.core import signing
 from django.db import IntegrityError, transaction
 from django.utils import timezone
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 
 from api.errors import ApiError
 from api.mail import frontend_link, send_templated_email
@@ -144,3 +147,30 @@ def verify_email_token(token):
         customer.email_verified_at = timezone.now()
         customer.save(update_fields=["is_email_verified", "email_verified_at", "updated_at"])
     return customer
+
+
+# Password reset (G§5.7): Django's token generator; single use because the hash covers the password.
+
+def request_password_reset(email):
+    """Send a reset link if an active customer has this email. Callers always answer the same way."""
+    customer = Customer.objects.select_related("user").filter(
+        user__email__iexact=email.strip(), user__is_active=True, anonymized_at__isnull=True,
+    ).first()
+    if customer is None:
+        return
+    user = customer.user
+    language = customer_language(customer)
+    link = frontend_link("/reset-password", language, uid=urlsafe_base64_encode(force_bytes(user.pk)),
+                         token=default_token_generator.make_token(user))
+    send_templated_email(user.email, "password_reset", {"name": customer.first_name, "link": link}, language)
+
+
+def reset_password_user(uid, token):
+    """The user a valid (uid, token) pair belongs to, else token_invalid."""
+    try:
+        user = get_user_model().objects.get(pk=urlsafe_base64_decode(str(uid)).decode())
+    except (ValueError, TypeError, OverflowError, get_user_model().DoesNotExist):
+        user = None
+    if user is None or not can_log_in(user) or not default_token_generator.check_token(user, str(token)):
+        raise ApiError("token_invalid")
+    return user

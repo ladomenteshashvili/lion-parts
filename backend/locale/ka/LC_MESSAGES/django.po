@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 11:22+0000\n"
+"POT-Creation-Date: 2026-11-03 11:25+0000\n"
 "Language: ka\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -78,6 +78,14 @@ msgstr "პაროლი უნდა შეიცავდეს სიმბ
 #: accounts/validators.py:64
 msgid "Use upper- and lower-case letters, a digit and a symbol."
 msgstr "გამოიყენეთ დიდი და პატარა ასოები, ციფრი და სიმბოლო."
+
+#: accounts/views.py:119
+msgid "If the account exists, a reset link has been sent."
+msgstr "თუ ანგარიში არსებობს, აღდგენის ბმული გამოგზავნილია."
+
+#: accounts/views.py:120
+msgid "Password changed."
+msgstr "პაროლი შეიცვალა."
 
 #: api/admin_i18n.py:38
 msgid "The default-language value is required."

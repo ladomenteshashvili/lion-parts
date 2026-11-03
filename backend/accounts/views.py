@@ -2,19 +2,24 @@
 
 from django.contrib.auth import authenticate, logout
 from django.middleware.csrf import get_token
+from django.utils.translation import gettext_lazy as _
 from django.views.decorators.csrf import ensure_csrf_cookie
+from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from api.errors import ApiError
 from api.throttles import (
-    EmailLoginThrottle, EmailSendThrottle, LoginIpThrottle, OtpSendIpThrottle, OtpVerifyThrottle, PhoneThrottle, RegisterThrottle,
+    EmailLoginThrottle, EmailSendThrottle, LoginIpThrottle, OtpSendIpThrottle, OtpVerifyThrottle,
+    PasswordResetThrottle, PhoneThrottle, RegisterThrottle,
 )
 
-from . import services
-from . import otp
-from .serializers import CodeSerializer, CustomerSerializer, LoginSerializer, RegisterSerializer, TokenSerializer
+from . import otp, services
+from .serializers import (
+    CodeSerializer, CustomerSerializer, LoginSerializer, PasswordResetConfirmSerializer, PasswordResetSerializer,
+    RegisterSerializer, TokenSerializer, check_password_rules,
+)
 
 
 @api_view(["POST"])
@@ -109,3 +114,34 @@ def email_verify(request):
     customer = services.verify_email_token(serializer.validated_data["token"])
     own = request.user.is_authenticated and request.user.pk == customer.user_id
     return Response({"verified": True, "customer": CustomerSerializer(customer).data if own else None})
+
+
+RESET_SENT = _("If the account exists, a reset link has been sent.")
+PASSWORD_CHANGED = _("Password changed.")
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([PasswordResetThrottle])
+def password_reset(request):
+    serializer = PasswordResetSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    services.request_password_reset(serializer.validated_data["email"])
+    return Response({"detail": str(RESET_SENT)})  # identical for known and unknown emails
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([PasswordResetThrottle])
+def password_reset_confirm(request):
+    serializer = PasswordResetConfirmSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    data = serializer.validated_data
+    user = services.reset_password_user(data["uid"], data["token"])
+    try:
+        check_password_rules(data["new_password"], user.email, user.first_name, user.last_name)
+    except serializers.ValidationError as exc:
+        raise serializers.ValidationError({"new_password": exc.detail}) from None
+    user.set_password(data["new_password"])  # rotates the session hash: other sessions end
+    user.save(update_fields=["password"])
+    return Response({"detail": str(PASSWORD_CHANGED)})
