@@ -90,5 +90,5 @@ backlog; planned with that milestone (master plan G1). Evidence = commit(s) + th
 |---|---|---|---|
 | M0 (Epic 1 + 1301) | `feature/lpk-83-platform-foundation` | done, PR #58 open | outbox fix `09338f1` |
 | M1 | `feature/m1-accounts-auth` | done, merged into main (PR #59) | Ponytail audit 2026-11-03: no must-fix; see the M1 checkpoint report |
-| M2 | `feature/m2-pricing-search-cart` | done (18/18 stories) + audit fix `a585dab`; pushed for CI, awaiting owner review | Ponytail security audit at the M2 checkpoint: 1 must-fix (fixed), 3 for review |
+| M2 | `feature/m2-pricing-search-cart` (PR #60) | done (18/18 stories) + audit fix `a585dab` + review fixes `acdbf76` (default markups), `409c538` (guest-search pricing), `aeccb03` (approved quote prices); not merged | Ponytail security audit at the M2 checkpoint: 1 must-fix (fixed); review items resolved per owner decisions (D13/D14), D13 open questions remain |
 
