@@ -16,11 +16,11 @@ Last updated: 2026-11-03 (M1 checkpoint review applied).
 
 | Item | State |
 |---|---|
-| Epic LP-BE-1 (101–107) + LP-BE-1301 | Done on `feature/lpk-83-platform-foundation` (PR #58, CI green on PostgreSQL 16, not merged) |
-| Demo outbox hardening | Done, `09338f1`: staff only + boot guard (decision D1) |
-| M1 | Epic 2 (201–213) + LP-BE-1302, 1303 done on `feature/m1-accounts-auth` (branched from the PR #58 head); approved for push and CI, not for merge |
-| Next milestone | **M2**, not started (waits for the owner) |
-| Legacy API | Unrouted since LP-BE-103; 126 tests skipped and mapped (`legacy-test-map.md`) |
+| M0–M5 | Merged into `main` (PRs #58–#64), post-merge CI green on PostgreSQL 16 |
+| M6 (1201–1205, 1306) | Done on `feature/m6-final-hardening`; Draft PR to `main`, not merged |
+| Legacy API | Removed (LP-BE-1201); no legacy test skipped; removed routes asserted 404 |
+| Release | **Not production-ready**: blockers B1 (no real payment provider), B2 (no legacy data migration), B3 (native-speaker sign-off), B4 (operations items) in `security-review.md` §4 |
+| Owner actions | send `api-handoff.md` + staging access to the frontend company (1205), build an isolated staging (`operations.md` §2, 1204), native-speaker review (`language-qa.md`, 1306), decide HSTS subdomain/preload, approve a payment integration and a data migration plan |
 
 ## 2. Milestones and story order
 
