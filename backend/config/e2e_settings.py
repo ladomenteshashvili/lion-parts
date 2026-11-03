@@ -35,6 +35,12 @@ CORS_ALLOWED_ORIGINS = [
 PARTS_PROVIDER = "demo"
 SENDER_GE_ENABLED = False
 
+MAILERS = {"default": {"BACKEND": "django.core.mail.backends.locmem.EmailBackend"}}
+SMS_DEMO_MODE = True
+ENABLE_DEMO_ENDPOINTS = True
+PAYMENT_PROVIDER = "fake"
+SECURE_SSL_REDIRECT = False
+
 PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.MD5PasswordHasher",
 ]

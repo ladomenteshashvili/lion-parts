@@ -14,16 +14,25 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import path
 from django.urls import include, path
 
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    path(settings.ADMIN_URL_PATH, admin.site.urls),
     path("api/", include("api.urls")),
-    path("api/parts/", include("parts.urls")),
-    path("api/cart/", include("cart.urls")),
-    path("api/orders/", include("orders.urls")),
-    path("api/accounts/", include("accounts.urls")),
+    # Legacy session_id routes (accounts/parts/cart/orders urls) are not mounted: see api/legacy.py.
 ]
+
+# Demo routes exist only when enabled (staging/tests); in production they aren't resolvable at all.
+if settings.ENABLE_DEMO_ENDPOINTS:
+    urlpatterns.append(path("api/demo/", include("api.demo_urls")))
+
+# static() returns no patterns unless DEBUG is on; in production nginx serves /media/.
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+# JSON error envelope outside DRF views too (G§4.4).
+handler404 = "api.views.not_found"
+handler500 = "api.views.server_error"

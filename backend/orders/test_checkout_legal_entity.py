@@ -7,6 +7,8 @@ from accounts.models import Customer, CustomerSession, LegalEntityProfile
 from cart.models import Cart, CartItem
 from orders.models import Order, Payment
 
+from api.legacy import legacy_endpoint_test
+
 
 def create_customer(session_id, verified=True, phone="555123456"):
     customer = Customer.objects.create(
@@ -62,6 +64,7 @@ class CheckoutLegalEntityTests(TestCase):
         self.client = APIClient()
         self.session_id = "checkout-legal-session"
 
+    @legacy_endpoint_test("LP-BE-603")
     def test_checkout_can_use_verified_legal_entity_profile(self):
         customer = create_customer(self.session_id)
         legal_entity = create_legal_entity(customer, verified=True)
@@ -112,6 +115,7 @@ class CheckoutLegalEntityTests(TestCase):
             "EZShop LLC",
         )
 
+    @legacy_endpoint_test("LP-BE-603")
     def test_checkout_without_legal_entity_stays_personal(self):
         create_customer(self.session_id)
         create_cart_with_item(self.session_id)
@@ -139,6 +143,7 @@ class CheckoutLegalEntityTests(TestCase):
         self.assertEqual(response.data["billing_type"], Order.BILLING_PERSONAL)
         self.assertIsNone(response.data["legal_entity_profile_id"])
 
+    @legacy_endpoint_test("LP-BE-603")
     def test_checkout_rejects_legal_billing_without_profile(self):
         create_customer(self.session_id)
         cart = create_cart_with_item(self.session_id)
@@ -164,6 +169,7 @@ class CheckoutLegalEntityTests(TestCase):
         cart.refresh_from_db()
         self.assertEqual(cart.items.count(), 1)
 
+    @legacy_endpoint_test("LP-BE-603")
     def test_checkout_rejects_unverified_legal_entity_mobile(self):
         customer = create_customer(self.session_id)
         create_legal_entity(customer, verified=False)
@@ -190,6 +196,7 @@ class CheckoutLegalEntityTests(TestCase):
         cart.refresh_from_db()
         self.assertEqual(cart.items.count(), 1)
 
+    @legacy_endpoint_test("LP-BE-603")
     def test_checkout_rejects_inactive_legal_entity_profile(self):
         customer = create_customer(self.session_id)
         create_legal_entity(customer, verified=True, active=False)

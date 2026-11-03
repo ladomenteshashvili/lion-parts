@@ -1,0 +1,245 @@
+# Lion Parts backend — Russian catalog. msgids are English (G§5.8).
+msgid ""
+msgstr ""
+"Project-Id-Version: lion-parts-backend\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-11-03 09:27+0000\n"
+"Language: ru\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+#: api/drf_messages.py:8
+msgid "This field is required."
+msgstr "Обязательное поле."
+
+#: api/drf_messages.py:9
+msgid "This field may not be null."
+msgstr "Это поле не может быть пустым."
+
+#: api/drf_messages.py:10
+msgid "This field may not be blank."
+msgstr "Это поле не может быть пустым."
+
+#: api/drf_messages.py:11
+msgid "Not a valid string."
+msgstr "Некорректная строка."
+
+#: api/drf_messages.py:12
+#, python-brace-format
+msgid "Ensure this field has no more than {max_length} characters."
+msgstr "Убедитесь, что это значение содержит не более {max_length} символов."
+
+#: api/drf_messages.py:13
+#, python-brace-format
+msgid "Ensure this field has at least {min_length} characters."
+msgstr "Убедитесь, что это значение содержит не менее {min_length} символов."
+
+#: api/drf_messages.py:14
+#, python-brace-format
+msgid "\"{input}\" is not a valid choice."
+msgstr "Значения {input} нет среди допустимых вариантов."
+
+#: api/drf_messages.py:15
+msgid "Must be a valid boolean."
+msgstr "Значение должно быть логическим (true или false)."
+
+#: api/drf_messages.py:16
+msgid "A valid integer is required."
+msgstr "Введите правильное число."
+
+#: api/drf_messages.py:17
+msgid "A valid number is required."
+msgstr "Требуется численное значение."
+
+#: api/drf_messages.py:18
+#, python-brace-format
+msgid "Ensure this value is less than or equal to {max_value}."
+msgstr "Убедитесь, что это значение меньше либо равно {max_value}."
+
+#: api/drf_messages.py:19
+#, python-brace-format
+msgid "Ensure this value is greater than or equal to {min_value}."
+msgstr "Убедитесь, что это значение больше либо равно {min_value}."
+
+#: api/drf_messages.py:20
+#, python-brace-format
+msgid "Ensure that there are no more than {max_digits} digits in total."
+msgstr "Убедитесь, что вы ввели не более {max_digits} цифры."
+
+#: api/drf_messages.py:21
+#, python-brace-format
+msgid "Ensure that there are no more than {max_decimal_places} decimal places."
+msgstr "Убедитесь, что вы ввели не более {max_decimal_places} цифры после запятой."
+
+#: api/drf_messages.py:22
+#, python-brace-format
+msgid "Expected a list of items but got type \"{input_type}\"."
+msgstr "Ожидался list со значениями, но был получен \"{input_type}\"."
+
+#: api/drf_messages.py:23
+msgid "This list may not be empty."
+msgstr "Этот список не может быть пустым."
+
+#: api/drf_messages.py:24
+#, python-brace-format
+msgid "Expected a dictionary of items but got type \"{input_type}\"."
+msgstr "Ожидался словарь со значениями, но был получен \"{input_type}\"."
+
+#: api/drf_messages.py:25
+#, python-brace-format
+msgid "Invalid data. Expected a dictionary, but got {datatype}."
+msgstr "Недопустимые данные. Ожидался dictionary, но был получен {datatype}."
+
+#: api/errors.py:7
+msgid "Please check the highlighted fields."
+msgstr "Проверьте заполненные поля."
+
+#: api/errors.py:8
+msgid "Incorrect email or password."
+msgstr "Неверный адрес эл. почты или пароль."
+
+#: api/errors.py:9
+msgid "The code is incorrect."
+msgstr "Неверный код."
+
+#: api/errors.py:10
+msgid "The code has expired. Request a new one."
+msgstr "Срок действия кода истёк. Запросите новый код."
+
+#: api/errors.py:11
+msgid "Too many attempts. You can request a new code later."
+msgstr "Превышено число попыток. Новый код можно будет запросить позже."
+
+#: api/errors.py:12
+msgid "Your registration session has expired. Please fill in the form again."
+msgstr "Время регистрации истекло. Заполните форму заново."
+
+#: api/errors.py:13
+msgid "This link is no longer valid."
+msgstr "Ссылка больше не действительна."
+
+#: api/errors.py:14
+msgid "Invalid callback."
+msgstr "Некорректный callback."
+
+#: api/errors.py:15
+msgid "Please sign in."
+msgstr "Пожалуйста, войдите в аккаунт."
+
+#: api/errors.py:16
+msgid "Security check failed. Please refresh the page."
+msgstr "Проверка безопасности не пройдена. Обновите страницу."
+
+#: api/errors.py:17
+msgid "Phone and email must be verified before payment."
+msgstr "Перед оплатой необходимо подтвердить телефон и эл. почту."
+
+#: api/errors.py:18
+msgid "Phone verification is required."
+msgstr "Необходимо подтвердить телефон."
+
+#: api/errors.py:19
+msgid "Weight entry is not available for your account."
+msgstr "Указание веса недоступно для вашего аккаунта."
+
+#: api/errors.py:20
+msgid "Price requests are not available for your account."
+msgstr "Запрос цены недоступен для вашего аккаунта."
+
+#: api/errors.py:21
+msgid "This action is not allowed."
+msgstr "Действие не разрешено."
+
+#: api/errors.py:22
+msgid "Not found."
+msgstr "Не найдено."
+
+#: api/errors.py:23
+msgid "This email is already linked to another account."
+msgstr "Этот адрес эл. почты уже привязан к другому аккаунту."
+
+#: api/errors.py:24
+msgid "Email is already verified."
+msgstr "Эл. почта уже подтверждена."
+
+#: api/errors.py:25
+msgid "You can't request a new code yet."
+msgstr "Запросить новый код пока нельзя."
+
+#: api/errors.py:26
+msgid "The price has expired. Refresh to get the current price."
+msgstr "Срок действия цены истёк. Обновите, чтобы получить актуальную цену."
+
+#: api/errors.py:27
+msgid "The price for this part is still being checked."
+msgstr "Цена на эту деталь ещё уточняется."
+
+#: api/errors.py:28
+msgid "Your cart is empty."
+msgstr "Корзина пуста."
+
+#: api/errors.py:29
+msgid "Checkout is blocked: an item in your cart has an expired price or is unavailable."
+msgstr "Оформление заблокировано: в корзине есть товар с истёкшей ценой или недоступный товар."
+
+#: api/errors.py:30
+msgid "No action is required anymore."
+msgstr "Действие больше не требуется."
+
+#: api/errors.py:31
+msgid "The order can no longer be cancelled: a part has already been purchased."
+msgstr "Заказ больше нельзя отменить: деталь уже закуплена."
+
+#: api/errors.py:32
+msgid "There is nothing to pay."
+msgstr "Нет суммы к оплате."
+
+#: api/errors.py:33
+msgid "A payment is already in progress."
+msgstr "Оплата уже выполняется."
+
+#: api/errors.py:34
+msgid "You can delete your account once your active orders are completed."
+msgstr "Аккаунт можно удалить после завершения активных заказов."
+
+#: api/errors.py:35
+msgid "Too many attempts. Please try again later."
+msgstr "Слишком много попыток. Попробуйте позже."
+
+#: api/errors.py:36 api/errors.py:37
+msgid "The service is temporarily unavailable. Please try again in a few minutes."
+msgstr "Сервис временно недоступен. Повторите попытку через несколько минут."
+
+#: api/errors.py:38
+msgid "The SMS could not be sent. Please try again."
+msgstr "Не удалось отправить SMS. Попробуйте ещё раз."
+
+#: api/errors.py:39
+msgid "The payment page could not be opened. You were not charged — please try again."
+msgstr "Не удалось открыть страницу оплаты. Деньги не списаны — попробуйте ещё раз."
+
+#: api/errors.py:41
+msgid "Something went wrong. Please try again later."
+msgstr "Что-то пошло не так. Попробуйте позже."
+
+#: api/exceptions.py:19
+msgid "Method not allowed."
+msgstr "Метод не разрешён."
+
+#: api/exceptions.py:20
+msgid "Malformed request."
+msgstr "Некорректный запрос."
+
+#: config/settings.py:121
+msgid "Georgian"
+msgstr "Грузинский"
+
+#: config/settings.py:121
+msgid "English"
+msgstr "Английский"
+
+#: config/settings.py:121
+msgid "Russian"
+msgstr "Русский"

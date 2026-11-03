@@ -7,6 +7,8 @@ from accounts.models import Customer, CustomerSession
 from cart.models import Cart, CartItem
 from orders.models import Order
 
+from api.legacy import legacy_endpoint_test
+
 
 def create_customer(session_id):
     customer = Customer.objects.create(
@@ -47,6 +49,7 @@ class CheckoutCourierRequestTests(TestCase):
         self.client = APIClient()
         self.session_id = "checkout-courier-session"
 
+    @legacy_endpoint_test("LP-BE-603")
     def test_checkout_stores_courier_delivery_request(self):
         create_customer(self.session_id)
         create_cart_with_item(self.session_id)
@@ -69,6 +72,7 @@ class CheckoutCourierRequestTests(TestCase):
         self.assertTrue(order.courier_delivery_requested)
         self.assertTrue(response.data["courier_delivery_requested"])
 
+    @legacy_endpoint_test("LP-BE-603")
     def test_checkout_defaults_courier_delivery_request_to_false(self):
         create_customer(self.session_id)
         create_cart_with_item(self.session_id)

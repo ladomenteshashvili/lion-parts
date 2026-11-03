@@ -6,6 +6,8 @@ from rest_framework.test import APIClient
 
 from cart.models import Cart
 
+from api.legacy import legacy_endpoint_test
+
 
 class CartApiTests(TestCase):
     def setUp(self):
@@ -31,6 +33,7 @@ class CartApiTests(TestCase):
             "quantity": 1,
         }
 
+    @legacy_endpoint_test("LP-BE-502/503")
     def test_get_empty_cart(self):
         response = self.client.get(f"/api/cart/?session_id={self.session_id}")
 
@@ -39,6 +42,7 @@ class CartApiTests(TestCase):
         self.assertEqual(response.data["items"], [])
         self.assertEqual(Decimal(str(response.data["total_gel"])), Decimal("0"))
 
+    @legacy_endpoint_test("LP-BE-502/503")
     def test_add_cart_item(self):
         response = self.client.post(
             "/api/cart/items/",
@@ -60,6 +64,7 @@ class CartApiTests(TestCase):
         self.assertEqual(len(response.data["items"]), 1)
         self.assertEqual(Decimal(str(response.data["total_gel"])), Decimal("650.0"))
 
+    @legacy_endpoint_test("LP-BE-502/503")
     def test_add_same_cart_item_increases_quantity(self):
         first_response = self.client.post(
             "/api/cart/items/",
@@ -81,6 +86,7 @@ class CartApiTests(TestCase):
         self.assertEqual(cart.items.count(), 1)
         self.assertEqual(item.quantity, 2)
 
+    @legacy_endpoint_test("LP-BE-502/503")
     def test_cart_total_uses_quantity(self):
         payload = {
             **self.item_payload,
@@ -96,6 +102,7 @@ class CartApiTests(TestCase):
         self.assertIn(response.status_code, [200, 201])
         self.assertEqual(Decimal(str(response.data["total_gel"])), Decimal("1300.0"))
 
+    @legacy_endpoint_test("LP-BE-502/503")
     def test_remove_cart_item(self):
         add_response = self.client.post(
             "/api/cart/items/",
@@ -118,12 +125,14 @@ class CartApiTests(TestCase):
         cart = Cart.objects.get(session_id=self.session_id)
         self.assertEqual(cart.items.count(), 0)
 
+    @legacy_endpoint_test("LP-BE-502/503")
     def test_get_cart_requires_session_id(self):
         response = self.client.get("/api/cart/")
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data["detail"], "session_id is required")
 
+    @legacy_endpoint_test("LP-BE-502/503")
     def test_add_cart_item_requires_session_id(self):
         payload = {
             **self.item_payload,

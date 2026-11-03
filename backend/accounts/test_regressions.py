@@ -21,6 +21,8 @@ from orders.models import (
     Payment,
 )
 
+from api.legacy import legacy_endpoint_test
+
 
 def create_order_for_customer(customer, session_id="main-session"):
     order = Order.objects.create(
@@ -93,6 +95,7 @@ class CustomerAccountOrderRegressionTests(TestCase):
             session_id=self.session_id,
         )
 
+    @legacy_endpoint_test("LP-BE-206/210")
     def test_phone_change_keeps_order_access_and_preserves_order_snapshot(self):
         self.customer.phone = "599777777"
         self.customer.save(update_fields=["phone", "updated_at"])
@@ -131,6 +134,7 @@ class CustomerAccountOrderRegressionTests(TestCase):
             "555123456",
         )
 
+    @legacy_endpoint_test("LP-BE-206/210")
     def test_password_login_reuses_customer_and_keeps_order_access(self):
         self.customer.set_password("Strong1!")
 
@@ -168,6 +172,7 @@ class CustomerAccountOrderRegressionTests(TestCase):
             self.order.order_number,
         )
 
+    @legacy_endpoint_test("LP-BE-206/210")
     def test_unverified_session_cannot_open_verified_customer_order(self):
         unverified_customer = Customer.objects.create(
             session_id="unverified-session",
@@ -235,7 +240,8 @@ class OperatorAdminRegressionTests(TestCase):
 
         self.assertTrue(logged_in)
 
-        response = self.client.get("/admin/")
+        # The admin follows the operator's browser language (default: ka); assert in English.
+        response = self.client.get("/admin/", headers={"accept-language": "en"})
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Site administration")

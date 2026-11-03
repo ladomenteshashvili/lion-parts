@@ -5,8 +5,11 @@ from django.test import TestCase
 from accounts.models import Customer, CustomerSession
 from orders.models import Order, OrderItem, Payment
 
+from api.legacy import legacy_endpoint_test
+
 
 class CustomerInvoiceViewTests(TestCase):
+    @legacy_endpoint_test("LP-BE-604")
     def test_verified_customer_can_open_own_invoice(self):
         customer = Customer.objects.create(
             session_id="invoice-session",
@@ -78,6 +81,7 @@ class CustomerInvoiceViewTests(TestCase):
         self.assertIn("Customer invoice part", content)
         self.assertIn("162.00", content)
 
+    @legacy_endpoint_test("LP-BE-604")
     def test_wrong_session_cannot_open_invoice(self):
         customer = Customer.objects.create(
             session_id="invoice-session",
