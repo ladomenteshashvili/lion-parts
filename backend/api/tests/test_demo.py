@@ -4,7 +4,8 @@ import importlib
 from email.utils import formatdate
 
 from django.core import mail
-from django.test import SimpleTestCase, override_settings
+from django.contrib.auth import get_user_model
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import Resolver404, clear_url_caches, resolve
 
 import config.urls
@@ -39,9 +40,11 @@ class DemoSwitchTests(SimpleTestCase):
 
 
 @override_settings(ENABLE_DEMO_ENDPOINTS=True)
-class OutboxTests(SimpleTestCase):
+class OutboxTests(TestCase):
     def setUp(self):
         reload_urls()
+        self.staff = get_user_model().objects.create_user("ops", password="x", is_staff=True)
+        self.client.force_login(self.staff)
 
     def tearDown(self):
         reload_urls()
@@ -67,7 +70,48 @@ class OutboxTests(SimpleTestCase):
         self.assertEqual((data[0]["subject"], data[-1]["subject"]), ("Verify 5", "Verify 54"))
         self.assertIsNone(data[0]["sent_at"])  # no Date header -> null
 
+    def test_anonymous_is_rejected_without_leaking_mail(self):
+        self.send(1)
+        self.client.logout()
+        response = self.client.get("/api/demo/outbox/")
+        self.assertEqual((response.status_code, response.json()["code"]), (401, "not_authenticated"))
+        self.assertNotIn("token=t1", response.content.decode())
+
+    def test_non_staff_user_is_forbidden(self):
+        self.send(1)
+        self.client.force_login(get_user_model().objects.create_user("nino", password="x"))
+        response = self.client.get("/api/demo/outbox/")
+        self.assertEqual((response.status_code, response.json()["code"]), (403, "permission_denied"))
+        self.assertNotIn("token=t1", response.content.decode())
+
+    def test_staff_user_reads_outbox(self):
+        self.send(1)
+        response = self.client.get("/api/demo/outbox/")
+        self.assertEqual((response.status_code, response.json()[0]["links"]),
+                         (200, ["http://localhost:5173/verify-email?token=t1&lang=en"]))
+
     def test_non_locmem_backend_returns_empty_list(self):
         self.send(1)
         with self.settings(MAILERS={"default": {"BACKEND": "django.core.mail.backends.console.EmailBackend"}}):
             self.assertEqual(self.client.get("/api/demo/outbox/").json(), [])
+
+
+class DemoProductionGuardTests(SimpleTestCase):
+    """Demo endpoints never boot next to real SMS or payments (production signature)."""
+
+    def boot(self, **env):
+        return run_python("import config.settings", {"ENABLE_DEMO_ENDPOINTS": "True", **env})
+
+    def test_demo_with_real_sms_refuses_to_start(self):
+        result = self.boot(SENDER_GE_ENABLED="True")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("ImproperlyConfigured", result.stderr)
+
+    def test_demo_with_real_payments_refuses_to_start(self):
+        result = self.boot(PAYMENT_PROVIDER="flitt")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("ImproperlyConfigured", result.stderr)
+
+    def test_staging_demo_configuration_starts(self):
+        result = self.boot(SENDER_GE_ENABLED="False", PAYMENT_PROVIDER="fake")
+        self.assertEqual(result.returncode, 0, result.stderr)

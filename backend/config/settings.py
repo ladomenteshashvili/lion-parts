@@ -14,6 +14,7 @@ Every variable read here is listed in backend/.env.example (G§12).
 
 from pathlib import Path
 from decouple import config, Csv
+from django.core.exceptions import ImproperlyConfigured
 from django.utils.translation import gettext_lazy as _
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -246,6 +247,10 @@ DEFAULT_ETA_DAYS = config("DEFAULT_ETA_DAYS", default=14, cast=int)
 # Sender.ge SMS
 SENDER_GE_ENABLED = config("SENDER_GE_ENABLED", default=False, cast=bool)
 SENDER_GE_API_KEY = config("SENDER_GE_API_KEY", default="")
+
+# Demo endpoints expose emails and demo codes; refuse them alongside real SMS or payments (= production).
+if ENABLE_DEMO_ENDPOINTS and (SENDER_GE_ENABLED or PAYMENT_PROVIDER != "fake"):
+    raise ImproperlyConfigured("ENABLE_DEMO_ENDPOINTS must be False when SENDER_GE_ENABLED or PAYMENT_PROVIDER is real.")
 SENDER_GE_SEND_URL = config(
     "SENDER_GE_SEND_URL",
     default="https://sender.ge/api/send.php",

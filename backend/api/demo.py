@@ -10,7 +10,7 @@ from django.core import mail
 from django.core.mail.backends.locmem import EmailBackend as LocmemBackend
 from django.utils.module_loading import import_string
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 
 LINK = re.compile(r"https?://\S+")
@@ -28,7 +28,7 @@ def _sent_at(message):
 
 
 @api_view(["GET"])
-@permission_classes([AllowAny])
+@permission_classes([IsAdminUser])  # bodies hold verification/reset links: staff only
 def outbox(request):
     """Emails captured by the in-memory mailer (tests, single-process runserver); [] otherwise."""
     if not _uses_locmem():
