@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 14:51+0000\n"
+"POT-Creation-Date: 2026-11-03 15:00+0000\n"
 "Language: ru\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -402,23 +402,42 @@ msgstr "Английский"
 msgid "Russian"
 msgstr "Русский"
 
-#: orders/admin.py:35
+#: orders/admin.py:32
 #, python-format
-msgid "%(n)d payment confirmed."
-msgid_plural "%(n)d payments confirmed."
-msgstr[0] "Подтверждён %(n)d платёж."
-msgstr[1] "Подтверждено %(n)d платежа."
-msgstr[2] "Подтверждено %(n)d платежей."
+msgid "%(payment)s: card payments are confirmed by the payment provider."
+msgstr "%(payment)s: оплату картой подтверждает платёжный провайдер."
 
-#: orders/admin.py:73 payments/admin.py:22
+#: orders/admin.py:33
+#, python-format
+msgid "%(payment)s: the payment is not pending."
+msgstr "%(payment)s: платёж не находится в ожидании."
+
+#: orders/admin.py:34
+#, python-format
+msgid "%(payment)s: not confirmed, the order no longer owes this amount (already paid or cancelled)."
+msgstr "%(payment)s: не подтверждено — по заказу эта сумма уже не причитается (уже оплачен или отменён)."
+
+#: orders/admin.py:45
+msgid "%(payment)s: payment confirmed."
+msgstr "%(payment)s: оплата подтверждена."
+
+#: orders/admin.py:83 payments/admin.py:22
 msgid "Payment received"
 msgstr "Оплата получена"
 
-#: orders/admin.py:77
+#: orders/admin.py:93
+#, python-format
+msgid "%(order)s: %(n)d pending invoice payment; choose it in Payments."
+msgid_plural "%(order)s: %(n)d pending invoice payments; choose one in Payments."
+msgstr[0] "%(order)s: %(n)d ожидающий платёж по счёту; выберите его в разделе «Платежи»."
+msgstr[1] "%(order)s: %(n)d ожидающих платежа по счёту; выберите один в разделе «Платежи»."
+msgstr[2] "%(order)s: %(n)d ожидающих платежей по счёту; выберите один в разделе «Платежи»."
+
+#: orders/admin.py:97
 msgid "Create balance invoice"
 msgstr "Создать счёт на остаток"
 
-#: orders/admin.py:86
+#: orders/admin.py:106
 #, python-format
 msgid "%(order)s: invoice created."
 msgstr "%(order)s: счёт создан."
@@ -662,6 +681,7 @@ msgid "Your parts are ready for pickup."
 msgstr "Ваши детали готовы к выдаче."
 
 #: orders/texts.py:51
+#, python-brace-format
 msgid "Payment confirmed ({percent}%)."
 msgstr "Оплата подтверждена ({percent}%)."
 
@@ -752,10 +772,21 @@ msgid "Choose one of: all, ready, checking, other."
 msgstr "Выберите одно из: all, ready, checking, other."
 
 #: payments/admin.py:26
+msgid "Cancel invoice"
+msgstr "Отменить счёт"
+
+#: payments/admin.py:32
+msgid "%(n)d invoice cancelled."
+msgid_plural "%(n)d invoices cancelled."
+msgstr[0] "%(n)d счёт отменён."
+msgstr[1] "%(n)d счёта отменены."
+msgstr[2] "%(n)d счетов отменены."
+
+#: payments/admin.py:35
 msgid "Mark refunded"
 msgstr "Отметить как возвращённый"
 
-#: payments/admin.py:30
+#: payments/admin.py:39
 #, python-format
 msgid "%(n)d payment marked refunded."
 msgid_plural "%(n)d payments marked refunded."

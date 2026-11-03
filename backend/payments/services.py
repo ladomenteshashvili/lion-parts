@@ -79,6 +79,19 @@ def start_payment(payment):
 
 
 PAYMENT_IN_PROGRESS_MINUTES = 30
+MANUAL_PROVIDERS = ("invoice", "manual")
+
+
+def open_payment(order):
+    """The payment that still blocks a new one: any pending invoice/manual payment (it never expires by
+    itself: the customer may still be paying it), or a card payment pending for < 30 min."""
+    from datetime import timedelta
+
+    from django.db.models import Q
+
+    recent = timezone.now() - timedelta(minutes=PAYMENT_IN_PROGRESS_MINUTES)
+    return order.payments.filter(Q(provider__in=MANUAL_PROVIDERS) | Q(created_at__gt=recent),
+                                 status=Payment.STATUS_PENDING).order_by("-created_at").first()
 
 
 def request_payment(order_id, method):
@@ -86,21 +99,34 @@ def request_payment(order_id, method):
     While the order still waits for its first payment, the retry is an `initial` payment for
     amount_due_now (so the order can move to processing); afterwards a `balance` payment for balance_due.
     Raises nothing_to_pay / payment_in_progress (+payment)."""
-    from datetime import timedelta
-
     from api.errors import ApiError
-    from orders.models import Order
     from orders.serializers import payment_data
 
     with transaction.atomic():
         order = Order.objects.select_for_update().get(pk=order_id)
         if order.status == Order.STATUS_CANCELLED or order.balance_due <= 0:
             raise ApiError("nothing_to_pay", status=409)
-        recent = order.payments.filter(status=Payment.STATUS_PENDING,
-                                       created_at__gt=timezone.now() - timedelta(minutes=PAYMENT_IN_PROGRESS_MINUTES)
-                                       ).order_by("-created_at").first()
-        if recent:
-            raise ApiError("payment_in_progress", status=409, payment=payment_data(recent))
+        if blocking := open_payment(order):
+            raise ApiError("payment_in_progress", status=409, payment=payment_data(blocking))
         initial = order.status == Order.STATUS_PAYMENT_PENDING
         return create_payment(order, method, Payment.KIND_INITIAL if initial else Payment.KIND_BALANCE,
                               amount=order.amount_due_now if initial else order.balance_due)
+
+
+def confirm_manual_payment(payment, user):
+    """Admin "payment received" for one pending invoice/manual payment (G§7.10). Refused when it would
+    collect more than the order still owes (e.g. the order was meanwhile paid by card). Locks in the
+    same order as mark_payment (payment, then order). -> None when confirmed, else a reason code:
+    not_manual / not_pending / overpayment."""
+    with transaction.atomic():
+        payment = Payment.objects.select_for_update().get(pk=payment.pk)
+        order = Order.objects.select_for_update().get(pk=payment.order_id)
+        if payment.provider not in MANUAL_PROVIDERS:
+            return "not_manual"
+        if payment.status != Payment.STATUS_PENDING:
+            return "not_pending"
+        recalculate_order(order)
+        if order.status == Order.STATUS_CANCELLED or payment.amount > order.balance_due:
+            return "overpayment"
+        mark_payment(payment, Payment.STATUS_PAID, confirmed_by=user)
+    return None

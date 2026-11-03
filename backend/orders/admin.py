@@ -7,7 +7,7 @@ from django.utils.translation import gettext_lazy as _, ngettext
 
 from api.errors import ApiError
 from payments.models import Payment
-from payments.services import mark_payment, request_payment
+from payments.services import MANUAL_PROVIDERS, confirm_manual_payment, request_payment
 
 from .models import Order, OrderItem, OrderItemEvent, OrderSupportMessage
 
@@ -28,12 +28,22 @@ class OperatorActionsMixin:
         return request.user.has_perm("payments.change_payment")
 
 
+CONFIRM_REFUSED = {
+    "not_manual": _("%(payment)s: card payments are confirmed by the payment provider."),
+    "not_pending": _("%(payment)s: the payment is not pending."),
+    "overpayment": _("%(payment)s: not confirmed, the order no longer owes this amount (already paid or cancelled)."),
+}
+
+
 def confirm_received(modeladmin, request, payments):
-    """"Payment received": only pending invoice/manual payments (card payments are confirmed by the provider)."""
-    done = sum(mark_payment(p, Payment.STATUS_PAID, confirmed_by=request.user).status == Payment.STATUS_PAID
-               for p in payments.filter(provider__in=("invoice", "manual"), status=Payment.STATUS_PENDING))
-    modeladmin.message_user(request, ngettext("%(n)d payment confirmed.", "%(n)d payments confirmed.", done)
-                            % {"n": done}, messages.SUCCESS if done else messages.WARNING)
+    """"Payment received" for exactly the selected payments, each through confirm_manual_payment."""
+    for payment in payments:
+        refused = confirm_manual_payment(payment, request.user)
+        if refused:
+            modeladmin.message_user(request, CONFIRM_REFUSED[refused] % {"payment": payment}, messages.WARNING)
+        else:
+            modeladmin.message_user(request, _("%(payment)s: payment confirmed.") % {"payment": payment},
+                                    messages.SUCCESS)
 
 
 class PaymentInline(ReadOnlyAdminMixin, admin.TabularInline):
@@ -72,7 +82,17 @@ class OrderAdmin(OperatorActionsMixin, ReadOnlyAdminMixin, admin.ModelAdmin):
 
     @admin.action(description=_("Payment received"), permissions=["operate"])
     def payment_received(self, request, queryset):
-        confirm_received(self, request, Payment.objects.filter(order__in=queryset))
+        """Only for an order with exactly one pending invoice/manual payment; otherwise the operator
+        picks the payment in the payments admin."""
+        for order in queryset:
+            pending = list(order.payments.filter(provider__in=MANUAL_PROVIDERS, status=Payment.STATUS_PENDING))
+            if len(pending) == 1:
+                confirm_received(self, request, pending)
+            else:
+                self.message_user(request, ngettext(
+                    "%(order)s: %(n)d pending invoice payment; choose it in Payments.",
+                    "%(order)s: %(n)d pending invoice payments; choose one in Payments.", len(pending))
+                    % {"order": order, "n": len(pending)}, messages.WARNING)
 
     @admin.action(description=_("Create balance invoice"), permissions=["operate"])
     def create_balance_invoice(self, request, queryset):
