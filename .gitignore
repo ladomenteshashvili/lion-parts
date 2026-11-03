@@ -29,3 +29,6 @@ build/
 backend/e2e.sqlite3
 frontend/playwright-report/
 frontend/test-results/
+
+# Compiled translation catalogs (built by compilemessages)
+*.mo

@@ -235,7 +235,8 @@ class OperatorAdminRegressionTests(TestCase):
 
         self.assertTrue(logged_in)
 
-        response = self.client.get("/admin/")
+        # The admin follows the operator's browser language (default: ka); assert in English.
+        response = self.client.get("/admin/", headers={"accept-language": "en"})
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Site administration")

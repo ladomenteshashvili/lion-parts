@@ -14,6 +14,7 @@ Every variable read here is listed in backend/.env.example (G§12).
 
 from pathlib import Path
 from decouple import config, Csv
+from django.utils.translation import gettext_lazy as _
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -51,6 +52,7 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    "django.middleware.locale.LocaleMiddleware",   # Accept-Language -> active language + Content-Language
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -110,11 +112,14 @@ AUTH_PASSWORD_VALIDATORS = [
 PASSWORD_RESET_TIMEOUT = 60 * 60
 
 
-# Internationalization
+# Internationalization (G§5.8)
 # https://docs.djangoproject.com/en/6.1/topics/i18n/
-# LANGUAGES / LocaleMiddleware / LOCALE_PATHS are added in LP-BE-1301.
+# Adding a language = add it here + translate its catalog; no code changes.
+# Names are English msgids; /api/meta/ shows each language's own name (Django LANG_INFO).
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = config("DEFAULT_LANGUAGE", default="ka")
+LANGUAGES = [("ka", _("Georgian")), ("en", _("English")), ("ru", _("Russian"))]
+LOCALE_PATHS = [BASE_DIR / "locale"]
 
 TIME_ZONE = 'UTC'
 

@@ -9,6 +9,7 @@ cd backend
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env          # fill in real values privately; never commit .env
+python manage.py compilemessages --ignore=venv   # needs GNU gettext (apt install gettext)
 python manage.py migrate
 python manage.py createcachetable
 python manage.py runserver 127.0.0.1:8000
@@ -24,3 +25,14 @@ python manage.py test --settings=config.e2e_settings    # SQLite, no .env needed
 ```
 
 Every environment variable is listed in `.env.example` (G§12).
+
+## Translations (ka, en, ru)
+
+msgids are English; catalogs live in `locale/<lang>/LC_MESSAGES/django.po` (commit `.po`, never `.mo`).
+
+```bash
+python manage.py makemessages -l ka -l ru --ignore=venv --no-obsolete
+python manage.py compilemessages --ignore=venv
+```
+
+Adding a language: add it to `LANGUAGES` in `config/settings.py`, run `makemessages -l <code>`, translate the `.po`, compile.

@@ -60,6 +60,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Install GNU gettext
+        run: sudo apt-get update && sudo apt-get install -y gettext
+
+      - name: Compile translation catalogs
+        working-directory: backend
+        run: python manage.py compilemessages
+
       - name: Run Django system checks
         working-directory: backend
         run: python manage.py check
