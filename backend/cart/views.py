@@ -5,7 +5,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from . import services
-from .serializers import AddItemSerializer, UpdateItemSerializer, VinSerializer
+from .serializers import AddItemSerializer, CartUpdateSerializer, UpdateItemSerializer, VinSerializer
 
 
 @api_view(["POST"])
@@ -17,9 +17,13 @@ def add_item(request):
     return Response(services.cart_data(request, cart), status=201)
 
 
-@api_view(["GET"])
+@api_view(["GET", "PATCH"])
 @permission_classes([AllowAny])
 def cart(request):
+    if request.method == "PATCH":
+        serializer = CartUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response(services.cart_data(request, services.switch_currency(request, serializer.validated_data["currency"])))
     return Response(services.cart_data(request, services.get_cart(request, create=False)))
 
 

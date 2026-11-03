@@ -16,6 +16,7 @@ from parts.models import PartQuoteRequest
 from parts.services import image_urls, owned_log, request_customer
 from pricing.engine import PriceSnapshot, reprice
 from pricing.models import SiteSettings
+from pricing.rates import get_usd_rate
 
 from .models import Cart, CartItem
 
@@ -194,3 +195,18 @@ def update_line(line, data):
 
 def apply_vin(cart, vin):
     cart.items.update(vin=vin, updated_at=timezone.now())
+
+
+def switch_currency(request, currency):
+    """Reprice every line into `currency` with the current rate, markup, VAT and discounts.
+    price_valid_until and the line status don't change (G§7.7)."""
+    customer = request_customer(request)
+    rate = get_usd_rate()
+    with transaction.atomic():
+        cart = Cart.objects.select_for_update().get(pk=get_cart(request).pk)
+        for line in cart.items.all():
+            line.apply_snapshot(reprice(line, customer=customer, currency=currency, usd_rate=rate))
+            line.save()
+        cart.currency = currency
+        cart.save(update_fields=["currency", "updated_at"])
+    return cart
