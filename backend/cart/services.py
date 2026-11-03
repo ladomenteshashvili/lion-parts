@@ -132,18 +132,20 @@ def item_data(request, line, now):
 
 
 def cart_data(request, cart):
-    """The G§8.0 Cart. A pending merge summary is returned once, then cleared."""
+    """The G§8.0 Cart (cart=None: the empty cart, without creating one). A pending merge summary is
+    returned once, then cleared."""
     now = timezone.now()
-    lines = list(cart.items.all())
+    lines = list(cart.items.all()) if cart else []
     items = [item_data(request, line, now) for line in lines]
     customer = request_customer(request)
     tariff = customer.get_tariff() if customer else CustomerTariff.objects.get(is_default=True)
     blocked = [{"item_id": i["id"], "code": i["status"]} for i in items if i["status"] in ("expired", "unavailable")]
-    merge, cart.merge_summary = cart.merge_summary, None
+    merge = cart.merge_summary if cart else None
     if merge is not None:
+        cart.merge_summary = None
         cart.save(update_fields=["merge_summary", "updated_at"])
     return {
-        "currency": cart.currency,
+        "currency": cart.currency if cart else "GEL",
         "items": items,
         "summary": {
             "items_count": sum(line.quantity for line in lines),
@@ -165,3 +167,30 @@ def cart_quantities(request):
     if cart is None:
         return {}
     return dict(cart.items.filter(source=CartItem.SOURCE_SEARCH).values_list("offer_id", "quantity"))
+
+
+def cart_count(request):
+    """Sum of line quantities, for /api/auth/me/."""
+    cart = get_cart(request, create=False)
+    return sum(cart.items.values_list("quantity", flat=True)) if cart else 0
+
+
+def own_line(request, item_id):
+    """A line of the requester's cart, else 404."""
+    cart = get_cart(request, create=False)
+    line = cart.items.filter(pk=item_id).first() if cart else None
+    if line is None:
+        raise ApiError("not_found", status=404)
+    return line
+
+
+def update_line(line, data):
+    fields = [f for f in ("quantity", "vin") if f in data]
+    for field in fields:
+        setattr(line, field, data[field])
+    if fields:
+        line.save(update_fields=[*fields, "updated_at"])
+
+
+def apply_vin(cart, vin):
+    cart.items.update(vin=vin, updated_at=timezone.now())

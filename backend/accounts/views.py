@@ -15,6 +15,8 @@ from api.throttles import (
     PasswordResetThrottle, PhoneThrottle, RegisterThrottle,
 )
 
+from cart.services import cart_count
+
 from . import otp, services
 from .serializers import (
     CodeSerializer, CustomerSerializer, DeleteAccountSerializer, EmailChangeSerializer, LoginSerializer, PasswordChangeSerializer, PasswordResetConfirmSerializer,
@@ -91,7 +93,7 @@ def me(request):
     return Response({
         "authenticated": customer is not None,
         "customer": CustomerSerializer(customer).data if customer else None,
-        "cart_count": 0,  # filled by the cart (LP-BE-503)
+        "cart_count": cart_count(request),
         "badges": None,   # filled by notifications (LP-BE-904)
     })
 
