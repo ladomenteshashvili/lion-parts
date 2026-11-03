@@ -185,7 +185,7 @@ msgstr "Убедитесь, что это значение больше либо
 #: api/drf_messages.py:20
 #, python-brace-format
 msgid "Ensure that there are no more than {max_digits} digits in total."
-msgstr "Убедитесь, что вы ввели не более {max_digits} цифры."
+msgstr "Число не должно содержать больше цифр, чем {max_digits}."
 
 #: api/drf_messages.py:21
 #, python-brace-format
@@ -458,7 +458,7 @@ msgstr "Причина (видна клиенту)"
 
 #: orders/admin.py:78
 msgid "Courier fee (GEL)"
-msgstr "Стоимость курьера (GEL)"
+msgstr "Стоимость курьерской доставки (GEL)"
 
 #: orders/admin.py:79 orders/admin.py:88
 msgid "Message to the customer"
@@ -561,7 +561,7 @@ msgstr "возвращено %(amount)s %(currency)s"
 
 #: orders/admin.py:222 orders/admin.py:227
 msgid "Propose courier fee"
-msgstr "Предложить стоимость курьера"
+msgstr "Предложить стоимость курьерской доставки"
 
 #: orders/admin.py:226
 #, python-format
@@ -677,11 +677,11 @@ msgstr "Служба поддержки Lion Parts ответила на ваш 
 
 #: orders/services.py:207
 msgid "Courier fees can be proposed for open delivery orders only."
-msgstr "Стоимость курьера можно предложить только для открытых заказов с доставкой."
+msgstr "Стоимость курьерской доставки можно предложить только для открытых заказов с доставкой."
 
 #: orders/services.py:209
 msgid "The courier fee must be zero or more."
-msgstr "Стоимость курьера должна быть нулевой или больше."
+msgstr "Стоимость курьерской доставки должна быть нулевой или больше."
 
 #: orders/services.py:311 orders/services.py:504
 msgid "A cancellation reason is required."
@@ -949,11 +949,11 @@ msgstr "Вы ознакомились с уведомлением."
 #: orders/texts.py:43
 #, python-brace-format
 msgid "Customer accepted the courier fee: {amount}."
-msgstr "Клиент согласился со стоимостью курьера: {amount}."
+msgstr "Клиент согласился со стоимостью доставки: {amount}."
 
 #: orders/texts.py:44
 msgid "Customer declined the courier fee."
-msgstr "Клиент отказался от стоимости курьера."
+msgstr "Клиент отказался от предложенной стоимости доставки."
 
 #: orders/texts.py:46
 msgid "Please confirm the delivery fee."

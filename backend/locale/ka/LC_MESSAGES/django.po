@@ -947,11 +947,11 @@ msgstr "თქვენ გაეცანით შეტყობინებ�
 #: orders/texts.py:43
 #, python-brace-format
 msgid "Customer accepted the courier fee: {amount}."
-msgstr "მომხმარებელი დაეთანხმა კურიერის საფასურს: {amount}."
+msgstr "მომხმარებელი დაეთანხმა მიტანის ღირებულებას: {amount}."
 
 #: orders/texts.py:44
 msgid "Customer declined the courier fee."
-msgstr "მომხმარებელმა უარი თქვა კურიერის საფასურზე."
+msgstr "მომხმარებელმა უარი თქვა მიტანის ღირებულებაზე."
 
 #: orders/texts.py:46
 msgid "Please confirm the delivery fee."
