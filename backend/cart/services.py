@@ -1,9 +1,23 @@
 """Cart services (G§7.7): one cart per customer, one per guest session."""
 
-from accounts.services import ensure_session
-from parts.services import request_customer
+from datetime import timedelta
+from decimal import Decimal
 
-from .models import Cart
+from django.db import transaction
+from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
+from rest_framework import serializers
+
+from accounts.models import CustomerTariff
+from accounts.services import ensure_session
+from api.errors import ApiError
+from orders.texts import render_text
+from parts.models import PartQuoteRequest
+from parts.services import image_urls, owned_log, request_customer
+from pricing.engine import PriceSnapshot, reprice
+from pricing.models import SiteSettings
+
+from .models import Cart, CartItem
 
 
 def get_cart(request, create=True):
@@ -18,3 +32,136 @@ def get_cart(request, create=True):
         key = request.session.session_key
         return Cart.objects.filter(session_key=key).first() if key else None
     return Cart.objects.get_or_create(session_key=ensure_session(request))[0]
+
+
+MAX_QUANTITY = 99
+
+
+def invalid_quantity():
+    return serializers.ValidationError({"quantity": [serializers.ErrorDetail(
+        str(_("The quantity must be between 1 and 99.")), code="invalid_quantity")]})
+
+
+def _line_from_offer(log, offer):
+    snap = PriceSnapshot.from_json(offer["snapshot"])
+    return {"source": CartItem.SOURCE_SEARCH, "search_log": log, "offer_id": offer["offer_id"],
+            "quote_id": f"LOG-{log.pk}", "part_number": log.part_number, "name": offer["name"],
+            "brand": offer["brand"], "condition": offer["condition"], "vin": log.vin,
+            "weight_source": offer["weight_source"], "eta_min_days": offer["eta_min_days"],
+            "eta_max_days": offer["eta_max_days"], "price_valid_until": log.price_valid_until}, snap
+
+
+def _line_from_quote(qr):
+    snap = PriceSnapshot(
+        supplier_price_usd=qr.supplier_price_usd, weight_kg=qr.prepared_weight_kg,
+        shipping_usd_per_kg=qr.shipping_usd_per_kg, markup_percent=qr.markup_percent, vat_percent=qr.vat_percent,
+        exchange_rate=qr.exchange_rate, list_unit_price=qr.list_unit_price,
+        discount_unit_amount=qr.discount_unit_amount, unit_price=qr.unit_price, discount_id=qr.discount_id,
+        currency=qr.currency)
+    valid_until = timezone.now() + timedelta(minutes=SiteSettings.get().price_valid_minutes)
+    return {"source": CartItem.SOURCE_PREPARED_QUOTE, "quote_request": qr, "offer_id": f"QR-{qr.pk}",
+            "quote_id": f"QR-{qr.pk}", "part_number": qr.part_number, "name": qr.name or qr.part_number,
+            "brand": qr.brand, "condition": qr.condition, "vin": qr.vin, "weight_source": "operator",
+            "eta_min_days": qr.eta_min_days, "eta_max_days": qr.eta_max_days, "price_valid_until": valid_until}, snap
+
+
+def add_item(request, data):
+    """Add by reference only (G§7.7): the price comes from the owned search log or prepared quote,
+    never from the request. Same (source, offer) -> quantity is added (max 99)."""
+    customer = request_customer(request)
+    if data["source"] == CartItem.SOURCE_SEARCH:
+        log = owned_log(request, data["search_id"])
+        offer = log.offer(data["offer_id"])
+        if offer is None:
+            raise ApiError("not_found", status=404)
+        if not log.price_valid_until or log.price_valid_until <= timezone.now():
+            raise ApiError("offer_expired", status=409)
+        if offer.get("status") != "ready" or not offer.get("snapshot"):
+            raise ApiError("offer_not_ready", status=409)
+        fields, snap = _line_from_offer(log, offer)
+    else:
+        qr = PartQuoteRequest.objects.filter(pk=data["quote_request_id"], customer=customer).first() \
+            if customer is not None else None
+        if qr is None:
+            raise ApiError("not_found", status=404)
+        if not qr.is_price_ready:
+            raise ApiError("offer_not_ready", status=409)
+        fields, snap = _line_from_quote(qr)
+
+    with transaction.atomic():
+        cart = Cart.objects.select_for_update().get(pk=get_cart(request).pk)
+        existing = cart.items.filter(source=fields["source"], offer_id=fields["offer_id"]).first()
+        if existing:
+            if existing.quantity + data["quantity"] > MAX_QUANTITY:
+                raise invalid_quantity()
+            existing.quantity += data["quantity"]
+            existing.save(update_fields=["quantity", "updated_at"])
+            return cart
+        if snap.currency != cart.currency:
+            snap = reprice(snap.to_json() | {"part_number": fields["part_number"], "brand": fields["brand"]},
+                           customer=customer, currency=cart.currency)
+        line = CartItem(cart=cart, quantity=data["quantity"], **fields)
+        line.apply_snapshot(snap)
+        line.save()
+    return cart
+
+
+# Read side (G§8.0 Cart)
+
+def _money(value):
+    return f"{value:.2f}" if value is not None else None
+
+
+def line_status(line, now):
+    return "expired" if now > line.price_valid_until else line.availability_status
+
+
+def item_data(request, line, now):
+    return {
+        "id": line.pk, "source": line.source, "part_number": line.part_number, "name": line.name,
+        "brand": line.brand, "condition": line.condition, "quantity": line.quantity, "vin": line.vin,
+        "list_unit_price": _money(line.list_unit_price), "discount_unit_amount": _money(line.discount_unit_amount),
+        "unit_price": _money(line.unit_price), "previous_unit_price": _money(line.previous_unit_price),
+        "line_total": _money(line.unit_price * line.quantity), "status": line_status(line, now),
+        "eta_min_days": line.eta_min_days, "eta_max_days": line.eta_max_days,
+        "weight_kg": _money(line.weight_kg), "weight_source": line.weight_source,
+        "customer_notice": render_text("weight_customer_notice") if line.weight_source == "customer" else "",
+        "price_valid_until": line.price_valid_until,
+        "image_urls": image_urls(request, line.part_number, line.brand),
+    }
+
+
+def cart_data(request, cart):
+    """The G§8.0 Cart. A pending merge summary is returned once, then cleared."""
+    now = timezone.now()
+    lines = list(cart.items.all())
+    items = [item_data(request, line, now) for line in lines]
+    customer = request_customer(request)
+    tariff = customer.get_tariff() if customer else CustomerTariff.objects.get(is_default=True)
+    blocked = [{"item_id": i["id"], "code": i["status"]} for i in items if i["status"] in ("expired", "unavailable")]
+    merge, cart.merge_summary = cart.merge_summary, None
+    if merge is not None:
+        cart.save(update_fields=["merge_summary", "updated_at"])
+    return {
+        "currency": cart.currency,
+        "items": items,
+        "summary": {
+            "items_count": sum(line.quantity for line in lines),
+            "items_total": _money(sum((line.list_unit_price * line.quantity for line in lines), Decimal("0"))),
+            "discount_total": _money(sum((line.discount_unit_amount * line.quantity for line in lines), Decimal("0"))),
+            "delivery_fee": None,
+            "total": _money(sum((line.unit_price * line.quantity for line in lines), Decimal("0"))),
+        },
+        "payment_terms": tariff.payment_terms,
+        "checkout_blocked": bool(blocked),
+        "checkout_blocked_reasons": blocked,
+        "merge": merge,
+    }
+
+
+def cart_quantities(request):
+    """offer_id -> quantity of this requester's `search` lines (for in_cart_quantity), without creating a cart."""
+    cart = get_cart(request, create=False)
+    if cart is None:
+        return {}
+    return dict(cart.items.filter(source=CartItem.SOURCE_SEARCH).values_list("offer_id", "quantity"))

@@ -19,7 +19,8 @@ class CurrencyField(serializers.CharField):
 
 class VinField(serializers.CharField):
     def __init__(self, **kwargs):
-        super().__init__(required=False, allow_blank=True, default="", max_length=40, **kwargs)
+        kwargs.setdefault("default", "")
+        super().__init__(required=False, allow_blank=True, max_length=40, **kwargs)
 
     def to_internal_value(self, data):
         return normalize_vin(super().to_internal_value(data))  # Django ValidationError(code=invalid_vin)

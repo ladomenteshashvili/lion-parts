@@ -42,50 +42,6 @@ class CartApiTests(TestCase):
         self.assertEqual(Decimal(str(response.data["total_gel"])), Decimal("0"))
 
     @legacy_endpoint_test("LP-BE-502/503")
-    def test_add_cart_item(self):
-        response = self.client.post(
-            "/api/cart/items/",
-            self.item_payload,
-            format="json",
-        )
-
-        self.assertIn(response.status_code, [200, 201])
-
-        cart = Cart.objects.get(session_id=self.session_id)
-        item = cart.items.first()
-
-        self.assertIsNotNone(item)
-        self.assertEqual(item.cart_item_id, self.cart_item_id)
-        self.assertEqual(item.part_number, "1565461")
-        self.assertEqual(item.quantity, 1)
-        self.assertEqual(item.final_price_gel, Decimal("650.00"))
-
-        self.assertEqual(len(response.data["items"]), 1)
-        self.assertEqual(Decimal(str(response.data["total_gel"])), Decimal("650.0"))
-
-    @legacy_endpoint_test("LP-BE-502/503")
-    def test_add_same_cart_item_increases_quantity(self):
-        first_response = self.client.post(
-            "/api/cart/items/",
-            self.item_payload,
-            format="json",
-        )
-        self.assertIn(first_response.status_code, [200, 201])
-
-        second_response = self.client.post(
-            "/api/cart/items/",
-            self.item_payload,
-            format="json",
-        )
-        self.assertIn(second_response.status_code, [200, 201])
-
-        cart = Cart.objects.get(session_id=self.session_id)
-        item = cart.items.first()
-
-        self.assertEqual(cart.items.count(), 1)
-        self.assertEqual(item.quantity, 2)
-
-    @legacy_endpoint_test("LP-BE-502/503")
     def test_cart_total_uses_quantity(self):
         payload = {
             **self.item_payload,
@@ -131,18 +87,3 @@ class CartApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data["detail"], "session_id is required")
 
-    @legacy_endpoint_test("LP-BE-502/503")
-    def test_add_cart_item_requires_session_id(self):
-        payload = {
-            **self.item_payload,
-            "session_id": "",
-        }
-
-        response = self.client.post(
-            "/api/cart/items/",
-            payload,
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.data["detail"], "session_id is required")

@@ -80,19 +80,23 @@ def run_search(request, *, part_number, vin, currency):
 
 
 def search_response(request, log):
+    from cart.services import cart_quantities  # cart builds on parts
+
+    in_cart = cart_quantities(request)
     return {
         "search_id": log.pk, "part_number": log.part_number, "vin": log.vin, "currency": log.currency,
         "exchange_rate": f"{log.exchange_rate:.4f}" if log.exchange_rate is not None else None,
         "price_valid_until": log.price_valid_until, "not_found": not log.offers(),
-        "offers": [present_offer(request, offer, log.part_number) for offer in log.offers()],
+        "offers": [present_offer(request, offer, log.part_number, in_cart) for offer in log.offers()],
     }
 
 
-def present_offer(request, offer, part_number):
+def present_offer(request, offer, part_number, in_cart=None):
     """Public offer with the request-dependent parts: cart quantity (LP-BE-501), image URLs and the
     weight disclaimer in the request language (stored as weight_source only, G§7.6)."""
     notice = render_text("weight_customer_notice") if offer.get("weight_source") == "customer" else ""
-    return public_offer(offer, in_cart_quantity=0, image_urls=image_urls(request, part_number, offer.get("brand")),
+    return public_offer(offer, in_cart_quantity=(in_cart or {}).get(offer["offer_id"], 0),
+                        image_urls=image_urls(request, part_number, offer.get("brand")),
                         customer_notice=notice)
 
 

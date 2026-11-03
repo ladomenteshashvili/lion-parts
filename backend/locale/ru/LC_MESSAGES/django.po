@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 12:53+0000\n"
+"POT-Creation-Date: 2026-11-03 12:56+0000\n"
 "Language: ru\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -382,6 +382,10 @@ msgstr "Подтвердите адрес электронной почты, о�
 msgid "The link is valid for 48 hours. If you didn't create a Lion Parts account, ignore this email."
 msgstr "Ссылка действительна 48 часов. Если вы не создавали аккаунт Lion Parts, проигнорируйте это письмо."
 
+#: cart/serializers.py:18 cart/services.py:42
+msgid "The quantity must be between 1 and 99."
+msgstr "Количество должно быть от 1 до 99."
+
 #: config/settings.py:124
 msgid "Georgian"
 msgstr "Грузинский"
@@ -456,11 +460,11 @@ msgstr "Изображение не должно превышать 5 МБ."
 msgid "Choose one of the available currencies."
 msgstr "Выберите одну из доступных валют."
 
-#: parts/serializers.py:65
+#: parts/serializers.py:66
 msgid "Enter a weight above 0 and up to 500 kg."
 msgstr "Введите вес больше 0 и не более 500 кг."
 
-#: parts/serializers.py:78
+#: parts/serializers.py:79
 msgid "Confirm that the price may change with the actual weight."
 msgstr "Подтвердите, что цена может измениться в зависимости от фактического веса."
 
