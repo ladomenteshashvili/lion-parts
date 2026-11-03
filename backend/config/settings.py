@@ -149,6 +149,9 @@ CORS_ALLOW_CREDENTIALS = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=not DEBUG, cast=bool)
 SECURE_HSTS_SECONDS = 0 if DEBUG else 31536000
+# Domain-wide HSTS policy is an owner decision (it also forces HTTPS on every subdomain): off unless set.
+SECURE_HSTS_INCLUDE_SUBDOMAINS = config("SECURE_HSTS_INCLUDE_SUBDOMAINS", default=False, cast=bool)
+SECURE_HSTS_PRELOAD = config("SECURE_HSTS_PRELOAD", default=False, cast=bool)
 
 
 # Django REST framework
@@ -255,6 +258,13 @@ if DEPLOY_ENV == "production":
         # FakeProvider never takes money; production needs a real adapter (M3 audit fix 3)
         ("PAYMENT_PROVIDER=fake", PAYMENT_PROVIDER == "fake"),
         (f"EMAIL_BACKEND={email_backend}", bool({"locmem", "console", "dummy", "filebased"} & set(email_backend.split(".")))),
+        # LP-BE-1202 (backend-review F9, F10): weak key, supplier TLS off, plain-HTTP links and origins
+        ("SECRET_KEY weak (< 50 characters or a placeholder)",
+         len(SECRET_KEY) < 50 or any(word in SECRET_KEY for word in ("insecure", "change-me", "test-secret"))),
+        ("AMT_VERIFY_SSL=False", not AMT_VERIFY_SSL),
+        ("FRONTEND_BASE_URL without https", not FRONTEND_BASE_URL.startswith("https://")),
+        ("CSRF_TRUSTED_ORIGINS without https", any(not o.startswith("https://") for o in CSRF_TRUSTED_ORIGINS)),
+        ("ALLOWED_HOSTS=*", "*" in ALLOWED_HOSTS),
     ) if is_set]
     if _forbidden:
         raise ImproperlyConfigured(f"DEPLOY_ENV=production forbids: {', '.join(_forbidden)}.")
@@ -284,17 +294,31 @@ PHONE_VERIFICATION_MAX_ATTEMPTS = config(
 
 
 
-# Logging: Django's defaults, plus masking of public link tokens in request logs (D23).
+# Logging (LP-BE-1202): everything to stdout (the process manager / journald collects it), INFO and up, in every
+# environment. Public link tokens are masked on the handler, so no logger can write one (D23). Application code
+# never logs OTP codes, passwords, API keys or message texts (api/tests/test_log_secrets.py).
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "filters": {"mask_tokens": {"()": "api.log_filters.MaskTokensFilter"}},
-    "formatters": {"django.server": {"()": "django.utils.log.ServerFormatter", "format": "[{server_time}] {message}",
-                                     "style": "{"}},
-    "handlers": {"django.server": {"level": "INFO", "class": "logging.StreamHandler", "formatter": "django.server"}},
-    "loggers": {
-        "django.request": {"filters": ["mask_tokens"]},
-        "django.server": {"handlers": ["django.server"], "level": "INFO", "propagate": False,
+    "formatters": {
+        "plain": {"format": "{asctime} {levelname} {name}: {message}", "style": "{"},
+        "django.server": {"()": "django.utils.log.ServerFormatter", "format": "[{server_time}] {message}",
+                          "style": "{"},
+    },
+    "handlers": {
+        "stdout": {"class": "logging.StreamHandler", "stream": "ext://sys.stdout", "formatter": "plain",
+                   "filters": ["mask_tokens"]},
+        "django.server": {"level": "INFO", "class": "logging.StreamHandler", "formatter": "django.server",
                           "filters": ["mask_tokens"]},
+    },
+    "root": {"handlers": ["stdout"], "level": config("LOG_LEVEL", default="INFO")},
+    "loggers": {
+        "django": {"handlers": ["stdout"], "level": "INFO", "propagate": False},
+        "django.request": {"filters": ["mask_tokens"]},  # also before any handler (records reused elsewhere)
+        # Their DEBUG records dump template contexts / SQL parameters (links, tokens): never below INFO.
+        "django.template": {"level": "INFO"},
+        "django.db.backends": {"level": "INFO"},
+        "django.server": {"handlers": ["django.server"], "level": "INFO", "propagate": False},
     },
 }
