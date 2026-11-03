@@ -33,6 +33,8 @@ def callback(request, provider):
         payment, status = adapter.handle_callback(request)
         if status not in PLATFORM_STATUSES:
             raise ValueError(f"unexpected status {status!r}")
+        if payment.provider != adapter.name:  # e.g. never let a card callback mark an invoice paid
+            raise ValueError(f"payment {payment.pk} belongs to provider {payment.provider!r}")
     except Exception:  # never trust a callback the adapter couldn't verify
         logger.warning("Invalid %s payment callback", provider, exc_info=True)
         raise ApiError("invalid_callback", status=400)

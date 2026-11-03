@@ -59,6 +59,18 @@ class CallbackTests(TestCase):
                 self.assertLogs("payments.views", "WARNING"):
             self.assertEqual(self.post().status_code, 400)
 
+    def test_payment_of_another_provider_is_rejected(self):
+        """M3 audit fix 4: a verified callback can only change its own provider's payments."""
+        invoice = Payment.objects.create(order=self.order, kind="initial", provider="invoice", amount=self.order.total,
+                                         currency="GEL", status="pending")
+        with mock.patch.object(FakeProvider, "handle_callback", return_value=(invoice, "paid")), \
+                self.assertLogs("payments.views", "WARNING"):
+            response = self.post()
+        self.assertEqual((response.status_code, response.json()["code"]), (400, "invalid_callback"))
+        invoice.refresh_from_db()
+        self.order.refresh_from_db()
+        self.assertEqual((invoice.status, self.order.amount_paid), ("pending", 0))
+
     def test_fake_provider_has_no_real_callback(self):
         with self.assertLogs("payments.views", "WARNING"):
             self.assertEqual(self.post().status_code, 400)
