@@ -250,3 +250,40 @@ def decide(customer, item_id, decision, actor_name=""):
     sync_order_status(order)
     # LP-BE-902: notify operators? (not in G§7.11; the admin list shows the decision)
     return order
+
+
+@transaction.atomic
+def cancel_order(order_id, reason, *, actor, actor_name="", operator=False):
+    """G§7.13. Customers: open order with nothing purchased (else 409 not_cancellable). Operators (owner
+    decision D19): any open order, reason required. Open payments expire; money already collected stays
+    recorded, so amount_paid > 0 shows as refund_pending (refunded manually, never automatically).
+    Locks the open payments, then the order (the order mark_payment uses). -> the order."""
+    from api.errors import ApiError
+    from payments.models import Payment
+    from payments.services import mark_payment
+
+    if operator and not reason.strip():
+        raise ValueError("an operator cancellation needs a reason")
+    open_payments = list(Payment.objects.select_for_update().filter(order_id=order_id,
+                                                                     status__in=Payment.OPEN_STATUSES))
+    order = Order.objects.select_for_update().get(pk=order_id)
+    allowed = order.status in Order.OPEN_STATUSES if operator else can_cancel(order)
+    if not allowed:
+        raise ApiError("not_cancellable", status=409)
+    for item in _live_items(order).select_for_update():
+        old = item.item_status
+        item.item_status = OrderItem.STATUS_CANCELLED
+        for field, value in PROPOSED_CLEAR.items():
+            setattr(item, field, value)
+        item.save()
+        create_item_event(item, "status_changed", text_code="status_cancelled", message=reason if operator else "",
+                          old={"item_status": old}, new={"item_status": item.item_status, "reason": reason},
+                          actor=actor, actor_name=actor_name, visible=True)
+    order.status, order.cancelled_at, order.cancel_reason = Order.STATUS_CANCELLED, timezone.now(), reason
+    order.courier_fee_action_required = False
+    order.save(update_fields=["status", "cancelled_at", "cancel_reason", "courier_fee_action_required", "updated_at"])
+    for payment in open_payments:
+        mark_payment(payment, Payment.STATUS_EXPIRED, payload={"expired_by": "order_cancelled"})
+    recalculate_order(order)
+    # LP-BE-902: notify(order.customer, "status_update", order=order)
+    return order

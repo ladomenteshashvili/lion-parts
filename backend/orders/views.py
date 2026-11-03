@@ -131,3 +131,16 @@ def item_decision(request, item_id):
 
 def _order_response(request, order, status=200):
     return Response(order_data(request, order_queryset(detail=True).get(pk=order.pk), detail=True), status=status)
+
+
+@api_view(["POST"])
+def order_cancel(request, order_number):
+    order = own_order(request, order_number)
+    reason = request.data.get("reason", "") if isinstance(request.data, dict) else ""
+    if not isinstance(reason, str) or len(reason) > 1000:
+        raise serializers.ValidationError({"reason": [serializers.ErrorDetail(
+            str(serializers.CharField.default_error_messages["max_length"]).format(max_length=1000), "invalid")]})
+    customer = request.user.customer
+    order = services.cancel_order(order.pk, reason.strip(), actor="customer",
+                                  actor_name=f"{customer.first_name} {customer.last_name}")
+    return _order_response(request, order)
