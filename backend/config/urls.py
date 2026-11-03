@@ -26,6 +26,10 @@ urlpatterns = [
     # Legacy session_id routes (accounts/parts/cart/orders urls) are not mounted: see api/legacy.py.
 ]
 
+# Demo routes exist only when enabled (staging/tests); in production they aren't resolvable at all.
+if settings.ENABLE_DEMO_ENDPOINTS:
+    urlpatterns.append(path("api/demo/", include("api.demo_urls")))
+
 # static() returns no patterns unless DEBUG is on; in production nginx serves /media/.
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
