@@ -1,5 +1,6 @@
 """LP-BE-1103: operator services and the rewired admin (G§10, G§7.8, G§7.9; owner decisions D19, D20)."""
 
+import csv as csv_module
 import threading
 import unittest
 from decimal import Decimal
@@ -267,6 +268,15 @@ class AdminParityTests(TestCase):
         self.assertEqual(len(csv), 3)  # header + 2 part lines
         self.assertIn(order.order_number, csv[1])
         self.assertIn("260.00", csv[1])
+
+    def test_csv_export_neutralises_formulas_and_invoice_language_is_checked(self):
+        customer = make_customer(email="x@example.com", phone="599111222", first_name="=HYPERLINK(\"http://x\")")
+        order = paid_order(customer)
+        content = self.act(ORDERS, "export_invoice_csv", [order]).content.decode("utf-8-sig")
+        cells = [cell for row in csv_module.reader(content.splitlines()) for cell in row]
+        self.assertIn("'=HYPERLINK(\"http://x\") Beridze", cells)
+        self.assertFalse([c for c in cells if c[:1] in ("=", "+", "@")])
+        self.assertEqual(self.client.get(f"{ORDERS}{order.pk}/invoice/?lang=xx").status_code, 200)
 
     def test_view_only_staff_has_no_operator_actions(self):
         staff = get_user_model().objects.create_user("viewer", "v@example.com", "x", is_staff=True)

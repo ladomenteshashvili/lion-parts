@@ -19,7 +19,7 @@ from payments.services import MANUAL_PROVIDERS, confirm_manual_payment, record_r
 
 from . import services
 from .admin_actions import OperatePermissionMixin, form_action
-from .invoices import render_invoice
+from .invoices import invoice_language, render_invoice
 from .models import CourierFeeProposal, Order, OrderItem, OrderItemEvent, OrderSupportMessage
 
 
@@ -63,8 +63,13 @@ def actor(request):
     return request.user.get_username()
 
 
+def csv_cell(value):
+    """Customer-entered text never runs as a spreadsheet formula (CSV injection)."""
+    return f"'{value}" if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r") else value
+
+
 class ReasonForm(forms.Form):
-    reason = forms.CharField(label=_("Reason"), widget=forms.Textarea, max_length=1000)
+    reason = forms.CharField(label=_("Reason (shown to the customer)"), widget=forms.Textarea, max_length=1000)
 
 
 class CourierFeeForm(forms.Form):
@@ -91,7 +96,8 @@ class ItemActionForm(forms.Form):
 
 class ItemStatusForm(forms.Form):
     item_status = forms.ChoiceField(label=_("New status"), choices=[(s, s) for s in services.OPERATOR_STATUSES])
-    reason = forms.CharField(label=_("Reason (required to cancel)"), widget=forms.Textarea, required=False,
+    reason = forms.CharField(label=_("Reason (required to cancel; shown to the customer)"), widget=forms.Textarea,
+                             required=False,
                              max_length=1000)
 
 
@@ -164,7 +170,8 @@ class OrderAdmin(OperatePermissionMixin, ReadOnlyAdminMixin, admin.ModelAdmin):
         if not self.has_view_permission(request):
             return HttpResponse(status=403)
         order = get_object_or_404(Order, pk=order_id)
-        return HttpResponse(render_invoice(order, request.GET.get("lang", "ka")), content_type="text/html; charset=utf-8")
+        language = invoice_language(request.GET.get("lang"), "ka")
+        return HttpResponse(render_invoice(order, language), content_type="text/html; charset=utf-8")
 
     @admin.display(description=_("Invoice"))
     def invoice_link(self, obj):
@@ -260,11 +267,12 @@ class OrderAdmin(OperatePermissionMixin, ReadOnlyAdminMixin, admin.ModelAdmin):
             for item in order.items.all():
                 if item.item_status == OrderItem.STATUS_CANCELLED:
                     continue
-                writer.writerow([order.order_number, *buyer, item.vin, "part", item.part_number, item.name,
-                                 item.quantity, order.currency, item.unit_price, item.line_total, *tail])
+                writer.writerow(map(csv_cell, [order.order_number, *buyer, item.vin, "part", item.part_number,
+                                               item.name, item.quantity, order.currency, item.unit_price,
+                                               item.line_total, *tail]))
             if order.courier_fee:
-                writer.writerow([order.order_number, *buyer, "", "courier", "", "Courier", 1, order.currency,
-                                 order.courier_fee, order.courier_fee, *tail])
+                writer.writerow(map(csv_cell, [order.order_number, *buyer, "", "courier", "", "Courier", 1,
+                                               order.currency, order.courier_fee, order.courier_fee, *tail]))
         return response
 
 

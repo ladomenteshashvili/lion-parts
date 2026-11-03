@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 15:54+0000\n"
+"POT-Creation-Date: 2026-11-03 15:58+0000\n"
 "Language: ru\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -422,88 +422,88 @@ msgstr "%(payment)s: не подтверждено — по заказу эта 
 msgid "%(payment)s: payment confirmed."
 msgstr "%(payment)s: оплата подтверждена."
 
-#: orders/admin.py:67
-msgid "Reason"
-msgstr "Причина"
+#: orders/admin.py:72
+msgid "Reason (shown to the customer)"
+msgstr "Причина (видна клиенту)"
 
-#: orders/admin.py:71
+#: orders/admin.py:76
 msgid "Courier fee (GEL)"
 msgstr "Стоимость курьера (GEL)"
 
-#: orders/admin.py:72 orders/admin.py:81
+#: orders/admin.py:77 orders/admin.py:86
 msgid "Message to the customer"
 msgstr "Сообщение клиенту"
 
-#: orders/admin.py:76 orders/admin.py:229 orders/admin.py:239
+#: orders/admin.py:81 orders/admin.py:236 orders/admin.py:246
 msgid "Reply to the customer"
 msgstr "Ответ клиенту"
 
-#: orders/admin.py:80
+#: orders/admin.py:85
 msgid "Decision type"
 msgstr "Тип решения"
 
-#: orders/admin.py:82
+#: orders/admin.py:87
 msgid "Proposed unit price (order currency)"
 msgstr "Предлагаемая цена за единицу (валюта заказа)"
 
-#: orders/admin.py:84
+#: orders/admin.py:89
 msgid "Proposed delivery days, from"
 msgstr "Предлагаемый срок доставки, от (дн.)"
 
-#: orders/admin.py:85
+#: orders/admin.py:90
 msgid "Proposed delivery days, to"
 msgstr "Предлагаемый срок доставки, до (дн.)"
 
-#: orders/admin.py:86
+#: orders/admin.py:91
 msgid "Alternative part number"
 msgstr "Номер альтернативной детали"
 
-#: orders/admin.py:87
+#: orders/admin.py:92
 msgid "Alternative part name"
 msgstr "Название альтернативной детали"
 
-#: orders/admin.py:88
+#: orders/admin.py:93
 msgid "Proposed weight (kg)"
 msgstr "Предлагаемый вес (кг)"
 
-#: orders/admin.py:93
+#: orders/admin.py:98
 msgid "New status"
 msgstr "Новый статус"
 
-#: orders/admin.py:94
-msgid "Reason (required to cancel)"
-msgstr "Причина (обязательна при отмене)"
+#: orders/admin.py:99
+msgid "Reason (required to cancel; shown to the customer)"
+msgstr "Причина (обязательна при отмене; видна клиенту)"
 
-#: orders/admin.py:143
+#: orders/admin.py:149
 msgid "Money (order currency, read-only)"
 msgstr "Суммы (валюта заказа, только чтение)"
 
-#: orders/admin.py:146 orders/templates/orders/invoice.html:46
+#: orders/admin.py:152 orders/templates/orders/invoice.html:46
 msgid "Delivery"
 msgstr "Доставка"
 
-#: orders/admin.py:150
+#: orders/admin.py:156
 msgid "Billing snapshot"
 msgstr "Данные плательщика (на момент заказа)"
 
-#: orders/admin.py:169 orders/templates/orders/invoice.html:6
+#: orders/admin.py:176 orders/templates/orders/invoice.html:6
 #: orders/templates/orders/invoice.html:20 pricing/admin.py:33
 msgid "Invoice"
 msgstr "Счёт"
 
-#: orders/admin.py:172
+#: orders/admin.py:179
 msgid "Print invoice"
 msgstr "Печать счёта"
 
-#: orders/admin.py:174
+#: orders/admin.py:181
 msgid "Refunds"
 msgstr "Возвраты"
 
-#: orders/admin.py:180 payments/admin.py:30
+#: orders/admin.py:187 payments/admin.py:30
 msgid "Payment received"
 msgstr "Оплата получена"
 
-#: orders/admin.py:190
+#: orders/admin.py:197
 #, python-format
 msgid "%(order)s: %(n)d pending invoice payment; choose it in Payments."
 msgid_plural "%(order)s: %(n)d pending invoice payments; choose one in Payments."
@@ -511,70 +511,70 @@ msgstr[0] "%(order)s: %(n)d ожидающий платёж по счёту; в�
 msgstr[1] "%(order)s: %(n)d ожидающих платежа по счёту; выберите один в разделе «Платежи»."
 msgstr[2] "%(order)s: %(n)d ожидающих платежей по счёту; выберите один в разделе «Платежи»."
 
-#: orders/admin.py:194
+#: orders/admin.py:201
 msgid "Create balance invoice"
 msgstr "Создать счёт на остаток"
 
-#: orders/admin.py:203
+#: orders/admin.py:210
 #, python-format
 msgid "%(order)s: invoice created."
 msgstr "%(order)s: счёт создан."
 
-#: orders/admin.py:205 orders/admin.py:208
+#: orders/admin.py:212 orders/admin.py:215
 msgid "Record refund of the amount owed"
 msgstr "Записать возврат причитающейся суммы"
 
-#: orders/admin.py:209
+#: orders/admin.py:216
 #, python-format
 msgid "refunded %(amount)s %(currency)s"
 msgstr "возвращено %(amount)s %(currency)s"
 
-#: orders/admin.py:213 orders/admin.py:218
+#: orders/admin.py:220 orders/admin.py:225
 msgid "Propose courier fee"
 msgstr "Предложить стоимость курьера"
 
-#: orders/admin.py:217
+#: orders/admin.py:224
 #, python-format
 msgid "proposed %(amount)s %(currency)s"
 msgstr "предложено %(amount)s %(currency)s"
 
-#: orders/admin.py:220 orders/admin.py:227
+#: orders/admin.py:227 orders/admin.py:234
 msgid "Cancel order"
 msgstr "Отменить заказ"
 
-#: orders/admin.py:226 orders/templates/orders/invoice.html:57
+#: orders/admin.py:233 orders/templates/orders/invoice.html:57
 msgid "cancelled"
 msgstr "отменено"
 
-#: orders/admin.py:238
+#: orders/admin.py:245
 msgid "reply sent"
 msgstr "ответ отправлен"
 
-#: orders/admin.py:241
+#: orders/admin.py:248
 msgid "Invoice CSV export"
 msgstr "Экспорт счетов в CSV"
 
-#: orders/admin.py:280 orders/admin.py:285
+#: orders/admin.py:288 orders/admin.py:293
 msgid "Request a customer decision"
 msgstr "Запросить решение клиента"
 
-#: orders/admin.py:284
+#: orders/admin.py:292
 msgid "decision requested"
 msgstr "решение запрошено"
 
-#: orders/admin.py:287 orders/admin.py:293
+#: orders/admin.py:295 orders/admin.py:301
 msgid "Change status"
 msgstr "Изменить статус"
 
-#: orders/admin.py:292
+#: orders/admin.py:300
 msgid "status changed"
 msgstr "статус изменён"
 
-#: orders/admin.py:292
+#: orders/admin.py:300
 msgid "already in this status"
 msgstr "уже в этом статусе"
 
-#: orders/admin.py:311
+#: orders/admin.py:319
 msgid "Mark read"
 msgstr "Отметить прочитанным"
 
@@ -606,63 +606,63 @@ msgstr "Стоимость курьера можно предложить тол
 msgid "The courier fee must be zero or more."
 msgstr "Стоимость курьера должна быть нулевой или больше."
 
-#: orders/services.py:309 orders/services.py:470
+#: orders/services.py:309 orders/services.py:478
 msgid "A cancellation reason is required."
 msgstr "Укажите причину отмены."
 
-#: orders/services.py:389
+#: orders/services.py:395
 msgid "Enter a value greater than zero."
 msgstr "Введите значение больше нуля."
 
-#: orders/services.py:400
+#: orders/services.py:406
 msgid "Unknown action type."
 msgstr "Неизвестный тип действия."
 
-#: orders/services.py:402
+#: orders/services.py:408
 msgid "Customer decisions can be requested on paid, open orders only."
 msgstr "Решение клиента можно запросить только по оплаченным открытым заказам."
 
-#: orders/services.py:404
+#: orders/services.py:410
 msgid "This item is already cancelled or completed."
 msgstr "Эта позиция уже отменена или завершена."
 
-#: orders/services.py:409
+#: orders/services.py:415
 msgid "The proposed price equals the current price."
 msgstr "Предлагаемая цена равна текущей."
 
-#: orders/services.py:414
+#: orders/services.py:420
 msgid "The maximum can't be less than the minimum."
 msgstr "Максимум не может быть меньше минимума."
 
-#: orders/services.py:416
+#: orders/services.py:422
 msgid "The proposed delivery time equals the current one."
 msgstr "Предлагаемый срок доставки совпадает с текущим."
 
-#: orders/services.py:419
+#: orders/services.py:425
 msgid "Enter the alternative part number and name."
 msgstr "Введите номер и название альтернативной детали."
 
-#: orders/services.py:421
+#: orders/services.py:427
 msgid "The alternative is the same part number."
 msgstr "У альтернативы тот же номер детали."
 
-#: orders/services.py:425
+#: orders/services.py:431
 msgid "Write a message for the customer."
 msgstr "Напишите сообщение для клиента."
 
-#: orders/services.py:459
+#: orders/services.py:467
 msgid "This status can't be set here."
 msgstr "Этот статус здесь установить нельзя."
 
-#: orders/services.py:462
+#: orders/services.py:470
 msgid "The order or item is already closed."
 msgstr "Заказ или позиция уже закрыты."
 
-#: orders/services.py:464
+#: orders/services.py:472
 msgid "The order is not paid yet."
 msgstr "Заказ ещё не оплачен."
 
-#: orders/services.py:468
+#: orders/services.py:476
 msgid "The order still has a balance due."
 msgstr "По заказу ещё есть задолженность."
 
@@ -925,6 +925,7 @@ msgid "Price ready: calculate the price and create the customer link"
 msgstr "Цена готова: рассчитать цену и создать ссылку для клиента"
 
 #: parts/admin.py:92
+#, python-format
 msgid "#%(id)s: priced; the customer link is active."
 msgstr "#%(id)s: цена рассчитана; ссылка для клиента активна."
 
