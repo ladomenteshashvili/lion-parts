@@ -141,3 +141,41 @@ class DetailContentTests(OrderApiTestCase):
         self.assertEqual((action["old"], action["new"], action["decisions"]),
                          ({"weight_kg": "2.00", "unit_price": "100.00"}, {"weight_kg": "3.00", "unit_price": "120.00"},
                           ["acknowledge"]))
+
+
+class GroupTests(OrderApiTestCase):
+    """LP-BE-802: groups, counts and priority (G§7.8)."""
+
+    def setUp(self):
+        super().setUp()
+        self.unpaid = make_order(self.customer)  # payment_pending, balance due
+        self.action = make_order(self.customer, status=Order.STATUS_ACTION_REQUIRED)
+        self.paid = make_order(self.customer, status=Order.STATUS_PROCESSING)
+        mark_payment(create_payment(self.paid, "invoice"), "paid")
+        OrderItem.objects.filter(order=self.paid).update(item_status="ready_for_pickup")
+        self.cancelled = make_order(self.customer, status=Order.STATUS_CANCELLED)
+        self.newest_done = make_order(self.customer, status=Order.STATUS_COMPLETED)
+        Order.objects.filter(pk=self.newest_done.pk).update(balance_due=0)
+        make_order(make_customer(email="o@example.com", phone="599000000"), status=Order.STATUS_ACTION_REQUIRED)
+
+    def numbers(self, group="all"):
+        return [o["order_number"] for o in self.client.get(f"/api/orders/?group={group}").json()["results"]]
+
+    def test_action_first_then_to_pay_then_newest(self):
+        self.assertEqual(self.numbers(), [o.order_number for o in (
+            self.action, self.unpaid, self.newest_done, self.cancelled, self.paid)])
+
+    def test_group_counts_match_the_filtered_lists(self):
+        body = self.client.get("/api/orders/").json()
+        self.assertEqual(body["group_counts"], {"all": 5, "action": 1, "to_pay": 2, "to_pickup": 1, "active": 3,
+                                                "completed": 1, "cancelled": 1})
+        for group, count in body["group_counts"].items():
+            with self.subTest(group=group):
+                self.assertEqual(len(self.numbers(group)), count)
+        self.assertEqual(self.numbers("to_pickup"), [self.paid.order_number])
+        self.assertNotIn(self.cancelled.order_number, self.numbers("to_pay"))  # cancelled never "to pay"
+
+    def test_invalid_group(self):
+        response = self.client.get("/api/orders/?group=nope")
+        self.assertEqual((response.status_code, response.json()["code"], response.json()["fields"]["group"][0]["code"]),
+                         (400, "validation_error", "invalid"))

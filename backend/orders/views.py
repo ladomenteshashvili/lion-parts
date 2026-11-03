@@ -1,5 +1,6 @@
 """Checkout and order endpoints (G§8.6, G§8.7). Thin views: logic in orders.checkout / orders.services."""
 
+from django.db.models import Case, Count, Exists, IntegerField, OuterRef, Q, When
 from django.http import HttpResponse
 from django.utils.translation import get_language
 from rest_framework import serializers
@@ -15,7 +16,7 @@ from payments.services import request_payment, start_payment
 
 from . import checkout
 from .invoices import invoice_language, render_invoice
-from .models import Order
+from .models import Order, OrderItem
 from .serializers import order_data, order_queryset, orders_data, payment_data
 
 
@@ -83,12 +84,33 @@ def order_payment(request, order_number, payment_id):
     return Response(payment_data(payment))
 
 
+def _groups():
+    """G§7.8 order groups -> filter (over a queryset annotated with `pickup`)."""
+    return {
+        "all": Q(), "action": Q(status=Order.STATUS_ACTION_REQUIRED),
+        "to_pay": Q(balance_due__gt=0) & ~Q(status=Order.STATUS_CANCELLED), "to_pickup": Q(pickup=True),
+        "active": Q(status__in=Order.OPEN_STATUSES), "completed": Q(status=Order.STATUS_COMPLETED),
+        "cancelled": Q(status=Order.STATUS_CANCELLED),
+    }
+
+
 @api_view(["GET"])
 def order_list(request):
-    orders = order_queryset().filter(customer=request.user.customer)
+    """G§8.7: ?group= filter, action first, then to_pay, then newest; group_counts in one query."""
+    groups = _groups()
+    group = request.query_params.get("group", "all")
+    if group not in groups:
+        raise serializers.ValidationError({"group": [serializers.ErrorDetail(
+            str(serializers.ChoiceField.default_error_messages["invalid_choice"]).format(input=group), "invalid")]})
+    mine = Order.objects.filter(customer=request.user.customer).annotate(pickup=Exists(OrderItem.objects.filter(
+        order=OuterRef("pk"), item_status=OrderItem.STATUS_READY_FOR_PICKUP)))
+    counts = mine.aggregate(**{name: Count("pk", filter=q) for name, q in groups.items()})
+    orders = order_queryset().filter(pk__in=mine.filter(groups[group]).values("pk")).annotate(priority=Case(
+        When(status=Order.STATUS_ACTION_REQUIRED, then=0), When(groups["to_pay"], then=1), default=2,
+        output_field=IntegerField())).order_by("priority", "-created_at", "-id")
     paginator = Pagination()
     page = paginator.paginate_queryset(orders, request)
-    return paginator.get_paginated_response(orders_data(request, page))
+    return paginator.get_paginated_response(orders_data(request, page), group_counts=counts)
 
 
 @api_view(["GET"])
