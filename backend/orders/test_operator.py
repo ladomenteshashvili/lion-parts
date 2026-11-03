@@ -10,9 +10,11 @@ from django.contrib.auth.models import Permission
 from django.db import connection
 from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
+from rest_framework.test import APIClient
 
 from accounts.testing import make_customer
 from orders.models import CourierFeeProposal, Order, OrderItem, OrderItemEvent, OrderSupportMessage
+from orders import services
 from orders.services import (OperatorError, cancel_order, decide, request_item_action, set_item_status)
 from orders.testing import make_order
 from payments.models import Payment, Refund
@@ -336,3 +338,116 @@ class UnpaidItemCancelTests(TestCase):
         order = make_order(make_customer(), items=(("A", D("300"), 1), ("B", D("100"), 1)))
         set_item_status(order.items.get(part_number="A").pk, "cancelled", reason="x")
         self.assertEqual(Order.objects.get(pk=order.pk).amount_due_now, D("260.00"))
+
+
+class LastItemCancellationTests(TestCase):
+    """D22: cancelling the last active item closes the order exactly like a whole-order cancellation."""
+
+    def setUp(self):
+        ExchangeRate.objects.create(date=timezone.localdate(), rate=D("2.6000"))
+        self.customer = make_customer()
+        self.admin = get_user_model().objects.create_superuser("root", "r@example.com", "x")
+
+    def delivery_order(self, fee=D("15.00")):
+        order = paid_order(self.customer)  # 390.00 paid
+        Order.objects.filter(pk=order.pk).update(delivery_method="delivery")
+        if fee is not None:
+            services.propose_courier_fee(order.pk, fee, "Vake")
+            services.respond_courier_fee(order.pk, accept=True)
+            mark_payment(create_payment(Order.objects.get(pk=order.pk), "invoice", "balance"), "paid")  # +15
+        return Order.objects.get(pk=order.pk)
+
+    def test_operator_cancels_the_last_item_after_a_paid_courier_fee(self):
+        order = self.delivery_order()
+        self.assertEqual((order.total, order.amount_paid), (D("405.00"), D("405.00")))
+        a, b = order.items.order_by("id")
+        set_item_status(a.pk, "purchased")
+        set_item_status(a.pk, "cancelled", actor_name="op", reason="Lost parcel")
+        self.assertEqual(Order.objects.get(pk=order.pk).status, "processing")  # B is still active
+        set_item_status(b.pk, "cancelled", actor_name="op", reason="Supplier failure")
+        order.refresh_from_db()
+        self.assertEqual((order.status, order.cancel_reason, order.courier_fee, order.total, order.amount_paid,
+                          order.balance_due), ("cancelled", "Supplier failure", D("0.00"), D("0.00"), D("405.00"),
+                                               D("-405.00")))
+        self.assertIsNotNone(order.cancelled_at)
+        audit = OrderItemEvent.objects.get(item__order=order, event_type="order_cancelled")
+        self.assertEqual((audit.actor_type, audit.actor_name, audit.visible_to_customer, audit.old_value["courier_fee"],
+                          audit.old_value["order_status"], audit.new_value["balance_due"]),
+                         ("operator", "op", False, "15.00", "processing", "-405.00"))
+        self.assertEqual(CourierFeeProposal.objects.get().status, "accepted")  # history kept
+        # the manual refund pays back exactly what was collected, once
+        self.assertEqual(record_refund(order.pk, self.admin, "Supplier failure"), D("405.00"))
+        self.assertEqual(record_refund(order.pk, self.admin), 0)
+        self.assertEqual(Order.objects.get(pk=order.pk).amount_paid, D("0.00"))
+        with self.assertRaises(OperatorError):  # closed: a repeat changes nothing
+            set_item_status(b.pk, "cancelled", reason="again")
+        self.assertEqual(OrderItemEvent.objects.filter(item__order=order, event_type="order_cancelled").count(), 1)
+
+    def test_whole_order_cancel_releases_a_confirmed_courier_fee_too(self):
+        order = self.delivery_order()
+        cancel_order(order.pk, "Customer request", actor="operator", actor_name="op", operator=True)
+        order.refresh_from_db()
+        self.assertEqual((order.courier_fee, order.balance_due), (D("0.00"), D("-405.00")))
+        self.assertEqual(OrderItemEvent.objects.get(item__order=order, event_type="order_cancelled")
+                         .old_value["courier_fee"], "15.00")
+
+    def test_unpaid_order_expires_open_payments_and_a_pending_courier_proposal(self):
+        order = make_order(self.customer)
+        Order.objects.filter(pk=order.pk).update(delivery_method="delivery")
+        invoice = create_payment(order, "invoice")
+        Order.objects.filter(pk=order.pk).update(status="processing")
+        services.propose_courier_fee(order.pk, D("15.00"), "Vake")
+        Order.objects.filter(pk=order.pk).update(status="payment_pending")
+        set_item_status(order.items.get().pk, "cancelled", reason="Out of stock")
+        order.refresh_from_db()
+        self.assertEqual((order.status, order.balance_due, order.courier_fee_action_required),
+                         ("cancelled", D("0.00"), False))
+        self.assertEqual((Payment.objects.get(pk=invoice.pk).status, CourierFeeProposal.objects.get().status),
+                         ("expired", "cancelled"))
+
+    def test_customer_cancel_decision_on_the_last_item(self):
+        order = paid_order(self.customer, items=(("A", D("100"), 1),))
+        item = order.items.get()
+        request_item_action(item.pk, "price_change", "Higher", proposed_unit_price=D("300.00"))
+        decide(self.customer, item.pk, "cancel", actor_name="Nino Beridze")
+        order.refresh_from_db()
+        self.assertEqual((order.status, order.amount_paid, order.balance_due), ("cancelled", D("260.00"),
+                                                                                D("-260.00")))
+        audit = OrderItemEvent.objects.get(item=item, event_type="order_cancelled")
+        self.assertEqual((audit.actor_type, audit.actor_name), ("customer", "Nino Beridze"))
+
+    def test_the_timeline_ends_with_the_cancellation(self):
+        order = paid_order(self.customer, items=(("A", D("100"), 1),))
+        set_item_status(order.items.get().pk, "cancelled", reason="x")
+        client = APIClient()
+        client.force_login(self.customer.user)
+        body = client.get(f"/api/orders/{order.order_number}/").json()
+        self.assertEqual((body["status"], body["payment_status"], body["timeline"][-1]["type"], body["can_cancel"]),
+                         ("cancelled", "refund_pending", "cancelled", False))
+        self.assertNotIn("order_cancelled", [e["event_type"] for e in body["items"][0]["events"]])  # internal
+
+
+@unittest.skipUnless(connection.vendor == "postgresql", "row locks need PostgreSQL (CI)")
+class ParallelLastItemTests(TransactionTestCase):
+    serialized_rollback = True
+
+    def test_the_two_last_items_cancelled_in_parallel_close_the_order_once(self):
+        order = paid_order(make_customer())
+        a, b = order.items.order_by("id")
+        barrier = threading.Barrier(2)
+
+        def run(item):
+            barrier.wait()
+            try:
+                set_item_status(item.pk, "cancelled", reason="parallel")
+            finally:
+                connection.close()
+
+        threads = [threading.Thread(target=run, args=(i,)) for i in (a, b)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        order.refresh_from_db()
+        self.assertEqual((order.status, order.balance_due), ("cancelled", D("-390.00")))
+        self.assertEqual(OrderItemEvent.objects.filter(item__order=order, event_type="order_cancelled").count(), 1)

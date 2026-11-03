@@ -61,7 +61,7 @@ class CancelTests(TestCase):
     def test_cancelled_or_completed_is_409_and_a_repeat_is_harmless(self):
         self.assertEqual(self.cancel().status_code, 200)
         self.assertEqual(self.cancel().json()["code"], "not_cancellable")
-        self.assertEqual(OrderItemEvent.objects.filter(item__order=self.order).count(), 2)
+        self.assertEqual(OrderItemEvent.objects.filter(item__order=self.order).count(), 3)  # 2 item events + the order audit event
         done = make_order(self.customer, status=Order.STATUS_COMPLETED)
         self.assertEqual(self.cancel(done).status_code, 409)
 

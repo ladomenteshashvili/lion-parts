@@ -254,14 +254,13 @@ def _apply_change(item):
 
 
 def lock_item(customer, item_id):
-    """(order, item) of the customer, both row-locked, order first (the lock order used everywhere)."""
+    """(order, item, open payments) of the customer, row-locked: open payments, then the order, then the item
+    (the lock order used everywhere)."""
     from api.errors import ApiError
 
-    order_id = OrderItem.objects.filter(pk=item_id, order__customer=customer).values_list("order_id", flat=True).first()
-    if order_id is None:
+    if not OrderItem.objects.filter(pk=item_id, order__customer=customer).exists():
         raise ApiError("not_found", status=404)
-    order = Order.objects.select_for_update().get(pk=order_id)
-    return order, OrderItem.objects.select_for_update().get(pk=item_id)
+    return _lock_for_operator(item_id, with_open_payments=True)
 
 
 @transaction.atomic
@@ -270,7 +269,7 @@ def decide(customer, item_id, decision, actor_name=""):
     action at all, e.g. a repeated submit) -> 409 no_pending_action. -> the order."""
     from api.errors import ApiError
 
-    order, item = lock_item(customer, item_id)
+    order, item, open_payments = lock_item(customer, item_id)
     if decision not in decisions(item) or order.status == Order.STATUS_CANCELLED:
         raise ApiError("no_pending_action", status=409)
     old, new = action_change(item)
@@ -290,6 +289,10 @@ def decide(customer, item_id, decision, actor_name=""):
                       new={"item_status": item.item_status, **_jsonable(new)}, actor=OrderItemEvent.ACTOR_CUSTOMER,
                       actor_name=actor_name, visible=True)
     recalculate_order(order)
+    if decision == "cancel" and not _live_items(order).exists():
+        close_cancelled_order(order, open_payments, "", item=item, actor=OrderItemEvent.ACTOR_CUSTOMER,
+                              actor_name=actor_name)
+        return order
     sync_order_status(order)
     # LP-BE-902: notify operators? (not in G§7.11; the admin list shows the decision)
     return order
@@ -303,7 +306,6 @@ def cancel_order(order_id, reason, *, actor, actor_name="", operator=False):
     Locks the open payments, then the order (the order mark_payment uses). -> the order."""
     from api.errors import ApiError
     from payments.models import Payment
-    from payments.services import mark_payment
 
     if operator and not reason.strip():
         raise OperatorError("reason", _("A cancellation reason is required."))
@@ -313,6 +315,7 @@ def cancel_order(order_id, reason, *, actor, actor_name="", operator=False):
     allowed = order.status in Order.OPEN_STATUSES if operator else can_cancel(order)
     if not allowed:
         raise ApiError("not_cancellable", status=409)
+    item = None
     for item in _live_items(order).select_for_update():
         old = item.item_status
         item.item_status = OrderItem.STATUS_CANCELLED
@@ -322,17 +325,37 @@ def cancel_order(order_id, reason, *, actor, actor_name="", operator=False):
         create_item_event(item, "status_changed", text_code="status_cancelled", message=reason if operator else "",
                           old={"item_status": old}, new={"item_status": item.item_status, "reason": reason},
                           actor=actor, actor_name=actor_name, visible=True)
-    order.status, order.cancelled_at, order.cancel_reason = Order.STATUS_CANCELLED, timezone.now(), reason
-    order.courier_fee_action_required, order.proposed_courier_fee_gel = False, None
-    order.save(update_fields=["status", "cancelled_at", "cancel_reason", "courier_fee_action_required",
-                              "proposed_courier_fee_gel", "updated_at"])
+    item = item or order.items.order_by("-id").first()
+    close_cancelled_order(order, open_payments, reason, item=item, actor=actor, actor_name=actor_name)
+    return order
+
+
+def close_cancelled_order(order, open_payments, reason, *, item, actor, actor_name=""):
+    """The terminal step of every order cancellation (D22): the whole order, or its last active item.
+    The caller holds the locks (open payments, then order). Open payments expire, a pending courier
+    proposal is cancelled and a confirmed courier fee is released (nothing will be delivered); collected
+    money stays recorded, so the order owes back exactly what was collected (refund_pending; refunded
+    manually). The before/after state is kept in an internal event on `item`."""
+    from payments.models import Payment
+    from payments.services import mark_payment
+
+    before = {"order_status": order.status, "courier_fee": _str(order.courier_fee),
+              "amount_paid": _str(order.amount_paid), "open_payments": [p.pk for p in open_payments]}
+    order.status, order.cancel_reason = Order.STATUS_CANCELLED, reason
+    order.courier_fee, order.courier_fee_action_required, order.proposed_courier_fee_gel = ZERO, False, None
+    order.save()
     order.courier_fee_proposals.filter(status=CourierFeeProposal.STATUS_PENDING).update(
         status=CourierFeeProposal.STATUS_CANCELLED, answered_at=timezone.now())
     for payment in open_payments:
         mark_payment(payment, Payment.STATUS_EXPIRED, payload={"expired_by": "order_cancelled"})
     recalculate_order(order)
+    create_item_event(item, "order_cancelled", text_code="order_cancelled", message=reason, old=before,
+                      new={"order_status": order.status, "courier_fee": _str(order.courier_fee),
+                           "amount_paid": _str(order.amount_paid), "balance_due": _str(order.balance_due),
+                           "reason": reason}, actor=actor, actor_name=actor_name)
+    order.cancelled_at = timezone.now()  # after the item events: the timeline ends with "cancelled"
+    order.save(update_fields=["cancelled_at", "updated_at"])
     # LP-BE-902: notify(order.customer, "status_update", order=order)
-    return order
 
 
 @transaction.atomic
@@ -487,6 +510,10 @@ def set_item_status(item_id, status, *, actor_name="", reason="", bypass_balance
                       new={"item_status": status, **({"reason": reason} if reason else {})},
                       actor=OrderItemEvent.ACTOR_OPERATOR, actor_name=actor_name, visible=True)
     recalculate_order(order)
+    if status == OrderItem.STATUS_CANCELLED and not _live_items(order).exists():
+        close_cancelled_order(order, open_payments, reason, item=item, actor=OrderItemEvent.ACTOR_OPERATOR,
+                              actor_name=actor_name)
+        return True
     if status == OrderItem.STATUS_CANCELLED and order.status == Order.STATUS_PAYMENT_PENDING:
         _reset_amount_due_now(order, open_payments)
     sync_order_status(order)
