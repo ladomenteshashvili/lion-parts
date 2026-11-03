@@ -18,7 +18,7 @@ One row per backlog story (76). Status: `done` (committed, tests green), `in pro
 | LP-BE-203 | TBD | OTP service & SMS wrapper | 5 | M1 | 202 | done |  | accounts/test_otp.py: 5 wrong -> attempts_left 0 then otp_attempts_exceeded; 409 resend_in; demo_code matrix; sms_failed stores nothing; parallel guesses (PostgreSQL/CI) |
 | LP-BE-204 | TBD | Registration step 1 (data + SMS) and resend | 5 | M1 | 203, 104 | done |  | accounts/test_register.py: physical/legal 200, taken+required together, no User/Customer after step 1, only password hash in session, resend/cooldown/expired, 6th code per phone -> 429, CSRF; legacy send_phone_verification_code_* (3) replaced |
 | LP-BE-205 | TBD | Registration step 2 (verify phone → create account → login) | 5 | M1 | 204, 207 | todo |  |  |
-| LP-BE-206 | TBD | Login, logout, me, csrf | 3 | M1 | 103, 201 | todo |  |  |
+| LP-BE-206 | TBD | Login, logout, me, csrf | 3 | M1 | 103, 201 | done |  | accounts/test_login.py: identical body for unknown/wrong/staff/inactive/anonymized, old sessionid rejected after logout, staff can't log in, session key rotates, CSRF required + rotated, login_ip/login_email throttles; 2 legacy login tests replaced |
 | LP-BE-207 | TBD | Email infrastructure | 2 | M1 | 101, 1301, 1303 | done |  | api/tests/test_mail.py: 4 templates reach the outbox with links; ru email + lang=ru; SMTP failure -> False + log; every template translated ka/ru |
 | LP-BE-208 | TBD | Email verification (send & verify) | 3 | M1 | 207, 206 | todo |  |  |
 | LP-BE-209 | TBD | Password reset (request & confirm) | 3 | M1 | 207 | todo |  |  |

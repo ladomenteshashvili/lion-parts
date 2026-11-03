@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 11:20+0000\n"
+"POT-Creation-Date: 2026-11-03 11:22+0000\n"
 "Language: ka\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -19,27 +19,27 @@ msgstr "ჯერ სხვა ტარიფი მონიშნეთ ნ�
 msgid "Lion Parts code: {code}"
 msgstr "Lion Parts-ის კოდი: {code}"
 
-#: accounts/serializers.py:14 api/errors.py:23
+#: accounts/serializers.py:16 api/errors.py:23
 msgid "This email is already linked to another account."
 msgstr "ეს ელფოსტა უკვე დაკავშირებულია სხვა ანგარიშთან."
 
-#: accounts/serializers.py:15
+#: accounts/serializers.py:17
 msgid "This phone number is already linked to another account."
 msgstr "ეს ტელეფონის ნომერი უკვე დაკავშირებულია სხვა ანგარიშთან."
 
-#: accounts/serializers.py:16
+#: accounts/serializers.py:18
 msgid "An account with this personal ID already exists."
 msgstr "ამ პირადი ნომრით ანგარიში უკვე არსებობს."
 
-#: accounts/serializers.py:17
+#: accounts/serializers.py:19
 msgid "A company with this identification code is already registered."
 msgstr "ამ საიდენტიფიკაციო კოდით კომპანია უკვე რეგისტრირებულია."
 
-#: accounts/serializers.py:66
+#: accounts/serializers.py:68
 msgid "You must accept the terms to register."
 msgstr "რეგისტრაციისთვის საჭიროა პირობებზე თანხმობა."
 
-#: accounts/serializers.py:86
+#: accounts/serializers.py:88
 msgid "Choose one of the supported languages."
 msgstr "აირჩიეთ ერთ-ერთი მხარდაჭერილი ენა."
 

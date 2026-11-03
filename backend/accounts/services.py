@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta
 
 from django.conf import settings
+from django.contrib.auth import login
 from django.contrib.auth.hashers import make_password
 from django.utils import timezone
 
@@ -51,3 +52,21 @@ def load_registration_draft(request):
 def send_registration_code(request, draft):
     return otp.send_code(session_key=ensure_session(request), phone=draft["phone"], purpose="registration",
                          language=customer_language(None, fallback=draft.get("preferred_language")))
+
+
+# Login (G§5.7): read the guest session key before login() rotates it, then attach guest data.
+
+def attach_guest_data(old_session_key, customer):
+    """Hook: guest search logs (LP-BE-407), guest cart merge (LP-BE-506), support tickets (LP-BE-1001)."""
+
+
+def login_customer(request, customer):
+    old_key = request.session.session_key
+    login(request, customer.user, backend="django.contrib.auth.backends.ModelBackend")
+    attach_guest_data(old_key, customer)
+
+
+def can_log_in(user):
+    """Only active, non-anonymized customers use the customer API; staff have no Customer."""
+    customer = getattr(user, "customer", None) if user is not None else None
+    return bool(user and user.is_active and customer and customer.anonymized_at is None)

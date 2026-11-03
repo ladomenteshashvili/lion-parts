@@ -7,6 +7,8 @@ from django.utils.translation import get_language
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 
+from api.i18n import tr
+
 from .models import Customer, LegalEntityProfile
 from .validators import normalize_phone, validate_company_id, validate_personal_id
 
@@ -140,3 +142,39 @@ class RegisterSerializer(serializers.Serializer):
             except (serializers.ValidationError, DjangoValidationError) as exc:
                 errors["company_identification_code"] = serializers.as_serializer_error(exc)["non_field_errors"]
         return errors
+
+
+class CustomerSerializer(serializers.ModelSerializer):
+    """The `Customer` schema of G§8.0 (exact keys; nested objects or null)."""
+
+    company = serializers.SerializerMethodField()
+    email = serializers.EmailField(source="user.email")
+    is_fully_verified = serializers.BooleanField()
+    tariff = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Customer
+        fields = ["id", "account_type", "first_name", "last_name", "personal_id", "company", "phone",
+                  "is_phone_verified", "email", "is_email_verified", "is_fully_verified", "tariff",
+                  "marketing_opt_in", "preferred_language", "created_at"]
+        read_only_fields = fields
+
+    def get_company(self, customer):
+        company = getattr(customer, "company", None)
+        if company is None:
+            return None
+        return {"official_name": company.company_official_name,
+                "identification_code": company.company_identification_code,
+                "legal_address": company.legal_address}
+
+    def get_tariff(self, customer):
+        tariff = customer.get_tariff()
+        return {"name": tariff.name, "payment_terms": tariff.payment_terms,
+                "split_upfront_percent": f"{tariff.split_upfront_percent:.2f}",
+                "can_enter_weight": tariff.can_enter_weight, "can_request_quote": tariff.can_request_quote,
+                "benefits_text": tr(tariff.benefits_text_i18n)}
+
+
+class LoginSerializer(serializers.Serializer):
+    email = serializers.CharField(max_length=254)
+    password = serializers.CharField(max_length=128, trim_whitespace=False)

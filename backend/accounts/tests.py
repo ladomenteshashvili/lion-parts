@@ -295,76 +295,6 @@ class AccountsApiTests(TestCase):
 
     @legacy_endpoint_test("LP-BE-203..212")
     @override_settings(SENDER_GE_ENABLED=False)
-    def test_same_phone_login_from_new_session_reuses_customer_account(self):
-        first_send_response = self.client.post(
-            "/api/accounts/send-code/",
-            {
-                "session_id": self.session_id,
-                "customer_phone": "+995555123456",
-            },
-            format="json",
-        )
-
-        first_verify_response = self.client.post(
-            "/api/accounts/verify-code/",
-            {
-                "session_id": self.session_id,
-                "customer_name": "Lado Menteshashvili",
-                "customer_phone": "+995555123456",
-                "code": first_send_response.data["demo_code"],
-            },
-            format="json",
-        )
-
-        self.assertEqual(first_verify_response.status_code, 200)
-
-        second_session_id = "second-browser-session"
-
-        second_send_response = self.client.post(
-            "/api/accounts/send-code/",
-            {
-                "session_id": second_session_id,
-                "customer_phone": "+995555123456",
-            },
-            format="json",
-        )
-
-        second_verify_response = self.client.post(
-            "/api/accounts/verify-code/",
-            {
-                "session_id": second_session_id,
-                "customer_phone": "+995555123456",
-                "code": second_send_response.data["demo_code"],
-            },
-            format="json",
-        )
-
-        self.assertEqual(second_verify_response.status_code, 200)
-        self.assertEqual(Customer.objects.count(), 1)
-
-        customer = Customer.objects.get(phone="555123456")
-
-        self.assertEqual(customer.name, "Lado Menteshashvili")
-        self.assertTrue(customer.is_phone_verified)
-        self.assertEqual(
-            CustomerSession.objects.filter(customer=customer).count(),
-            2,
-        )
-
-        first_profile_response = self.client.get(
-            f"/api/accounts/profile/?session_id={self.session_id}"
-        )
-        second_profile_response = self.client.get(
-            f"/api/accounts/profile/?session_id={second_session_id}"
-        )
-
-        self.assertEqual(first_profile_response.status_code, 200)
-        self.assertEqual(second_profile_response.status_code, 200)
-        self.assertEqual(first_profile_response.data["id"], customer.id)
-        self.assertEqual(second_profile_response.data["id"], customer.id)
-
-    @legacy_endpoint_test("LP-BE-203..212")
-    @override_settings(SENDER_GE_ENABLED=False)
     def test_verify_phone_code_requires_name_for_new_phone(self):
         send_response = self.client.post(
             "/api/accounts/send-code/",
@@ -480,39 +410,6 @@ class AccountsApiTests(TestCase):
         customer.refresh_from_db()
 
         self.assertTrue(customer.check_password("Newstrong1!"))
-
-    @legacy_endpoint_test("LP-BE-203..212")
-    @override_settings(SENDER_GE_ENABLED=False)
-    def test_password_login_reuses_customer_from_new_session(self):
-        customer = Customer.objects.create(
-            session_id=self.session_id,
-            name="Password Customer",
-            phone="555123456",
-            is_phone_verified=True,
-        )
-        customer.set_password("Strong1!")
-
-        second_session_id = "password-login-second-session"
-
-        response = self.client.post(
-            "/api/accounts/login-password/",
-            {
-                "session_id": second_session_id,
-                "customer_phone": "+995555123456",
-                "password": "Strong1!",
-            },
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["id"], customer.id)
-        self.assertEqual(Customer.objects.count(), 1)
-        self.assertTrue(
-            CustomerSession.objects.filter(
-                customer=customer,
-                session_id=second_session_id,
-            ).exists()
-        )
 
     @legacy_endpoint_test("LP-BE-203..212")
     @override_settings(SENDER_GE_ENABLED=False)
