@@ -34,6 +34,37 @@ class SiteSettings(models.Model):
     def __str__(self):
         return "Site settings"
 
+    def clean(self):
+        """Cities: [{"code", "name": {lang: text}}]; districts also need "city" (an existing city code).
+        Codes are unique and the default-language name is required (G§5.8)."""
+        from django.conf import settings
+
+        def check(rows, field, needs_city):
+            if not isinstance(rows, list):
+                return _("Enter a list of objects.")
+            seen = set()
+            for row in rows:
+                if not isinstance(row, dict) or not str(row.get("code") or "").strip():
+                    return _("Every row needs a code.")
+                if row["code"] in seen:
+                    return _("Duplicate code: %(code)s") % {"code": row["code"]}
+                seen.add(row["code"])
+                names = row.get("name")
+                if not isinstance(names, dict) or not str(names.get(settings.LANGUAGE_CODE) or "").strip():
+                    return _("%(code)s: the default-language name is required.") % {"code": row["code"]}
+                if needs_city and row.get("city") not in city_codes:
+                    return _("%(code)s: unknown city.") % {"code": row["code"]}
+            return None
+
+        city_codes = {c.get("code") for c in self.delivery_cities if isinstance(c, dict)} \
+            if isinstance(self.delivery_cities, list) else set()
+        errors = {field: message for field, message in (
+            ("delivery_cities", check(self.delivery_cities, "delivery_cities", False)),
+            ("delivery_districts", check(self.delivery_districts, "delivery_districts", True)),
+        ) if message}
+        if errors:
+            raise ValidationError(errors)
+
     def save(self, *args, **kwargs):
         if self._state.adding and SiteSettings.objects.exists():
             raise ValidationError(_("Site settings already exist; edit the existing row."))

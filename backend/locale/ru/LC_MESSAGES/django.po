@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 12:43+0000\n"
+"POT-Creation-Date: 2026-11-03 12:45+0000\n"
 "Language: ru\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -440,22 +440,77 @@ msgstr "Пропущено (введите положительный вес и 
 msgid "Not priced, the exchange rate is unavailable: %(ids)s"
 msgstr "Цена не рассчитана, курс валют недоступен: %(ids)s"
 
+#: parts/admin.py:108
+msgid "Preview"
+msgstr "Просмотр"
+
 #: parts/models.py:151
 msgid "The image must not be larger than 5 MB."
 msgstr "Изображение не должно превышать 5 МБ."
 
-#: pricing/models.py:39
+#: pricing/admin.py:18
+msgid "Prices"
+msgstr "Цены"
+
+#: pricing/admin.py:19
+msgid "Delivery areas"
+msgstr "Зоны доставки"
+
+#: pricing/admin.py:20
+msgid "Cities: [{\"code\": \"tbilisi\", \"name\": {\"ka\": \"...\", \"en\": \"...\", \"ru\": \"...\"}}]. Districts also need \"city\" with an existing city code."
+msgstr "Города: [{\"code\": \"tbilisi\", \"name\": {\"ka\": \"...\", \"en\": \"...\", \"ru\": \"...\"}}]. Районам также нужен \"city\" с кодом существующего города."
+
+#: pricing/admin.py:24
+msgid "Invoice"
+msgstr "Счёт"
+
+#: pricing/admin.py:61
+msgid "Fetch today's NBG rate now"
+msgstr "Получить сегодняшний курс НБГ сейчас"
+
+#: pricing/admin.py:66
+msgid "The NBG rate is unavailable. Try again later."
+msgstr "Курс НБГ недоступен. Попробуйте позже."
+
+#: pricing/admin.py:68
+#, python-format
+msgid "USD rate %(rate)s stored for %(date)s."
+msgstr "Курс USD %(rate)s сохранён на %(date)s."
+
+#: pricing/models.py:44
+msgid "Enter a list of objects."
+msgstr "Введите список объектов."
+
+#: pricing/models.py:48
+msgid "Every row needs a code."
+msgstr "У каждой строки должен быть код."
+
+#: pricing/models.py:50
+#, python-format
+msgid "Duplicate code: %(code)s"
+msgstr "Повторяющийся код: %(code)s"
+
+#: pricing/models.py:54
+msgid "%(code)s: the default-language name is required."
+msgstr "%(code)s: название на основном языке обязательно."
+
+#: pricing/models.py:56
+#, python-format
+msgid "%(code)s: unknown city."
+msgstr "%(code)s: неизвестный город."
+
+#: pricing/models.py:70
 msgid "Site settings already exist; edit the existing row."
 msgstr "Настройки сайта уже существуют; измените существующую запись."
 
-#: pricing/models.py:107
+#: pricing/models.py:138
 msgid "The value can't be negative."
 msgstr "Значение не может быть отрицательным."
 
-#: pricing/models.py:109
+#: pricing/models.py:140
 msgid "A percentage can't exceed 100."
 msgstr "Процент не может превышать 100."
 
-#: pricing/models.py:111
+#: pricing/models.py:142
 msgid "The end must be after the start."
 msgstr "Окончание должно быть позже начала."

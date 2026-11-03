@@ -67,7 +67,7 @@ backlog; planned with that milestone (master plan G1). Evidence = commit(s) + th
 | LP-BE-904 | LPK-91 / — | Notification endpoints, badges, public link | 3 | M5 | 902 | todo |  |  |
 | LP-BE-1001 | LPK-92 / — | Support tickets (guest & customer) | 3 | M5 | 902, 104 | todo |  |  |
 | LP-BE-1002 | LPK-92 / — | Operator replies (tickets & order messages) | 2 | M5 | 1001, 903 | todo |  |  |
-| LP-BE-1101 | LPK-93 / — | Configuration admin | 5 | M2 | 301, 401 | todo |  |  |
+| LP-BE-1101 | LPK-93 / — | Configuration admin | 5 | M2 | 301, 401 | done |  | pricing/tests/test_admin.py: USD markup (tariff inline) + USD VAT edited in admin change the next USD price; SiteSettings single row, no add/delete, translated inputs, delivery JSON validated; NBG fetch-now action; read-only rates; discount validation; PartImage/PickupPoint pages. NotificationChannelSetting admin follows its model in LP-BE-901/1305 (M5) |
 | LP-BE-1102 | LPK-93 / — | Customer admin | 2 | M5† | 213 | todo |  |  |
 | LP-BE-1103 | LPK-93 / — | Order & item admin rewired to services | 5 | M4 | 801, 705 | todo |  |  |
 | LP-BE-1104 | LPK-93 / — | Quote request admin: price ready | 3 | M4† | 406, 303 | todo |  |  |

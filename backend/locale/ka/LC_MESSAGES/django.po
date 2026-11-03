@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 12:43+0000\n"
+"POT-Creation-Date: 2026-11-03 12:45+0000\n"
 "Language: ka\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -439,22 +439,77 @@ msgstr "გამოტოვებულია (შეიყვანეთ დ
 msgid "Not priced, the exchange rate is unavailable: %(ids)s"
 msgstr "ფასი ვერ დაითვალა, ვალუტის კურსი მიუწვდომელია: %(ids)s"
 
+#: parts/admin.py:108
+msgid "Preview"
+msgstr "გადახედვა"
+
 #: parts/models.py:151
 msgid "The image must not be larger than 5 MB."
 msgstr "სურათი არ უნდა აღემატებოდეს 5 მბ-ს."
 
-#: pricing/models.py:39
+#: pricing/admin.py:18
+msgid "Prices"
+msgstr "ფასები"
+
+#: pricing/admin.py:19
+msgid "Delivery areas"
+msgstr "მიწოდების არეალები"
+
+#: pricing/admin.py:20
+msgid "Cities: [{\"code\": \"tbilisi\", \"name\": {\"ka\": \"...\", \"en\": \"...\", \"ru\": \"...\"}}]. Districts also need \"city\" with an existing city code."
+msgstr "ქალაქები: [{\"code\": \"tbilisi\", \"name\": {\"ka\": \"...\", \"en\": \"...\", \"ru\": \"...\"}}]. რაიონებს ასევე სჭირდება \"city\" არსებული ქალაქის კოდით."
+
+#: pricing/admin.py:24
+msgid "Invoice"
+msgstr "ინვოისი"
+
+#: pricing/admin.py:61
+msgid "Fetch today's NBG rate now"
+msgstr "ეროვნული ბანკის დღევანდელი კურსის მიღება ახლავე"
+
+#: pricing/admin.py:66
+msgid "The NBG rate is unavailable. Try again later."
+msgstr "ეროვნული ბანკის კურსი მიუწვდომელია. სცადეთ მოგვიანებით."
+
+#: pricing/admin.py:68
+#, python-format
+msgid "USD rate %(rate)s stored for %(date)s."
+msgstr "USD კურსი %(rate)s შენახულია თარიღისთვის %(date)s."
+
+#: pricing/models.py:44
+msgid "Enter a list of objects."
+msgstr "შეიყვანეთ ობიექტების სია."
+
+#: pricing/models.py:48
+msgid "Every row needs a code."
+msgstr "ყველა ჩანაწერს სჭირდება კოდი."
+
+#: pricing/models.py:50
+#, python-format
+msgid "Duplicate code: %(code)s"
+msgstr "განმეორებული კოდი: %(code)s"
+
+#: pricing/models.py:54
+msgid "%(code)s: the default-language name is required."
+msgstr "%(code)s: ძირითად ენაზე სახელი სავალდებულოა."
+
+#: pricing/models.py:56
+#, python-format
+msgid "%(code)s: unknown city."
+msgstr "%(code)s: უცნობი ქალაქი."
+
+#: pricing/models.py:70
 msgid "Site settings already exist; edit the existing row."
 msgstr "საიტის პარამეტრები უკვე არსებობს; შეცვალეთ არსებული ჩანაწერი."
 
-#: pricing/models.py:107
+#: pricing/models.py:138
 msgid "The value can't be negative."
 msgstr "მნიშვნელობა არ შეიძლება იყოს უარყოფითი."
 
-#: pricing/models.py:109
+#: pricing/models.py:140
 msgid "A percentage can't exceed 100."
 msgstr "პროცენტი არ შეიძლება აღემატებოდეს 100-ს."
 
-#: pricing/models.py:111
+#: pricing/models.py:142
 msgid "The end must be after the start."
 msgstr "დასრულება უნდა იყოს დაწყების შემდეგ."

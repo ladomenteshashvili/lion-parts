@@ -6,7 +6,7 @@ from django.utils.translation import ngettext
 
 from pricing.rates import RateUnavailable
 
-from .models import CarrierService, PartQuoteRequest, PartSearchLog
+from .models import CarrierService, PartImage, PartQuoteRequest, PartSearchLog
 from .services import mark_quote_price_ready
 
 
@@ -96,3 +96,17 @@ class PartQuoteRequestAdmin(admin.ModelAdmin):
         if failed:
             self.message_user(request, _("Not priced, the exchange rate is unavailable: %(ids)s")
                               % {"ids": ", ".join(map(str, failed))}, messages.ERROR)
+
+
+@admin.register(PartImage)
+class PartImageAdmin(admin.ModelAdmin):
+    list_display = ("thumbnail", "part_number", "brand", "sort_order", "updated_at")
+    list_editable = ("sort_order",)
+    search_fields = ("part_number", "brand")
+    readonly_fields = ("thumbnail", "created_at", "updated_at")
+
+    @admin.display(description=_("Preview"))
+    def thumbnail(self, obj):
+        if not obj or not obj.image:
+            return "—"
+        return format_html('<img src="{}" alt="" style="max-height:80px;max-width:120px">', obj.image.url)
