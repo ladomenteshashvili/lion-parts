@@ -20,8 +20,8 @@ from payments.services import MANUAL_PROVIDERS, confirm_manual_payment, record_r
 from . import services
 from .admin_actions import OperatePermissionMixin, form_action
 from .invoices import invoice_language, render_invoice
-from .models import (CourierFeeProposal, Notification, NotificationChannelSetting, Order, OrderItem,
-                     OrderItemEvent, OrderSupportMessage)
+from .models import (CourierFeeProposal, Notification, NotificationChannelSetting, NotificationTemplate, Order,
+                     OrderItem, OrderItemEvent, OrderSupportMessage)
 
 
 class ReadOnlyAdminMixin:
@@ -322,13 +322,40 @@ class OrderSupportMessageAdmin(OperatePermissionMixin, ReadOnlyAdminMixin, admin
         queryset.update(is_read_by_operator=True)
 
 
+class NotificationTemplateForm(forms.ModelForm):
+    class Meta:
+        model = NotificationTemplate
+        fields = ("language", "sms_template", "email_subject", "email_template")
+
+    def clean(self):
+        """A template that doesn't compile is refused here, not at sending time."""
+        from django.template import Template, TemplateSyntaxError
+
+        data = super().clean()
+        for field in ("sms_template", "email_subject", "email_template"):
+            try:
+                Template(data.get(field) or "")
+            except TemplateSyntaxError as error:
+                self.add_error(field, str(error))
+        return data
+
+
+class NotificationTemplateInline(admin.StackedInline):
+    """One row per language (LP-BE-1305); a missing language falls back to the default one."""
+
+    model = NotificationTemplate
+    form = NotificationTemplateForm
+    extra = 0
+
+
 @admin.register(NotificationChannelSetting)
 class NotificationChannelSettingAdmin(admin.ModelAdmin):
-    """One row per event (seeded); only the channel is editable."""
+    """One row per event (seeded); the channel and the event's templates are editable."""
 
     list_display = ("event_type", "channel")
     list_editable = ("channel",)
     readonly_fields = ("event_type",)
+    inlines = [NotificationTemplateInline]
 
     def has_add_permission(self, request):
         return False

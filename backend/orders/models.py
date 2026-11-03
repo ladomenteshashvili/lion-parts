@@ -314,3 +314,23 @@ class NotificationChannelSetting(models.Model):
 
     def __str__(self):
         return f"{self.event_type}: {self.channel}"
+
+
+class NotificationTemplate(models.Model):
+    """SMS/email text per event and language (LP-BE-1305); a missing language falls back to the default one.
+    Django template syntax over a restricted context (D24): link, title, order.order_number,
+    notification.quote_request.part_number."""
+
+    event_type = models.ForeignKey(NotificationChannelSetting, on_delete=models.CASCADE, to_field="event_type",
+                                   db_column="event_type", related_name="templates")
+    language = models.CharField(max_length=8, choices=settings.LANGUAGES)
+    sms_template = models.TextField(blank=True)
+    email_subject = models.CharField(max_length=255, blank=True)
+    email_template = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["event_type", "language"]
+        constraints = [models.UniqueConstraint(fields=["event_type", "language"], name="one_template_per_language")]
+
+    def __str__(self):
+        return f"{self.event_type_id} · {self.language}"
