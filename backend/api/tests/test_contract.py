@@ -128,6 +128,7 @@ class CatalogContractTests(ContractTestCase):
         quote = self.client.post("/api/parts/quote-requests/", {"request_type": "manual_search", "part_number": "X-1"},
                                  format="json").json()
         self.assert_keys(quote, C.QUOTE_REQUEST)
+        self.assert_page(self.client.get("/api/parts/quote-requests/").json(), C.QUOTE_REQUEST)
         self.assert_page(self.client.get("/api/parts/history/").json(), C.HISTORY_ITEM, {"new_count"})
         PartQuoteRequest.objects.filter(pk=quote["id"]).update(supplier_price_usd=D("100"))
         qr = mark_quote_ready(quote["id"], D("2.0"))
@@ -148,6 +149,12 @@ class OrderContractTests(ContractTestCase):
                          self.client.patch(f"/api/cart/items/{line}/", {"quantity": 2}, format="json"),
                          self.client.post(f"/api/cart/items/{line}/refresh/", {}, format="json")):
             self.assert_keys(response.json(), C.CART, response.request["PATH_INFO"])
+        from pricing.models import SiteSettings
+
+        SiteSettings.objects.update(multi_currency_enabled=True)
+        self.assert_keys(self.client.patch("/api/cart/", {"currency": "USD"}, format="json").json(), C.CART)
+        self.assert_keys(self.client.post("/api/cart/apply-vin/", {"vin": "WBA8E9G50GNU12345"}, format="json")
+                         .json(), C.CART)
         options = self.client.get("/api/checkout/options/").json()
         self.assert_keys(options, C.CHECKOUT_OPTIONS)
         self.assert_keys(options["payment_options"][0], C.PAYMENT_OPTION)
