@@ -1,7 +1,12 @@
-from decimal import Decimal
 import uuid
+from decimal import Decimal
 
+from django.core.exceptions import ValidationError
+from django.core.validators import FileExtensionValidator
 from django.db import models
+from django.utils.translation import gettext_lazy as _
+
+from accounts.validators import normalize_part_number
 
 
 class CarrierService(models.Model):
@@ -35,42 +40,35 @@ class CarrierService(models.Model):
 
 
 class PartSearchLog(models.Model):
+    """One supplier search or weight calculation; normalized_response holds the priced offers
+    (with snapshots) and is the source of truth for adding to the cart (G§6.3, G§7.6)."""
+
     STATUS_SUCCESS = "success"
     STATUS_FAILED = "failed"
-
-    STATUS_CHOICES = [
-        (STATUS_SUCCESS, "Success"),
-        (STATUS_FAILED, "Failed"),
-    ]
-
     PROVIDER_DEMO = "demo"
     PROVIDER_AMT = "amt"
+    KIND_SEARCH = "search"
+    KIND_WEIGHT_CALC = "weight_calc"
 
-    PROVIDER_CHOICES = [
-        (PROVIDER_DEMO, "Demo"),
-        (PROVIDER_AMT, "AutoMotoTrade"),
-    ]
-
-    session_id = models.CharField(max_length=255, blank=True, db_index=True)
-    customer_phone = models.CharField(max_length=50, blank=True, db_index=True)
-    customer_name = models.CharField(max_length=150, blank=True)
-    provider = models.CharField(max_length=30, choices=PROVIDER_CHOICES, db_index=True)
-
+    customer = models.ForeignKey("accounts.Customer", on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name="search_logs")
+    session_key = models.CharField(max_length=64, blank=True, db_index=True)
+    kind = models.CharField(max_length=20, choices=[(KIND_SEARCH, "Search"), (KIND_WEIGHT_CALC, "Weight calculation")],
+                            default=KIND_SEARCH)
+    provider = models.CharField(max_length=30, choices=[(PROVIDER_DEMO, "Demo"), (PROVIDER_AMT, "AutoMotoTrade")],
+                                db_index=True)
     part_number = models.CharField(max_length=120, db_index=True)
     vin = models.CharField(max_length=40, blank=True)
-
     found_count = models.PositiveIntegerField(default=0)
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default=STATUS_SUCCESS,
-        db_index=True,
-    )
-
+    status = models.CharField(max_length=20, choices=[(STATUS_SUCCESS, "Success"), (STATUS_FAILED, "Failed")],
+                              default=STATUS_SUCCESS, db_index=True)
     raw_response = models.JSONField(default=dict, blank=True)
     normalized_response = models.JSONField(default=dict, blank=True)
     error_message = models.TextField(blank=True)
-
+    currency = models.CharField(max_length=3, default="GEL")
+    exchange_rate = models.DecimalField(max_digits=10, decimal_places=4, null=True, blank=True)
+    price_valid_until = models.DateTimeField(null=True, blank=True)
+    hidden_at = models.DateTimeField(null=True, blank=True)  # history cleared
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -79,80 +77,58 @@ class PartSearchLog(models.Model):
     def __str__(self):
         return f"{self.provider} · {self.part_number} · {self.status}"
 
-        
+    def offers(self):
+        return self.normalized_response.get("offers", [])
+
+    def offer(self, offer_id):
+        return next((o for o in self.offers() if o.get("offer_id") == offer_id), None)
+
+
 class PartQuoteRequest(models.Model):
-    REQUEST_TYPE_MANUAL_SEARCH = "manual_search"
+    """A customer's request for a price (G§6.3, G§7.6). When the operator marks it ready, the price
+    snapshot (G§7.2) is stored here and the public /q/<token> link works."""
+
     REQUEST_TYPE_WEIGHT_PRICE = "weight_price"
-
-    REQUEST_TYPE_CHOICES = [
-        (REQUEST_TYPE_MANUAL_SEARCH, "Manual part search"),
-        (REQUEST_TYPE_WEIGHT_PRICE, "Missing weight price preparation"),
-    ]
-
+    REQUEST_TYPE_MANUAL_SEARCH = "manual_search"
     STATUS_NEW = "new"
     STATUS_CONTACTED = "contacted"
     STATUS_RESOLVED = "resolved"
     STATUS_CANCELLED = "cancelled"
+    OPEN_STATUSES = (STATUS_NEW, STATUS_CONTACTED)
 
-    STATUS_CHOICES = [
-        (STATUS_NEW, "New"),
-        (STATUS_CONTACTED, "Contacted"),
-        (STATUS_RESOLVED, "Resolved"),
-        (STATUS_CANCELLED, "Cancelled"),
-    ]
-
-    session_id = models.CharField(max_length=255, db_index=True)
-    request_type = models.CharField(
-        max_length=30,
-        choices=REQUEST_TYPE_CHOICES,
-        default=REQUEST_TYPE_MANUAL_SEARCH,
-        db_index=True,
-    )
-    part_number = models.CharField(max_length=100)
+    customer = models.ForeignKey("accounts.Customer", on_delete=models.CASCADE, related_name="quote_requests")
+    search_log = models.ForeignKey(PartSearchLog, on_delete=models.SET_NULL, null=True, blank=True)
+    request_type = models.CharField(max_length=20, choices=[
+        (REQUEST_TYPE_WEIGHT_PRICE, "Weight price"), (REQUEST_TYPE_MANUAL_SEARCH, "Manual search")])
+    part_number = models.CharField(max_length=120)
     vin = models.CharField(max_length=17, blank=True)
-    customer_name = models.CharField(max_length=150, blank=True)
-    customer_phone = models.CharField(max_length=50)
     comment = models.TextField(blank=True)
-
-    # The searched offer is copied here so the operator can prepare a stable
-    # customer-facing quote even if the supplier response changes later.
+    offer_id = models.CharField(max_length=120, blank=True)
     quote_id = models.CharField(max_length=120, blank=True)
-    part_option_id = models.CharField(max_length=120, blank=True)
     name = models.CharField(max_length=255, blank=True)
-    condition = models.CharField(max_length=80, blank=True)
     brand = models.CharField(max_length=120, blank=True)
-    availability = models.CharField(max_length=120, blank=True)
-    eta_days = models.PositiveIntegerField(null=True, blank=True)
-    prepared_weight_kg = models.DecimalField(
-        max_digits=8,
-        decimal_places=2,
-        null=True,
-        blank=True,
-    )
-    final_price_gel = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        null=True,
-        blank=True,
-    )
-    currency = models.CharField(max_length=10, default="GEL")
+    condition = models.CharField(max_length=80, blank=True)
+    eta_min_days = models.PositiveSmallIntegerField(null=True, blank=True)
+    eta_max_days = models.PositiveSmallIntegerField(null=True, blank=True)
+    status = models.CharField(max_length=20, default=STATUS_NEW, db_index=True, choices=[
+        (STATUS_NEW, "New"), (STATUS_CONTACTED, "Contacted"), (STATUS_RESOLVED, "Resolved"),
+        (STATUS_CANCELLED, "Cancelled")])
+    prepared_weight_kg = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    supplier_price_usd = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    # price snapshot when ready (G§7.2)
+    shipping_usd_per_kg = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    markup_percent = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    vat_percent = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    exchange_rate = models.DecimalField(max_digits=10, decimal_places=4, null=True, blank=True)
+    list_unit_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    discount_unit_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    discount = models.ForeignKey("pricing.Discount", on_delete=models.SET_NULL, null=True, blank=True)
+    currency = models.CharField(max_length=3, default="GEL")
     operator_message = models.TextField(blank=True)
-
-    notification_token = models.UUIDField(
-        default=uuid.uuid4,
-        unique=True,
-        db_index=True,
-    )
+    notification_token = models.UUIDField(default=uuid.uuid4, unique=True)
     price_ready_at = models.DateTimeField(null=True, blank=True)
-    notification_acknowledged_at = models.DateTimeField(null=True, blank=True)
-
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default=STATUS_NEW,
-        db_index=True,
-    )
-
+    seen_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -160,8 +136,36 @@ class PartQuoteRequest(models.Model):
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"{self.part_number} - {self.customer_phone}"
+        return f"{self.part_number} · {self.get_request_type_display()} · {self.status}"
 
     @property
     def is_price_ready(self):
-        return bool(self.price_ready_at and self.final_price_gel is not None)
+        return self.price_ready_at is not None and self.unit_price is not None
+
+
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
+
+
+def validate_image_size(file):
+    if file.size > MAX_IMAGE_BYTES:
+        raise ValidationError(_("The image must not be larger than 5 MB."), code="file_too_large")
+
+
+class PartImage(models.Model):
+    part_number = models.CharField(max_length=120, db_index=True)  # normalized
+    brand = models.CharField(max_length=120, blank=True)  # empty = any brand
+    image = models.ImageField(upload_to="parts/", validators=[
+        FileExtensionValidator(["jpg", "jpeg", "png", "webp"]), validate_image_size])
+    sort_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["sort_order", "id"]
+
+    def __str__(self):
+        return f"{self.part_number} {self.brand}".strip()
+
+    def save(self, *args, **kwargs):
+        self.part_number = normalize_part_number(self.part_number)
+        super().save(*args, **kwargs)

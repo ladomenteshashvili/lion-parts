@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 12:37+0000\n"
+"POT-Creation-Date: 2026-11-03 12:43+0000\n"
 "Language: ru\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -393,6 +393,56 @@ msgstr "Английский"
 #: config/settings.py:124
 msgid "Russian"
 msgstr "Русский"
+
+#: parts/admin.py:54
+msgid "Request"
+msgstr "Запрос"
+
+#: parts/admin.py:55
+msgid "Offer"
+msgstr "Предложение"
+
+#: parts/admin.py:57
+msgid "Operator price"
+msgstr "Цена оператора"
+
+#: parts/admin.py:58
+msgid "Enter the weight (and the supplier price for a manual request), then run the “price ready” action: the price is calculated for the customer automatically."
+msgstr "Введите вес (для ручного запроса — и цену поставщика), затем запустите действие «Цена готова»: цена для клиента рассчитается автоматически."
+
+#: parts/admin.py:62
+msgid "Price snapshot"
+msgstr "Снимок цены"
+
+#: parts/admin.py:64 parts/admin.py:68
+msgid "Customer link"
+msgstr "Ссылка для клиента"
+
+#: parts/admin.py:75
+msgid "Price ready: calculate the price and create the customer link"
+msgstr "Цена готова: рассчитать цену и создать ссылку для клиента"
+
+#: parts/admin.py:90
+#, python-format
+msgid "%(n)d request priced; its customer link is active."
+msgid_plural "%(n)d requests priced; their customer links are active."
+msgstr[0] "%(n)d запрос оценён; ссылка для клиента активна."
+msgstr[1] "%(n)d запроса оценены; ссылки для клиентов активны."
+msgstr[2] "%(n)d запросов оценены; ссылки для клиентов активны."
+
+#: parts/admin.py:94
+#, python-format
+msgid "Skipped (enter a positive weight and supplier price): %(ids)s"
+msgstr "Пропущено (введите положительный вес и цену поставщика): %(ids)s"
+
+#: parts/admin.py:97
+#, python-format
+msgid "Not priced, the exchange rate is unavailable: %(ids)s"
+msgstr "Цена не рассчитана, курс валют недоступен: %(ids)s"
+
+#: parts/models.py:151
+msgid "The image must not be larger than 5 MB."
+msgstr "Изображение не должно превышать 5 МБ."
 
 #: pricing/models.py:39
 msgid "Site settings already exist; edit the existing row."

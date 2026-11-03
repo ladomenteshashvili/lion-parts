@@ -28,7 +28,6 @@ UNTRANSLATED_CODES = set()
 # The test fails once a listed file has none left, so this list only shrinks.
 LEGACY_GEORGIAN_FILES = {
     "parts/providers.py": "LP-BE-402/405 (CUSTOMER_WEIGHT_NOTICE -> EVENT_TEXTS)",
-    "parts/admin.py": "LP-BE-1104",
     "orders/views.py": "LP-BE-1304 / LP-BE-1201",
     "orders/admin.py": "LP-BE-1103 / LP-BE-1304",
     "orders/invoices.py": "LP-BE-604",
@@ -123,7 +122,8 @@ class CatalogTests(SimpleTestCase):
                 po = (BACKEND_DIR / "locale" / code / "LC_MESSAGES" / "django.po").read_text(encoding="utf-8")
                 entries = po.split("\n\n")[1:]  # skip the header entry
                 self.assertEqual([e for e in entries if "#, fuzzy" in e], [])
-                self.assertEqual([e for e in entries if e.rstrip().endswith('msgstr ""')], [])
+                # an empty msgstr / msgstr[n] (plural forms too); no-wrap catalogs have no continuation lines
+                self.assertEqual([e for e in entries if re.search(r'^msgstr(\[\d+\])? ""$', e, re.M)], [])
 
     def test_every_registered_msgid_is_translated(self):
         for code in non_english_languages():

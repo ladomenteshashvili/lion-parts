@@ -1,277 +1,98 @@
-from decimal import Decimal, InvalidOperation
-
 from django.conf import settings
 from django.contrib import admin, messages
-from django.utils import timezone
 from django.utils.html import format_html
+from django.utils.translation import gettext_lazy as _
+from django.utils.translation import ngettext
 
-from accounts.customer_sessions import get_customer_for_session
-from accounts.models import Customer
+from pricing.rates import RateUnavailable
 
 from .models import CarrierService, PartQuoteRequest, PartSearchLog
-from .providers import PartsProviderError, calculate_part_price_provider
+from .services import mark_quote_price_ready
+
 
 @admin.register(CarrierService)
 class CarrierServiceAdmin(admin.ModelAdmin):
-    list_display = (
-        "id",
-        "name",
-        "usd_per_kg",
-        "min_eta_days",
-        "max_eta_days",
-        "is_active",
-        "is_default",
-        "updated_at",
-    )
+    list_display = ("id", "name", "usd_per_kg", "min_eta_days", "max_eta_days", "is_active", "is_default", "updated_at")
     list_filter = ("is_active", "is_default")
     search_fields = ("name",)
-    list_editable = (
-        "usd_per_kg",
-        "min_eta_days",
-        "max_eta_days",
-        "is_active",
-        "is_default",
-    )
+    list_editable = ("usd_per_kg", "min_eta_days", "max_eta_days", "is_active", "is_default")
     readonly_fields = ("created_at", "updated_at")
 
 
 @admin.register(PartSearchLog)
 class PartSearchLogAdmin(admin.ModelAdmin):
-    list_display = (
-        "id",
-        "provider",
-        "part_number",
-        "vin",
-        "customer_phone",
-        "customer_name",
-        "session_id",
-        "found_count",
-        "status",
-        "created_at",
-    )
-    list_filter = ("provider", "status", "created_at")
-    search_fields = ("part_number", "vin", "session_id", "customer_phone", "customer_name")
-    readonly_fields = (
-        "session_id",
-        "provider",
-        "part_number",
-        "vin",
-        "customer_phone",
-        "customer_name",
-        "found_count",
-        "status",
-        "raw_response",
-        "normalized_response",
-        "error_message",
-        "created_at",
-    )
+    """Read-only audit of searches; the offers in normalized_response are the price source."""
+
+    list_display = ("id", "kind", "provider", "part_number", "vin", "customer", "currency", "found_count", "status",
+                    "price_valid_until", "hidden_at", "created_at")
+    list_filter = ("kind", "provider", "status", "currency", "created_at")
+    search_fields = ("part_number", "vin", "session_key", "customer__phone", "customer__user__email")
+    list_select_related = ("customer",)
+    raw_id_fields = ("customer",)
+
+    def get_readonly_fields(self, request, obj=None):
+        return [f.name for f in self.model._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
 
 
 @admin.register(PartQuoteRequest)
 class PartQuoteRequestAdmin(admin.ModelAdmin):
-    list_display = (
-        "id",
-        "request_type",
-        "part_number",
-        "customer_phone",
-        "customer_name",
-        "status",
-        "prepared_weight_kg",
-        "final_price_gel",
-        "price_ready_at",
-        "customer_link",
-        "created_at",
-    )
-    list_filter = ("request_type", "status", "price_ready_at", "created_at")
-    search_fields = (
-        "part_number",
-        "vin",
-        "customer_phone",
-        "customer_name",
-        "notification_token",
-    )
-    readonly_fields = (
-        "notification_token",
-        "customer_link",
-        "price_ready_at",
-        "notification_acknowledged_at",
-        "created_at",
-        "updated_at",
-    )
+    list_display = ("id", "request_type", "part_number", "customer", "status", "prepared_weight_kg",
+                    "supplier_price_usd", "unit_price", "currency", "price_ready_at", "customer_link", "created_at")
+    list_filter = ("request_type", "status", "currency", "price_ready_at")
+    search_fields = ("part_number", "vin", "customer__phone", "customer__user__email", "notification_token")
+    list_select_related = ("customer",)
+    raw_id_fields = ("customer", "search_log")
     actions = ("mark_price_ready",)
-
+    readonly_fields = ("customer", "search_log", "request_type", "part_number", "vin", "comment", "offer_id",
+                       "quote_id", "shipping_usd_per_kg", "markup_percent", "vat_percent", "exchange_rate",
+                       "list_unit_price", "discount_unit_amount", "unit_price", "discount", "notification_token",
+                       "customer_link", "price_ready_at", "seen_at", "created_at", "updated_at")
     fieldsets = (
-        ("მოთხოვნა", {
-            "fields": (
-                "part_number",
-                "request_type",
-                "vin",
-                "customer_name",
-                "customer_phone",
-                "comment",
-                "status",
-            ),
+        (_("Request"), {"fields": ("customer", "request_type", "part_number", "vin", "comment", "status")}),
+        (_("Offer"), {"fields": ("search_log", "offer_id", "quote_id", "name", "brand", "condition",
+                                  "eta_min_days", "eta_max_days")}),
+        (_("Operator price"), {
+            "description": _("Enter the weight (and the supplier price for a manual request), then run the "
+                             "“price ready” action: the price is calculated for the customer automatically."),
+            "fields": ("prepared_weight_kg", "supplier_price_usd", "currency", "operator_message"),
         }),
-        ("მოძებნილი შეთავაზება", {
-            "fields": (
-                "quote_id",
-                "part_option_id",
-                "name",
-                "condition",
-                "brand",
-                "availability",
-            ),
-        }),
-        ("ოპერატორის მიერ მომზადებული ფასი", {
-            "description": (
-                "წონის ფასის მოთხოვნაზე შეავსეთ მხოლოდ დაზუსტებული წონა — "
-                "საბოლოო ფასს სისტემა action-ის გაშვებისას ავტომატურად დათვლის."
-            ),
-            "fields": (
-                "prepared_weight_kg",
-                "final_price_gel",
-                "currency",
-                "eta_days",
-                "operator_message",
-            ),
-        }),
-        ("Customer notification", {
-            "fields": (
-                "notification_token",
-                "customer_link",
-                "price_ready_at",
-                "notification_acknowledged_at",
-                "created_at",
-                "updated_at",
-            ),
-        }),
+        (_("Price snapshot"), {"fields": ("shipping_usd_per_kg", "markup_percent", "vat_percent", "exchange_rate",
+                                          "list_unit_price", "discount_unit_amount", "unit_price", "discount")}),
+        (_("Customer link"), {"fields": ("notification_token", "customer_link", "price_ready_at", "seen_at",
+                                         "created_at", "updated_at")}),
     )
 
-    def get_readonly_fields(self, request, obj=None):
-        readonly_fields = list(super().get_readonly_fields(request, obj))
-
-        if obj and obj.request_type == PartQuoteRequest.REQUEST_TYPE_WEIGHT_PRICE:
-            readonly_fields.append("final_price_gel")
-
-        return readonly_fields
-
-    @admin.display(description="Customer magic link")
+    @admin.display(description=_("Customer link"))
     def customer_link(self, obj):
         if not obj or not obj.is_price_ready:
             return "—"
+        url = f"{settings.FRONTEND_BASE_URL.rstrip('/')}/q/{obj.notification_token}"
+        return format_html('<a href="{}" target="_blank" rel="noopener">{}</a>', url, url)
 
-        base_url = getattr(settings, "FRONTEND_BASE_URL", "").rstrip("/")
-        path = f"/q/{obj.notification_token}"
-        url = f"{base_url}{path}" if base_url else path
-        return format_html('<a href="{}" target="_blank">{}</a>', url, url)
-
-    @admin.action(description="მომხმარებელს: ფასი მზადაა — magic link-ის შექმნა")
+    @admin.action(description=_("Price ready: calculate the price and create the customer link"))
     def mark_price_ready(self, request, queryset):
-        prepared_count = 0
-        missing_data_ids = []
-        calculation_failed_ids = []
-
-        for quote_request in queryset:
-            if (
-                quote_request.prepared_weight_kg is None
-                or quote_request.prepared_weight_kg <= 0
-            ):
-                missing_data_ids.append(quote_request.id)
+        ready, missing, failed = 0, [], []
+        for quote_request in queryset.select_related("customer"):
+            weight, price = quote_request.prepared_weight_kg, quote_request.supplier_price_usd
+            if not weight or weight <= 0 or price is None or price <= 0:
+                missing.append(quote_request.id)
                 continue
-
-            if quote_request.request_type == PartQuoteRequest.REQUEST_TYPE_WEIGHT_PRICE:
-                customer = get_customer_for_session(quote_request.session_id)
-
-                if customer is None:
-                    customer = Customer.objects.filter(
-                        phone=quote_request.customer_phone,
-                    ).first()
-
-                if customer is None:
-                    calculation_failed_ids.append(quote_request.id)
-                    continue
-
-                try:
-                    option = calculate_part_price_provider(
-                        part_number=quote_request.part_number,
-                        part_option_id=quote_request.part_option_id,
-                        weight_kg=quote_request.prepared_weight_kg,
-                        customer=customer,
-                    )
-                except PartsProviderError:
-                    calculation_failed_ids.append(quote_request.id)
-                    continue
-
-                try:
-                    final_price_gel = Decimal(str(option.get("final_price_gel")))
-                except (InvalidOperation, TypeError):
-                    final_price_gel = None
-
-                if (
-                    final_price_gel is None
-                    or not final_price_gel.is_finite()
-                    or final_price_gel <= 0
-                ):
-                    calculation_failed_ids.append(quote_request.id)
-                    continue
-
-                quote_request.final_price_gel = final_price_gel
-                quote_request.currency = option.get("currency") or "GEL"
-                quote_request.name = option.get("name") or quote_request.name
-                quote_request.condition = (
-                    option.get("condition") or quote_request.condition
-                )
-                quote_request.brand = option.get("brand") or quote_request.brand
-                quote_request.availability = (
-                    option.get("availability") or quote_request.availability
-                )
-                quote_request.eta_days = (
-                    option.get("eta_days") or quote_request.eta_days
-                )
-            elif (
-                quote_request.final_price_gel is None
-                or quote_request.final_price_gel <= 0
-            ):
-                missing_data_ids.append(quote_request.id)
+            try:
+                mark_quote_price_ready(quote_request)
+            except RateUnavailable:
+                failed.append(quote_request.id)
                 continue
-
-            quote_request.status = PartQuoteRequest.STATUS_RESOLVED
-            quote_request.price_ready_at = timezone.now()
-            quote_request.notification_acknowledged_at = None
-            quote_request.name = quote_request.name or quote_request.part_number
-            quote_request.availability = quote_request.availability or "ფასი მზადაა"
-            quote_request.operator_message = (
-                quote_request.operator_message
-                or "ნაწილის წონა გადამოწმებულია და საბოლოო ფასი მზადაა."
-            )
-            quote_request.save()
-            prepared_count += 1
-
-        if prepared_count:
-            self.message_user(
-                request,
-                f"{prepared_count} მოთხოვნაზე ფასი მომზადდა და magic link შეიქმნა.",
-                level=messages.SUCCESS,
-            )
-
-        if missing_data_ids:
-            self.message_user(
-                request,
-                (
-                    f"{len(missing_data_ids)} მოთხოვნა გამოტოვებულია "
-                    f"(ID: {', '.join(map(str, missing_data_ids))}) — "
-                    "წონის მოთხოვნაზე შეავსეთ წონა; სხვა მოთხოვნაზე — წონა და ფასი."
-                ),
-                level=messages.WARNING,
-            )
-
-        if calculation_failed_ids:
-            self.message_user(
-                request,
-                (
-                    f"{len(calculation_failed_ids)} მოთხოვნაზე ფასი ვერ დაითვალა "
-                    f"(ID: {', '.join(map(str, calculation_failed_ids))}). "
-                    "შეამოწმეთ მომხმარებელი, ნაწილის შეთავაზება და provider-ის კავშირი."
-                ),
-                level=messages.ERROR,
-            )
+            ready += 1
+        if ready:
+            self.message_user(request, ngettext("%(n)d request priced; its customer link is active.",
+                                                "%(n)d requests priced; their customer links are active.",
+                                                ready) % {"n": ready}, messages.SUCCESS)
+        if missing:
+            self.message_user(request, _("Skipped (enter a positive weight and supplier price): %(ids)s")
+                              % {"ids": ", ".join(map(str, missing))}, messages.WARNING)
+        if failed:
+            self.message_user(request, _("Not priced, the exchange rate is unavailable: %(ids)s")
+                              % {"ids": ", ".join(map(str, failed))}, messages.ERROR)

@@ -272,12 +272,9 @@ def anonymize_customer(customer):
         PhoneVerificationCode.objects.filter(customer=customer).delete()
         if phone:
             PhoneVerificationCode.objects.filter(phone=phone).delete()
-            # shortcut: legacy search logs and quote requests are keyed by phone. LP-BE-404/406 switch to the
-            # customer FK + hidden_at; LP-BE-501/901 add deleting the cart and notifications here.
-            PartSearchLog.objects.filter(customer_phone=phone).update(customer_phone="", customer_name="")
-            PartQuoteRequest.objects.filter(
-                customer_phone=phone, status__in=[PartQuoteRequest.STATUS_NEW, PartQuoteRequest.STATUS_CONTACTED],
-            ).delete()
+        PartQuoteRequest.objects.filter(customer=customer, status__in=PartQuoteRequest.OPEN_STATUSES).delete()
+        PartSearchLog.objects.filter(customer=customer).update(customer=None, hidden_at=now)
+        # LP-BE-501 adds deleting the cart, LP-BE-901 the notifications.
 
         # shortcut: scans every session (fine at this scale); add a user->session index if sessions grow large.
         for session in Session.objects.all():

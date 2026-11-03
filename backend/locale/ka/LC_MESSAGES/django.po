@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 12:37+0000\n"
+"POT-Creation-Date: 2026-11-03 12:43+0000\n"
 "Language: ka\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -393,6 +393,55 @@ msgstr "ინგლისური"
 #: config/settings.py:124
 msgid "Russian"
 msgstr "რუსული"
+
+#: parts/admin.py:54
+msgid "Request"
+msgstr "მოთხოვნა"
+
+#: parts/admin.py:55
+msgid "Offer"
+msgstr "შეთავაზება"
+
+#: parts/admin.py:57
+msgid "Operator price"
+msgstr "ოპერატორის ფასი"
+
+#: parts/admin.py:58
+msgid "Enter the weight (and the supplier price for a manual request), then run the “price ready” action: the price is calculated for the customer automatically."
+msgstr "შეიყვანეთ წონა (ხელით მოთხოვნისას — მომწოდებლის ფასიც), შემდეგ გაუშვით მოქმედება „ფასი მზადაა“: ფასი მომხმარებლისთვის ავტომატურად დაითვლება."
+
+#: parts/admin.py:62
+msgid "Price snapshot"
+msgstr "ფასის ჩანაწერი"
+
+#: parts/admin.py:64 parts/admin.py:68
+msgid "Customer link"
+msgstr "მომხმარებლის ბმული"
+
+#: parts/admin.py:75
+msgid "Price ready: calculate the price and create the customer link"
+msgstr "ფასი მზადაა: ფასის დათვლა და მომხმარებლის ბმულის შექმნა"
+
+#: parts/admin.py:90
+#, python-format
+msgid "%(n)d request priced; its customer link is active."
+msgid_plural "%(n)d requests priced; their customer links are active."
+msgstr[0] "%(n)d მოთხოვნაზე ფასი დაითვალა; მომხმარებლის ბმული აქტიურია."
+msgstr[1] "%(n)d მოთხოვნაზე ფასი დაითვალა; მომხმარებლების ბმულები აქტიურია."
+
+#: parts/admin.py:94
+#, python-format
+msgid "Skipped (enter a positive weight and supplier price): %(ids)s"
+msgstr "გამოტოვებულია (შეიყვანეთ დადებითი წონა და მომწოდებლის ფასი): %(ids)s"
+
+#: parts/admin.py:97
+#, python-format
+msgid "Not priced, the exchange rate is unavailable: %(ids)s"
+msgstr "ფასი ვერ დაითვალა, ვალუტის კურსი მიუწვდომელია: %(ids)s"
+
+#: parts/models.py:151
+msgid "The image must not be larger than 5 MB."
+msgstr "სურათი არ უნდა აღემატებოდეს 5 მბ-ს."
 
 #: pricing/models.py:39
 msgid "Site settings already exist; edit the existing row."

@@ -31,7 +31,7 @@ backlog; planned with that milestone (master plan G1). Evidence = commit(s) + th
 | LP-BE-302 | LPK-85 / — | NBG exchange rate client & job | 3 | M2 | 301 | done |  | pricing/tests/test_rates.py: recorded NBG response -> 2.5971 for 2026-10-24, quantity division + upsert, stale+down -> RateUnavailable (502 rate_unavailable), fresh -> no HTTP, idempotent command; requests mocked |
 | LP-BE-303 | LPK-85 / — | Price engine & snapshots | 5 | M2 | 302, 304 | done |  | pricing/tests/test_engine.py: worked example 427.07 GEL / 164.26 USD, USD markup changes only USD, VAT per currency, partner + default-markup fallback, discounts snapshotted, reprice identical without changes / new rate / currency switch, JSON round trip, ROUND_HALF_UP |
 | LP-BE-304 | LPK-85 / — | Discount engine | 3 | M2 | 301 | done |  | pricing/tests/test_discounts.py: 5% customer vs 10% part -> 10%, fixed 50 GEL at 2.5 -> 20.00 USD, tie -> lower id, guests get no customer/tariff rules, inactive/expired/future ignored, cap, rounding |
-| LP-BE-401 | LPK-86 / — | Parts model changes & part images | 3 | M2 | 201, 301 | todo |  |  |
+| LP-BE-401 | LPK-86 / — | Parts model changes & part images | 3 | M2 | 201, 301 | done |  | parts/test_images.py: .gif and 6 MB rejected, normalized part number, brand-specific before generic (absolute URLs); parts/test_admin.py: price-ready action via engine (replaces 3 legacy admin tests); Pillow 12.3.0; parts 0007/0008 |
 | LP-BE-402 | LPK-86 / — | Offer builder (AMT + demo) on the price engine | 5 | M2 | 303, 401 | todo |  |  |
 | LP-BE-403 | LPK-86 / — | Search endpoint | 3 | M2 | 402, 104 | todo |  |  |
 | LP-BE-404 | LPK-86 / — | Search history, seen, clear | 8 | M2 | 403, 406 | todo |  |  |
