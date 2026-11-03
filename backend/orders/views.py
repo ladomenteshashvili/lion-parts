@@ -5,12 +5,15 @@ from django.utils.translation import get_language
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
-from api.errors import ApiError
+from api.errors import MESSAGES, ApiError
 from api.permissions import IsFullyVerified
+
+from payments.services import start_payment
 
 from . import checkout
 from .invoices import invoice_language, render_invoice
 from .models import Order
+from .serializers import order_data, payment_data
 
 
 def own_order(request, order_number):
@@ -35,3 +38,18 @@ def invoice(request, order_number):
     response["X-Robots-Tag"] = "noindex"
     response["Content-Language"] = language
     return response
+
+
+@api_view(["POST"])
+@permission_classes([IsFullyVerified])
+def checkout_create(request):
+    customer = request.user.customer
+    serializer = checkout.CheckoutSerializer(data=request.data, context={"customer": customer})
+    serializer.is_valid(raise_exception=True)
+    order, payment = checkout.create_order(customer, serializer.validated_data)
+    body = {}
+    if payment.provider != "invoice" and not start_payment(payment):  # after commit, no locks held
+        body = {"code": "payment_init_failed", "detail": str(MESSAGES["payment_init_failed"])}
+    payment.refresh_from_db()
+    order.refresh_from_db()
+    return Response({"order": order_data(request, order), "payment": payment_data(payment), **body}, status=201)

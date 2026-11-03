@@ -45,3 +45,34 @@ def mark_payment(payment, status, payload=None, confirmed_by=None):
     sync_order_status(order)
     # LP-BE-902: transaction.on_commit(notify(order.customer, "payment_update", order=order))
     return payment
+
+
+def create_payment(order, method, kind=Payment.KIND_INITIAL, amount=None):
+    """A payment for exactly the order's frozen amount in the order currency (D16). Card -> the configured
+    provider (status created, started after commit); invoice -> pending, paid when an operator confirms."""
+    from .providers import get_provider
+
+    amount = amount if amount is not None else (order.amount_due_now if kind == Payment.KIND_INITIAL
+                                                else order.balance_due)
+    card = method == "card"
+    payment = Payment.objects.create(
+        order=order, kind=kind, provider=get_provider().name if card else "invoice", amount=amount,
+        currency=order.currency, status=Payment.STATUS_CREATED if card else Payment.STATUS_PENDING)
+    payment.provider_order_id = f"{order.order_number}-{payment.pk}"
+    payment.save(update_fields=["provider_order_id", "updated_at"])
+    return payment
+
+
+def start_payment(payment):
+    """Open the provider's payment page. Never inside a DB transaction (no row locks held while calling
+    out). A PaymentInitError marks the payment failed. -> True when a checkout_url was obtained."""
+    from .providers import PaymentInitError, get_provider
+
+    try:
+        url = get_provider().start(payment)
+    except PaymentInitError:
+        mark_payment(payment, Payment.STATUS_FAILED)
+        return False
+    Payment.objects.filter(pk=payment.pk).update(checkout_url=url, updated_at=timezone.now())
+    mark_payment(payment, Payment.STATUS_PENDING)
+    return True

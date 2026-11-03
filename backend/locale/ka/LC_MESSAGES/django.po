@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 14:42+0000\n"
+"POT-Creation-Date: 2026-11-03 14:44+0000\n"
 "Language: ka\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -401,6 +401,26 @@ msgstr "ინგლისური"
 #: config/settings.py:125
 msgid "Russian"
 msgstr "რუსული"
+
+#: orders/checkout.py:78
+msgid "You must accept the terms to place an order."
+msgstr "შეკვეთისთვის საჭიროა პირობებზე თანხმობა."
+
+#: orders/checkout.py:83
+msgid "This payment option is not available for your account."
+msgstr "გადახდის ეს ვარიანტი თქვენს ანგარიშზე არ არის ხელმისაწვდომი."
+
+#: orders/checkout.py:93
+msgid "Choose an available pickup point."
+msgstr "აირჩიეთ ხელმისაწვდომი გაცემის პუნქტი."
+
+#: orders/checkout.py:105
+msgid "Choose a city from the list."
+msgstr "აირჩიეთ ქალაქი სიიდან."
+
+#: orders/checkout.py:107
+msgid "Choose a district of this city."
+msgstr "აირჩიეთ ამ ქალაქის რაიონი."
 
 #: orders/templates/orders/invoice.html:6
 #: orders/templates/orders/invoice.html:20 pricing/admin.py:33
