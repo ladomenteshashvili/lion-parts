@@ -48,3 +48,9 @@ def apply_vin(request):
     cart = services.get_cart(request)
     services.apply_vin(cart, serializer.validated_data["vin"])
     return Response(services.cart_data(request, cart))
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def refresh_item(request, item_id):
+    return Response(services.cart_data(request, services.refresh_line(request, services.own_line(request, item_id))))

@@ -13,8 +13,8 @@ from accounts.services import ensure_session
 from api.errors import ApiError
 from orders.texts import render_text
 from parts.models import PartQuoteRequest
-from parts.services import image_urls, owned_log, request_customer
-from pricing.engine import PriceSnapshot, reprice
+from parts.services import image_urls, owned_log, request_customer, run_search
+from pricing.engine import PriceInput, PriceSnapshot, default_shipping_usd_per_kg, price_offer, reprice
 from pricing.models import SiteSettings
 from pricing.rates import get_usd_rate
 
@@ -209,4 +209,32 @@ def switch_currency(request, currency):
             line.save()
         cart.currency = currency
         cart.save(update_fields=["currency", "updated_at"])
+    return cart
+
+
+def refresh_line(request, line):
+    """G§7.5: search the supplier again (saved as a new log), find the same offer (else the same
+    brand), reprice. Gone -> unavailable; a new unit price -> price_changed with the old one kept.
+    A customer/operator weight is kept; only an API weight follows the supplier. Supplier or rate
+    failure -> 502 with the line unchanged."""
+    cart = line.cart
+    log = run_search(request, part_number=line.part_number, vin=line.vin, currency=cart.currency)
+    offers = log.offers()
+    offer = log.offer(line.offer_id) or next((o for o in offers if o["brand"].lower() == line.brand.lower()), None)
+    weight = line.weight_kg if line.weight_source in ("customer", "operator") else (
+        Decimal(offer["weight_kg"]) if offer and offer.get("weight_kg") else None)
+    line.search_log = log if line.source == CartItem.SOURCE_SEARCH else line.search_log
+    line.price_valid_until = log.price_valid_until
+    if offer is None or weight is None:
+        line.availability_status = CartItem.STATUS_UNAVAILABLE
+    else:
+        old_price = line.unit_price
+        line.apply_snapshot(price_offer(
+            PriceInput(Decimal(offer["supplier_price_usd"]), weight, default_shipping_usd_per_kg()),
+            customer=request_customer(request), currency=cart.currency, part_number=line.part_number,
+            brand=line.brand, usd_rate=log.exchange_rate))
+        changed = line.unit_price != old_price
+        line.previous_unit_price = old_price if changed else None
+        line.availability_status = CartItem.STATUS_PRICE_CHANGED if changed else CartItem.STATUS_OK
+    line.save()
     return cart
