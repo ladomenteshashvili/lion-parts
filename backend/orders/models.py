@@ -124,8 +124,8 @@ class Order(models.Model):
 
     @property
     def current_customer_name(self):
-        if self.customer_id and self.customer and self.customer.name:
-            return self.customer.name
+        if self.customer_id and self.customer and self.customer.full_name:
+            return self.customer.full_name
         return self.customer_name
 
     @property

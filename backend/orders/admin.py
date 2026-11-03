@@ -612,7 +612,8 @@ class OrderAdmin(admin.ModelAdmin):
         "session_id",
         "customer_name",
         "customer_phone",
-        "customer__name",
+        "customer__first_name",
+        "customer__last_name",
         "customer__phone",
         "legal_entity_company_identification_code",
         "legal_entity_company_official_name",
@@ -651,7 +652,7 @@ class OrderAdmin(admin.ModelAdmin):
     ]
 
 
-    @admin.display(description="Current customer", ordering="customer__name")
+    @admin.display(description="Current customer", ordering="customer__last_name")
     def current_customer_name(self, obj):
         return obj.current_customer_name
 

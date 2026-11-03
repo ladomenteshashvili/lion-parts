@@ -1,7 +1,7 @@
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from accounts.models import Customer, CustomerSession, LegalEntityProfile, PhoneVerificationCode
+from accounts.models import Customer, LegalEntityProfile, PhoneVerificationCode
 
 from api.legacy import legacy_endpoint_test
 

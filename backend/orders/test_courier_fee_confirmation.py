@@ -6,7 +6,7 @@ from django.contrib.messages.storage.fallback import FallbackStorage
 from django.test import RequestFactory, TestCase
 from rest_framework.test import APIClient
 
-from accounts.models import Customer, CustomerSession
+from accounts.testing import make_customer
 from orders.admin import OrderAdmin
 from orders.models import Order, OrderCustomerNotification, OrderItem, OrderSupportMessage
 from orders.serializers import OrderSerializer
@@ -15,14 +15,7 @@ from api.legacy import legacy_endpoint_test
 
 
 def create_customer(session_id):
-    customer = Customer.objects.create(
-        session_id=session_id,
-        name="Courier Fee Customer",
-        phone="555123456",
-        is_phone_verified=True,
-    )
-    CustomerSession.objects.create(customer=customer, session_id=session_id)
-    return customer
+    return make_customer(first_name="Courier Fee", last_name="Customer", is_phone_verified=True)
 
 
 def create_order(session_id):
@@ -32,7 +25,7 @@ def create_order(session_id):
         order_number="LP-COURIER-0001",
         session_id=session_id,
         customer=customer,
-        customer_name=customer.name,
+        customer_name=customer.full_name,
         customer_phone=customer.phone,
         payment_type=Order.PAYMENT_FULL,
         status=Order.STATUS_PAYMENT_PENDING,

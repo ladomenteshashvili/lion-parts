@@ -1,11 +1,11 @@
 """Throttle classes (G§5.5). Rates: REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]; state: the shared
 DatabaseCache, so limits hold across gunicorn workers. Client IP: get_ident() with NUM_PROXIES."""
 
+from django.core.exceptions import ValidationError
 from rest_framework.settings import api_settings
 from rest_framework.throttling import SimpleRateThrottle
 
-# LP-BE-202 moves this to accounts.validators.normalize_phone.
-from accounts.views import normalize_georgian_phone
+from accounts.validators import normalize_phone
 
 
 def body(request):
@@ -63,8 +63,8 @@ class PhoneThrottle(SettingsRateThrottle):
 
     def get_cache_key(self, request, view):
         try:
-            phone = normalize_georgian_phone(body(request).get("phone", ""))
-        except ValueError:  # invalid input is rejected by the view's serializer
+            phone = normalize_phone(body(request).get("phone", ""))
+        except ValidationError:  # invalid input is rejected by the view's serializer
             phone = request.session.get("registration_draft", {}).get("phone")
         return self.key(phone)
 

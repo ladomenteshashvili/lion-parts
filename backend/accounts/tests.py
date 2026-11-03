@@ -4,7 +4,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from accounts.models import Customer, CustomerSession, PhoneVerificationCode
+from accounts.models import Customer, PhoneVerificationCode
 
 from api.legacy import legacy_endpoint_test
 

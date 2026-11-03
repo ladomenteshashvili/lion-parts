@@ -1,7 +1,7 @@
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from accounts.models import Customer, CustomerSession, LegalEntityProfile
+from accounts.models import Customer, LegalEntityProfile
 
 from api.legacy import legacy_endpoint_test
 

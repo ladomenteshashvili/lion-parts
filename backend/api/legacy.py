@@ -10,11 +10,19 @@ import unittest
 
 # urlconf module -> prefix it used to be mounted at
 LEGACY_URLCONFS = {
-    "accounts.urls": "/api/accounts/",
     "parts.urls": "/api/parts/",
     "cart.urls": "/api/cart/",
     "orders.urls": "/api/orders/",
 }
+
+# Routes whose modules were already deleted (LP-BE-201: accounts views/serializers/urls).
+REMOVED_ROUTES = [
+    f"/api/accounts/{route}" for route in (
+        "profile/", "profile/password/", "profile/legal-entity/", "profile/legal-entity/send-code/",
+        "profile/legal-entity/verify-code/", "login-password/", "password-reset/send-code/",
+        "password-reset/", "demo-login/", "send-code/", "verify-code/",
+    )
+]
 
 
 def legacy_endpoint_test(replaced_by):

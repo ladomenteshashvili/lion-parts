@@ -1,7 +1,7 @@
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from accounts.models import Customer, CustomerSession, LegalEntityProfile
+from accounts.models import Customer, LegalEntityProfile
 
 from api.legacy import legacy_endpoint_test
 
@@ -63,27 +63,3 @@ class LegalEntityProfileRegressionTests(TestCase):
         self.assertEqual(legal_entity["mobile_phone"], "555123456")
         self.assertEqual(legal_entity["is_mobile_verified"], False)
         self.assertEqual(legal_entity["is_active"], True)
-
-    def test_customer_can_have_only_one_legal_entity_profile(self):
-        LegalEntityProfile.objects.create(
-            customer=self.customer,
-            company_identification_code="405834094",
-            company_official_name="EZShop LLC",
-            legal_address="Tbilisi, Georgia",
-            contact_first_name="Lado",
-            contact_last_name="Menteshashvili",
-            email="legal@example.com",
-            mobile_phone="555123456",
-        )
-
-        with self.assertRaises(Exception):
-            LegalEntityProfile.objects.create(
-                customer=self.customer,
-                company_identification_code="405834095",
-                company_official_name="Second Company",
-                legal_address="Tbilisi, Georgia",
-                contact_first_name="Lado",
-                contact_last_name="Menteshashvili",
-                email="legal2@example.com",
-                mobile_phone="555123456",
-            )

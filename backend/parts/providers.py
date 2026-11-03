@@ -39,7 +39,7 @@ def _save_part_search_log(
             vin=vin or "",
             session_id=session_id or "",
             customer_phone=(customer.phone if customer and customer.is_phone_verified else ""),
-            customer_name=(customer.name if customer and customer.is_phone_verified else ""),
+            customer_name=(customer.full_name if customer and customer.is_phone_verified else ""),
             found_count=len(normalized_response.get("results", [])),
             status=status,
             raw_response={"data": raw_response},
@@ -171,8 +171,10 @@ def _is_no_part_found_row(row: dict[str, Any]) -> bool:
 
 
 def _get_customer_markup_percent(customer: Customer | None) -> Decimal:
-    if customer:
-        return customer.get_markup_percent()
+    # shortcut: legacy pricing reads the tariff's GEL markup until LP-BE-303's engine replaces it.
+    markup = customer and customer.get_tariff().markups.filter(currency="GEL").first()
+    if markup:
+        return markup.markup_percent
 
     return Decimal(str(settings.DEFAULT_CUSTOMER_MARKUP_PERCENT))
 
@@ -305,7 +307,7 @@ def search_amt_parts(
         provider=PartSearchLog.PROVIDER_AMT,
         part_number=part_number,
         vin=vin,
-        session_id=session_id or (customer.session_id if customer else ""),
+        session_id=session_id or "",
         customer=customer,
         raw_response=rows,
         normalized_response=response,

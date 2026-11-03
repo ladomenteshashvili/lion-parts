@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('accounts', '0008_alter_phoneverificationcode_purpose'),
+        ('accounts', '0001_initial'),
         ('orders', '0015_backfill_order_customers'),
     ]
 

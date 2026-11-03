@@ -8,7 +8,6 @@ from rest_framework.test import APIClient
 
 from accounts.models import (
     Customer,
-    CustomerSession,
     CustomerTariff,
     PhoneVerificationCode,
 )
@@ -211,7 +210,6 @@ class OperatorAdminRegressionTests(TestCase):
 
         permission_map = {
             Customer: ["view", "change"],
-            CustomerSession: ["view"],
             CustomerTariff: ["view"],
             PhoneVerificationCode: ["view"],
             Order: ["view", "change"],
