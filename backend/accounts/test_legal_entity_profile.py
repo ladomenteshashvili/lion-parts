@@ -3,6 +3,8 @@ from rest_framework.test import APIClient
 
 from accounts.models import Customer, CustomerSession, LegalEntityProfile
 
+from api.legacy import legacy_endpoint_test
+
 
 class LegalEntityProfileRegressionTests(TestCase):
     def setUp(self):
@@ -19,6 +21,7 @@ class LegalEntityProfileRegressionTests(TestCase):
             session_id=self.session_id,
         )
 
+    @legacy_endpoint_test("LP-BE-204/205")
     def test_customer_profile_without_legal_entity_returns_null(self):
         response = self.client.get(
             f"/api/accounts/profile/?session_id={self.session_id}",
@@ -28,6 +31,7 @@ class LegalEntityProfileRegressionTests(TestCase):
         self.assertIn("legal_entity", response.data)
         self.assertIsNone(response.data["legal_entity"])
 
+    @legacy_endpoint_test("LP-BE-204/205")
     def test_customer_profile_includes_legal_entity_data(self):
         LegalEntityProfile.objects.create(
             customer=self.customer,

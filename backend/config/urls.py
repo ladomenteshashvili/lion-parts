@@ -23,10 +23,7 @@ from django.urls import include, path
 urlpatterns = [
     path(settings.ADMIN_URL_PATH, admin.site.urls),
     path("api/", include("api.urls")),
-    path("api/parts/", include("parts.urls")),
-    path("api/cart/", include("cart.urls")),
-    path("api/orders/", include("orders.urls")),
-    path("api/accounts/", include("accounts.urls")),
+    # Legacy session_id routes (accounts/parts/cart/orders urls) are not mounted: see api/legacy.py.
 ]
 
 # static() returns no patterns unless DEBUG is on; in production nginx serves /media/.

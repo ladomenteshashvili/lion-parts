@@ -10,11 +10,14 @@ from .models import CarrierService, PartQuoteRequest, PartSearchLog
 from .admin import PartQuoteRequestAdmin
 from accounts.models import Customer, CustomerSession, CustomerTariff
 
+from api.legacy import legacy_endpoint_test
+
 @override_settings(PARTS_PROVIDER="demo")
 class PartsSearchApiTests(TestCase):
     def setUp(self):
         self.client = APIClient()
 
+    @legacy_endpoint_test("LP-BE-402/403")
     def test_search_requires_part_number(self):
         response = self.client.post(
             "/api/parts/search/",
@@ -28,6 +31,7 @@ class PartsSearchApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data["detail"], "part_number is required")
 
+    @legacy_endpoint_test("LP-BE-402/403")
     def test_search_returns_demo_quote(self):
         response = self.client.post(
             "/api/parts/search/",
@@ -62,6 +66,7 @@ class PartsSearchApiTests(TestCase):
             "Original new part. Demo offer. Supplier integration will be added later.",
         )
 
+    @legacy_endpoint_test("LP-BE-402/403")
     def test_search_returns_multiple_demo_offers(self):
         response = self.client.post(
             "/api/parts/search/",
@@ -80,6 +85,7 @@ class PartsSearchApiTests(TestCase):
         self.assertEqual(results[1]["part_option_id"], "P-DEMO-002")
         self.assertEqual(results[2]["part_option_id"], "P-DEMO-003")
 
+    @legacy_endpoint_test("LP-BE-402/403")
     def test_search_returns_vin_when_provided(self):
         response = self.client.post(
             "/api/parts/search/",
@@ -94,6 +100,7 @@ class PartsSearchApiTests(TestCase):
         self.assertEqual(response.data["part_number"], "1565461")
         self.assertEqual(response.data["vin"], "1C6SRFKP6TN159390")
 
+    @legacy_endpoint_test("LP-BE-402/403")
     def test_search_trims_part_number_and_vin(self):
         response = self.client.post(
             "/api/parts/search/",
@@ -108,6 +115,7 @@ class PartsSearchApiTests(TestCase):
         self.assertEqual(response.data["part_number"], "1565461")
         self.assertEqual(response.data["vin"], "1C6SRFKP6TN159390")
 
+    @legacy_endpoint_test("LP-BE-402/403")
     def test_search_response_has_customer_price_fields(self):
         response = self.client.post(
             "/api/parts/search/",
@@ -127,6 +135,7 @@ class PartsSearchApiTests(TestCase):
             self.assertNotIn("shipping_price", result)
             self.assertNotIn("internal_cost", result)
 
+    @legacy_endpoint_test("LP-BE-402/403")
     def test_feed_returns_recent_searches_for_verified_phone(self):
         session_id = "feed-session"
 
@@ -162,6 +171,7 @@ class PartsSearchApiTests(TestCase):
         self.assertEqual(log.customer_phone, "555111222")
         self.assertEqual(log.customer_name, "Feed Customer")
 
+    @legacy_endpoint_test("LP-BE-402/403")
     def test_feed_allows_same_verified_phone_from_new_session(self):
         first_session_id = "feed-first-session"
         second_session_id = "feed-second-session"
@@ -198,6 +208,7 @@ class PartsSearchApiTests(TestCase):
             "SAMEPHONE123",
         )
 
+    @legacy_endpoint_test("LP-BE-402/403")
     def test_feed_blocks_different_verified_phone(self):
         first_session_id = "feed-owner-session"
         second_session_id = "feed-other-session"
@@ -232,6 +243,7 @@ class PartsSearchApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["results"], [])
 
+    @legacy_endpoint_test("LP-BE-402/403")
     def test_feed_requires_verified_phone(self):
         session_id = "feed-unverified-session"
 
@@ -280,6 +292,7 @@ class PartPriceCalculationApiTests(TestCase):
             is_default=True,
         )
 
+    @legacy_endpoint_test("LP-BE-405")
     @patch("parts.providers.get_usd_sell_rate")
     @patch("parts.providers.get_price_by_oem")
     def test_calculate_part_price_with_manual_weight(
@@ -323,6 +336,7 @@ class PartPriceCalculationApiTests(TestCase):
         self.assertNotIn("supplier_price", response.data)
         self.assertNotIn("internal_cost", response.data)
 
+    @legacy_endpoint_test("LP-BE-405")
     def test_calculate_part_price_requires_weight_permission(self):
         disabled_session_id = "weight-disabled-session"
 
@@ -356,6 +370,7 @@ class PartPriceCalculationApiTests(TestCase):
             "weight entry is not enabled for this customer",
         )
 
+    @legacy_endpoint_test("LP-BE-405")
     def test_calculate_part_price_requires_positive_weight(self):
         response = self.client.post(
             "/api/parts/calculate-price/",
@@ -384,6 +399,7 @@ class PartQuoteRequestApiTests(TestCase):
             can_request_quote=True,
         )
 
+    @legacy_endpoint_test("LP-BE-406")
     def test_create_quote_request(self):
         response = self.client.post(
             "/api/parts/quote-requests/",
@@ -415,6 +431,7 @@ class PartQuoteRequestApiTests(TestCase):
         self.assertEqual(response.data["part_number"], "51118070648")
         self.assertEqual(response.data["status"], PartQuoteRequest.STATUS_NEW)
 
+    @legacy_endpoint_test("LP-BE-406")
     def test_create_quote_request_requires_enabled_customer(self):
         disabled_session_id = "disabled-test-session"
 
@@ -441,6 +458,7 @@ class PartQuoteRequestApiTests(TestCase):
             "quote request is not enabled for this customer",
         )
 
+    @legacy_endpoint_test("LP-BE-406")
     def test_create_quote_request_requires_session_id(self):
         response = self.client.post(
             "/api/parts/quote-requests/",
@@ -454,6 +472,7 @@ class PartQuoteRequestApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("session_id", response.data)
 
+    @legacy_endpoint_test("LP-BE-406")
     def test_create_quote_request_requires_part_number(self):
         response = self.client.post(
             "/api/parts/quote-requests/",
@@ -468,6 +487,7 @@ class PartQuoteRequestApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("part_number", response.data)
 
+    @legacy_endpoint_test("LP-BE-406")
     def test_create_quote_request_requires_customer_phone(self):
         response = self.client.post(
             "/api/parts/quote-requests/",
@@ -481,6 +501,7 @@ class PartQuoteRequestApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("customer_phone", response.data)
 
+    @legacy_endpoint_test("LP-BE-406")
     def test_create_weight_quote_request_copies_selected_offer(self):
         response = self.client.post(
             "/api/parts/quote-requests/",
@@ -506,6 +527,7 @@ class PartQuoteRequestApiTests(TestCase):
         self.assertEqual(quote_request.name, "Front bumper cover")
         self.assertEqual(quote_request.eta_days, 14)
 
+    @legacy_endpoint_test("LP-BE-406")
     def test_feed_shows_processing_and_then_ready_price(self):
         customer = Customer.objects.get(session_id=self.session_id)
         customer.is_phone_verified = True
@@ -541,6 +563,7 @@ class PartQuoteRequestApiTests(TestCase):
         self.assertEqual(item["weight_kg"], Decimal("3.40"))
         self.assertEqual(item["notification_token"], quote_request.notification_token)
 
+    @legacy_endpoint_test("LP-BE-406")
     def test_prepared_quote_magic_link_is_public_only_after_price_is_ready(self):
         quote_request = PartQuoteRequest.objects.create(
             session_id=self.session_id,
@@ -674,6 +697,7 @@ class PartQuoteRequestApiTests(TestCase):
         self.assertIsNone(quote_request.price_ready_at)
         self.assertEqual(quote_request.status, PartQuoteRequest.STATUS_NEW)
 
+    @legacy_endpoint_test("LP-BE-406")
     def test_verified_regular_customer_can_create_weight_price_request(self):
         customer = Customer.objects.get(session_id=self.session_id)
         customer.can_request_quote = False
@@ -706,6 +730,7 @@ class PartQuoteRequestApiTests(TestCase):
         )
         self.assertEqual(quote_request.customer_phone, customer.phone)
 
+    @legacy_endpoint_test("LP-BE-406")
     def test_unverified_customer_cannot_create_weight_price_request(self):
         response = self.client.post(
             "/api/parts/quote-requests/",
@@ -723,6 +748,7 @@ class PartQuoteRequestApiTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.data["detail"], "phone verification is required")
 
+    @legacy_endpoint_test("LP-BE-406")
     def test_weight_price_request_requires_selected_offer(self):
         customer = Customer.objects.get(session_id=self.session_id)
         customer.is_phone_verified = True

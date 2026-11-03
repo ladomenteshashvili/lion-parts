@@ -148,9 +148,12 @@ SECURE_HSTS_SECONDS = 0 if DEBUG else 31536000
 
 
 # Django REST framework
-# Auth, permissions and parsers are added in LP-BE-103, pagination in LP-BE-105.
+# Pagination is added in LP-BE-105. Public views declare @permission_classes([AllowAny]).
 
 REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": ["api.auth.CsrfSessionAuthentication"],
+    "DEFAULT_PERMISSION_CLASSES": ["api.permissions.IsCustomer"],
+    "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.JSONParser"],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "EXCEPTION_HANDLER": "api.exceptions.exception_handler",
     "COERCE_DECIMAL_TO_STRING": True,

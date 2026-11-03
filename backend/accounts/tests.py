@@ -6,6 +6,8 @@ from rest_framework.test import APIClient
 
 from accounts.models import Customer, CustomerSession, PhoneVerificationCode
 
+from api.legacy import legacy_endpoint_test
+
 
 class AccountsApiTests(TestCase):
     def setUp(self):
@@ -18,12 +20,14 @@ class AccountsApiTests(TestCase):
             "customer_phone": "+995555123456",
         }
 
+    @legacy_endpoint_test("LP-BE-203..212")
     def test_get_profile_requires_session_id(self):
         response = self.client.get("/api/accounts/profile/")
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data["detail"], "session_id is required")
 
+    @legacy_endpoint_test("LP-BE-203..212")
     def test_get_profile_returns_404_when_not_found(self):
         response = self.client.get(
             f"/api/accounts/profile/?session_id={self.session_id}"
@@ -32,6 +36,7 @@ class AccountsApiTests(TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.data["detail"], "profile not found")
 
+    @legacy_endpoint_test("LP-BE-203..212")
     def test_demo_login_requires_session_id(self):
         payload = {
             **self.payload,
@@ -47,6 +52,7 @@ class AccountsApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data["detail"], "session_id is required")
 
+    @legacy_endpoint_test("LP-BE-203..212")
     def test_demo_login_requires_customer_name(self):
         payload = {
             **self.payload,
@@ -62,6 +68,7 @@ class AccountsApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data["detail"], "customer_name is required")
 
+    @legacy_endpoint_test("LP-BE-203..212")
     def test_demo_login_requires_customer_phone(self):
         payload = {
             **self.payload,
@@ -77,6 +84,7 @@ class AccountsApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data["detail"], "customer_phone is required")
 
+    @legacy_endpoint_test("LP-BE-203..212")
     def test_demo_login_creates_profile(self):
         response = self.client.post(
             "/api/accounts/demo-login/",
@@ -96,6 +104,7 @@ class AccountsApiTests(TestCase):
         self.assertEqual(response.data["customer_name"], "Lado Menteshashvili")
         self.assertEqual(response.data["customer_phone"], "+995555123456")
 
+    @legacy_endpoint_test("LP-BE-203..212")
     def test_demo_login_updates_existing_profile(self):
         self.client.post(
             "/api/accounts/demo-login/",
@@ -125,6 +134,7 @@ class AccountsApiTests(TestCase):
         self.assertEqual(customer.phone, "+995599999999")
         self.assertFalse(customer.is_phone_verified)
 
+    @legacy_endpoint_test("LP-BE-203..212")
     def test_get_profile_returns_saved_profile(self):
         self.client.post(
             "/api/accounts/demo-login/",
@@ -142,6 +152,7 @@ class AccountsApiTests(TestCase):
         self.assertEqual(response.data["customer_phone"], "+995555123456")
         self.assertFalse(response.data["is_phone_verified"])
 
+    @legacy_endpoint_test("LP-BE-203..212")
     @override_settings(SENDER_GE_ENABLED=False)
     def test_send_phone_verification_code_creates_code(self):
         response = self.client.post(
@@ -165,6 +176,7 @@ class AccountsApiTests(TestCase):
         self.assertEqual(verification.status, PhoneVerificationCode.STATUS_PENDING)
         self.assertTrue(verification.check_code(response.data["demo_code"]))
 
+    @legacy_endpoint_test("LP-BE-203..212")
     @override_settings(SENDER_GE_ENABLED=False)
     def test_send_phone_verification_code_rejects_invalid_phone(self):
         response = self.client.post(
@@ -179,6 +191,7 @@ class AccountsApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(PhoneVerificationCode.objects.count(), 0)
 
+    @legacy_endpoint_test("LP-BE-203..212")
     @override_settings(SENDER_GE_ENABLED=False)
     def test_send_phone_verification_code_reuses_recent_code(self):
         first_response = self.client.post(
@@ -208,6 +221,7 @@ class AccountsApiTests(TestCase):
         self.assertIn("expires_in_seconds", second_response.data)
         self.assertEqual(PhoneVerificationCode.objects.count(), 1)
 
+    @legacy_endpoint_test("LP-BE-203..212")
     @override_settings(SENDER_GE_ENABLED=False)
     def test_verify_phone_code_creates_verified_customer(self):
         send_response = self.client.post(
@@ -248,6 +262,7 @@ class AccountsApiTests(TestCase):
         self.assertEqual(verification.status, PhoneVerificationCode.STATUS_VERIFIED)
         self.assertIsNotNone(verification.verified_at)
 
+    @legacy_endpoint_test("LP-BE-203..212")
     @override_settings(SENDER_GE_ENABLED=False)
     def test_verify_phone_code_rejects_wrong_code(self):
         self.client.post(
@@ -275,6 +290,7 @@ class AccountsApiTests(TestCase):
         verification = PhoneVerificationCode.objects.get()
         self.assertEqual(verification.attempts, 1)
 
+    @legacy_endpoint_test("LP-BE-203..212")
     def test_verify_phone_code_rejects_expired_code(self):
         verification = PhoneVerificationCode(
             session_id=self.session_id,
@@ -303,6 +319,7 @@ class AccountsApiTests(TestCase):
         verification.refresh_from_db()
         self.assertEqual(verification.status, PhoneVerificationCode.STATUS_EXPIRED)
 
+    @legacy_endpoint_test("LP-BE-203..212")
     @override_settings(SENDER_GE_ENABLED=False)
     def test_verify_phone_code_uses_existing_customer_name_without_requiring_name(self):
         Customer.objects.create(
@@ -345,6 +362,7 @@ class AccountsApiTests(TestCase):
         self.assertTrue(customer.is_phone_verified)
         self.assertTrue(customer.can_request_quote)
 
+    @legacy_endpoint_test("LP-BE-203..212")
     @override_settings(SENDER_GE_ENABLED=False)
     def test_same_phone_login_from_new_session_reuses_customer_account(self):
         first_send_response = self.client.post(
@@ -414,6 +432,7 @@ class AccountsApiTests(TestCase):
         self.assertEqual(first_profile_response.data["id"], customer.id)
         self.assertEqual(second_profile_response.data["id"], customer.id)
 
+    @legacy_endpoint_test("LP-BE-203..212")
     @override_settings(SENDER_GE_ENABLED=False)
     def test_verify_phone_code_requires_name_for_new_phone(self):
         send_response = self.client.post(
@@ -465,6 +484,7 @@ class AccountsApiTests(TestCase):
         self.assertEqual(verification.status, PhoneVerificationCode.STATUS_VERIFIED)
 
 
+    @legacy_endpoint_test("LP-BE-203..212")
     @override_settings(SENDER_GE_ENABLED=False)
     def test_profile_password_sets_password_for_verified_customer(self):
         customer = Customer.objects.create(
@@ -491,6 +511,7 @@ class AccountsApiTests(TestCase):
         self.assertTrue(customer.check_password("Strong1!"))
         self.assertTrue(response.data["has_password"])
 
+    @legacy_endpoint_test("LP-BE-203..212")
     @override_settings(SENDER_GE_ENABLED=False)
     def test_profile_password_change_requires_current_password(self):
         customer = Customer.objects.create(
@@ -529,6 +550,7 @@ class AccountsApiTests(TestCase):
 
         self.assertTrue(customer.check_password("Newstrong1!"))
 
+    @legacy_endpoint_test("LP-BE-203..212")
     @override_settings(SENDER_GE_ENABLED=False)
     def test_password_login_reuses_customer_from_new_session(self):
         customer = Customer.objects.create(
@@ -561,6 +583,7 @@ class AccountsApiTests(TestCase):
             ).exists()
         )
 
+    @legacy_endpoint_test("LP-BE-203..212")
     @override_settings(SENDER_GE_ENABLED=False)
     def test_password_reset_sets_new_password_and_logs_in_session(self):
         customer = Customer.objects.create(

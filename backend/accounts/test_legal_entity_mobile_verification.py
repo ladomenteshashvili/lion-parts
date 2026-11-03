@@ -3,6 +3,8 @@ from rest_framework.test import APIClient
 
 from accounts.models import Customer, CustomerSession, LegalEntityProfile, PhoneVerificationCode
 
+from api.legacy import legacy_endpoint_test
+
 
 def create_verified_customer(session_id="legal-mobile-session", phone="555123456"):
     customer = Customer.objects.create(
@@ -43,6 +45,7 @@ class LegalEntityMobileVerificationApiTests(TestCase):
         self.customer = create_verified_customer(self.session_id)
         self.legal_entity = create_legal_entity(self.customer)
 
+    @legacy_endpoint_test("LP-BE-204/205")
     def test_send_code_creates_pending_legal_entity_mobile_verification(self):
         response = self.client.post(
             "/api/accounts/profile/legal-entity/send-code/",
@@ -62,6 +65,7 @@ class LegalEntityMobileVerificationApiTests(TestCase):
 
         self.assertEqual(verification.status, PhoneVerificationCode.STATUS_PENDING)
 
+    @legacy_endpoint_test("LP-BE-204/205")
     def test_verify_code_marks_legal_entity_mobile_verified(self):
         send_response = self.client.post(
             "/api/accounts/profile/legal-entity/send-code/",
@@ -97,6 +101,7 @@ class LegalEntityMobileVerificationApiTests(TestCase):
         self.assertEqual(verification.status, PhoneVerificationCode.STATUS_VERIFIED)
         self.assertEqual(verification.attempts, 1)
 
+    @legacy_endpoint_test("LP-BE-204/205")
     def test_wrong_code_does_not_verify_mobile(self):
         self.client.post(
             "/api/accounts/profile/legal-entity/send-code/",
@@ -119,6 +124,7 @@ class LegalEntityMobileVerificationApiTests(TestCase):
         self.legal_entity.refresh_from_db()
         self.assertFalse(self.legal_entity.is_mobile_verified)
 
+    @legacy_endpoint_test("LP-BE-204/205")
     def test_unverified_customer_cannot_send_legal_entity_mobile_code(self):
         session_id = "unverified-legal-mobile"
         customer = Customer.objects.create(
@@ -144,6 +150,7 @@ class LegalEntityMobileVerificationApiTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.data["detail"], "phone verification required")
 
+    @legacy_endpoint_test("LP-BE-204/205")
     def test_missing_legal_entity_profile_is_rejected(self):
         session_id = "no-legal-profile-session"
         create_verified_customer(session_id, phone="555222333")
@@ -157,6 +164,7 @@ class LegalEntityMobileVerificationApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data["detail"], "legal entity profile not found")
 
+    @legacy_endpoint_test("LP-BE-204/205")
     def test_already_verified_mobile_returns_without_sending_new_code(self):
         self.legal_entity.is_mobile_verified = True
         self.legal_entity.save(update_fields=["is_mobile_verified", "updated_at"])

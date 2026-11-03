@@ -3,6 +3,8 @@ from rest_framework.test import APIClient
 
 from accounts.models import Customer, CustomerSession, LegalEntityProfile
 
+from api.legacy import legacy_endpoint_test
+
 
 def create_customer(session_id, phone="555123456", verified=True):
     customer = Customer.objects.create(
@@ -36,6 +38,7 @@ class LegalEntityProfileApiTests(TestCase):
         self.session_id = "legal-api-session"
         self.customer = create_customer(self.session_id)
 
+    @legacy_endpoint_test("LP-BE-204/205")
     def test_verified_customer_can_create_legal_entity_profile(self):
         response = self.client.post(
             "/api/accounts/profile/legal-entity/",
@@ -65,6 +68,7 @@ class LegalEntityProfileApiTests(TestCase):
         self.assertEqual(legal_entity["mobile_phone"], "555123456")
         self.assertEqual(legal_entity["is_mobile_verified"], True)
 
+    @legacy_endpoint_test("LP-BE-204/205")
     def test_verified_customer_can_update_same_legal_entity_profile(self):
         self.client.post(
             "/api/accounts/profile/legal-entity/",
@@ -97,6 +101,7 @@ class LegalEntityProfileApiTests(TestCase):
             "EZShop Updated LLC",
         )
 
+    @legacy_endpoint_test("LP-BE-204/205")
     def test_unverified_customer_cannot_create_legal_entity_profile(self):
         session_id = "unverified-legal-session"
         create_customer(session_id, phone="555654321", verified=False)
@@ -111,6 +116,7 @@ class LegalEntityProfileApiTests(TestCase):
         self.assertEqual(response.data["detail"], "phone verification required")
         self.assertEqual(LegalEntityProfile.objects.count(), 0)
 
+    @legacy_endpoint_test("LP-BE-204/205")
     def test_duplicate_company_identification_code_is_rejected(self):
         other_customer = create_customer(
             "other-legal-session",
@@ -144,6 +150,7 @@ class LegalEntityProfileApiTests(TestCase):
             LegalEntityProfile.objects.filter(customer=self.customer).exists()
         )
 
+    @legacy_endpoint_test("LP-BE-204/205")
     def test_duplicate_email_is_rejected(self):
         other_customer = create_customer(
             "other-email-session",
@@ -174,6 +181,7 @@ class LegalEntityProfileApiTests(TestCase):
             LegalEntityProfile.objects.filter(customer=self.customer).exists()
         )
 
+    @legacy_endpoint_test("LP-BE-204/205")
     def test_required_fields_are_validated(self):
         response = self.client.post(
             "/api/accounts/profile/legal-entity/",
@@ -187,6 +195,7 @@ class LegalEntityProfileApiTests(TestCase):
             "company_official_name is required",
         )
 
+    @legacy_endpoint_test("LP-BE-204/205")
     def test_invalid_email_is_rejected(self):
         response = self.client.post(
             "/api/accounts/profile/legal-entity/",
@@ -197,6 +206,7 @@ class LegalEntityProfileApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data["detail"], "invalid email")
 
+    @legacy_endpoint_test("LP-BE-204/205")
     def test_different_mobile_phone_is_saved_but_not_verified_yet(self):
         response = self.client.post(
             "/api/accounts/profile/legal-entity/",

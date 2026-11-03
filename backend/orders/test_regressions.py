@@ -13,6 +13,8 @@ from orders.models import (
     Payment,
 )
 
+from api.legacy import legacy_endpoint_test
+
 
 def create_verified_customer(session_id="order-action-session"):
     customer = Customer.objects.create(
@@ -95,6 +97,7 @@ class OrderActionRegressionTests(TestCase):
         self.order.status = Order.STATUS_ACTION_REQUIRED
         self.order.save(update_fields=["status", "updated_at"])
 
+    @legacy_endpoint_test("LP-BE-803")
     def test_customer_can_confirm_price_change_action(self):
         self.make_price_change_action()
 
@@ -131,6 +134,7 @@ class OrderActionRegressionTests(TestCase):
         self.assertEqual(response.data["total_gel"], "150.00")
         self.assertEqual(response.data["status"], Order.STATUS_PROCESSING)
 
+    @legacy_endpoint_test("LP-BE-803")
     def test_customer_can_cancel_price_change_action(self):
         self.make_price_change_action()
 
@@ -166,6 +170,7 @@ class OrderActionRegressionTests(TestCase):
         self.assertEqual(response.data["total_gel"], "0.00")
         self.assertEqual(response.data["status"], Order.STATUS_CANCELLED)
 
+    @legacy_endpoint_test("LP-BE-803")
     def test_notice_only_weight_action_cannot_be_cancelled_but_can_be_acknowledged(self):
         self.item.action_required = True
         self.item.action_type = OrderItem.ACTION_TYPE_WEIGHT_CHANGE
@@ -228,6 +233,7 @@ class OrderSupportAndNotificationRegressionTests(TestCase):
             self.session_id,
         )
 
+    @legacy_endpoint_test("LP-BE-806/904")
     def test_customer_support_message_is_created_and_visible_on_order(self):
         response = self.client.post(
             f"/api/orders/{self.order.order_number}/support/messages/",
@@ -257,6 +263,7 @@ class OrderSupportAndNotificationRegressionTests(TestCase):
             "Please check this part before ordering.",
         )
 
+    @legacy_endpoint_test("LP-BE-806/904")
     def test_customer_can_acknowledge_operator_support_messages(self):
         operator_message = OrderSupportMessage.objects.create(
             order=self.order,
@@ -291,6 +298,7 @@ class OrderSupportAndNotificationRegressionTests(TestCase):
 
         self.assertTrue(operator_message.is_read_by_customer)
 
+    @legacy_endpoint_test("LP-BE-806/904")
     def test_public_notification_acknowledge_marks_notification_and_support_message_read(self):
         operator_message = OrderSupportMessage.objects.create(
             order=self.order,

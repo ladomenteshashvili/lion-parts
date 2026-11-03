@@ -10,6 +10,8 @@ from orders.models import Order, OrderCustomerNotification, OrderItem, OrderItem
 from accounts.models import Customer, CustomerSession
 from orders.admin import request_order_item_action_from_admin, set_order_item_status_from_admin
 
+from api.legacy import legacy_endpoint_test
+
 
 @override_settings(ENABLE_DEMO_ENDPOINTS=True)
 class OrderFlowTests(TestCase):
@@ -44,6 +46,7 @@ class OrderFlowTests(TestCase):
             quantity=1,
         )
 
+    @legacy_endpoint_test("LP-BE-601..807")
     def test_checkout_creates_order_payment_and_order_item_event(self):
         response = self.client.post(
             "/api/orders/checkout/",
@@ -95,6 +98,7 @@ class OrderFlowTests(TestCase):
 
 
 
+    @legacy_endpoint_test("LP-BE-601..807")
     def test_checkout_requires_verified_phone(self):
         self.customer.is_phone_verified = False
         self.customer.save(update_fields=["is_phone_verified"])
@@ -115,6 +119,7 @@ class OrderFlowTests(TestCase):
         self.assertEqual(response.data["detail"], "phone verification required")
         self.assertEqual(Order.objects.count(), 0)
 
+    @legacy_endpoint_test("LP-BE-601..807")
     def test_checkout_requires_phone_to_match_verified_profile(self):
         response = self.client.post(
             "/api/orders/checkout/",
@@ -136,6 +141,7 @@ class OrderFlowTests(TestCase):
         self.assertEqual(Order.objects.count(), 0)
 
 
+    @legacy_endpoint_test("LP-BE-601..807")
     def test_duplicate_eta_change_is_blocked(self):
         order, item = self._create_order_from_cart()
 
@@ -154,6 +160,7 @@ class OrderFlowTests(TestCase):
         self.assertEqual(response.data["detail"], "no actual changes detected")
         self.assertEqual(item.events.count(), 1)
 
+    @legacy_endpoint_test("LP-BE-601..807")
     def test_eta_change_request_creates_action_and_event(self):
         order, item = self._create_order_from_cart()
 
@@ -188,6 +195,7 @@ class OrderFlowTests(TestCase):
             OrderItemEvent.EVENT_TYPE_ETA_CHANGE_REQUESTED,
         )
 
+    @legacy_endpoint_test("LP-BE-601..807")
     def test_resolve_action_applies_proposed_eta(self):
         order, item = self._create_order_from_cart()
 
@@ -231,6 +239,7 @@ class OrderFlowTests(TestCase):
             OrderItemEvent.EVENT_TYPE_ACTION_RESOLVED,
         )
 
+    @legacy_endpoint_test("LP-BE-601..807")
     def test_price_change_resolve_updates_order_total(self):
         order, item = self._create_order_from_cart()
 
@@ -262,6 +271,7 @@ class OrderFlowTests(TestCase):
         self.assertIsNone(item.proposed_final_price_gel)
         self.assertEqual(order.total_gel, Decimal("800.00"))
 
+    @legacy_endpoint_test("LP-BE-601..807")
     def test_status_update_creates_event(self):
         order, item = self._create_order_from_cart()
 
@@ -293,6 +303,7 @@ class OrderFlowTests(TestCase):
             {"item_status": OrderItem.ITEM_STATUS_PURCHASED},
         )
 
+    @legacy_endpoint_test("LP-BE-601..807")
     def test_demo_confirm_payment_updates_payment_order_items_and_creates_events(self):
         order, item = self._create_order_from_cart()
         payment = order.payment
@@ -342,6 +353,7 @@ class OrderFlowTests(TestCase):
             OrderItem.ITEM_STATUS_PAYMENT_CONFIRMED,
         )
 
+    @legacy_endpoint_test("LP-BE-601..807")
     def test_verify_payment_marks_payment_paid_and_updates_order(self):
         order, item = self._create_order_from_cart()
         payment = order.payment
@@ -374,6 +386,7 @@ class OrderFlowTests(TestCase):
 
         self.assertEqual(response.data["payment"]["status"], Payment.STATUS_PAID)
 
+    @legacy_endpoint_test("LP-BE-601..807")
     def test_verify_payment_blocks_wrong_payment_reference(self):
         order, item = self._create_order_from_cart()
 
@@ -399,6 +412,7 @@ class OrderFlowTests(TestCase):
         self.assertEqual(item.item_status, OrderItem.ITEM_STATUS_CREATED)
         self.assertEqual(order.payment.status, Payment.STATUS_PENDING)
 
+    @legacy_endpoint_test("LP-BE-601..807")
     def test_verify_payment_is_idempotent_after_paid(self):
         order, item = self._create_order_from_cart()
         payment = order.payment
@@ -430,6 +444,7 @@ class OrderFlowTests(TestCase):
         self.assertEqual(payment.status, Payment.STATUS_PAID)
         self.assertEqual(item.events.count(), 2)
 
+    @legacy_endpoint_test("LP-BE-601..807")
     def test_order_detail_allows_same_verified_phone_from_new_session(self):
         order, _item = self._create_order_from_cart()
         other_session_id = "same-phone-new-session"
@@ -446,6 +461,7 @@ class OrderFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["order_number"], order.order_number)
 
+    @legacy_endpoint_test("LP-BE-601..807")
     def test_order_detail_blocks_different_verified_phone(self):
         order, _item = self._create_order_from_cart()
         other_session_id = "different-phone-session"
@@ -463,6 +479,7 @@ class OrderFlowTests(TestCase):
 
         self.assertEqual(response.status_code, 404)
 
+    @legacy_endpoint_test("LP-BE-601..807")
     def test_order_detail_returns_only_customer_visible_events(self):
         order, item = self._create_order_from_cart()
 
@@ -502,6 +519,7 @@ class OrderFlowTests(TestCase):
 
 
 
+    @legacy_endpoint_test("LP-BE-601..807")
     def test_customer_can_cancel_action_required_item(self):
         order, item = self._create_order_from_cart()
 
@@ -555,6 +573,7 @@ class OrderFlowTests(TestCase):
             OrderItem.ITEM_STATUS_CANCELLED,
         )
 
+    @legacy_endpoint_test("LP-BE-601..807")
     def test_cancel_action_requires_pending_action(self):
         order, item = self._create_order_from_cart()
 
@@ -584,6 +603,7 @@ class OrderFlowTests(TestCase):
         item.refresh_from_db()
         self.assertEqual(item.item_status, OrderItem.ITEM_STATUS_PAYMENT_CONFIRMED)
 
+    @legacy_endpoint_test("LP-BE-601..807")
     def test_cancel_action_blocks_different_verified_phone(self):
         order, item = self._create_order_from_cart()
 
@@ -619,6 +639,7 @@ class OrderFlowTests(TestCase):
         self.assertEqual(item.item_status, OrderItem.ITEM_STATUS_ACTION_REQUIRED)
 
 
+    @legacy_endpoint_test("LP-BE-601..807")
     def test_customer_can_acknowledge_weight_change_notice(self):
         order, item = self._create_order_from_cart()
 
@@ -666,6 +687,7 @@ class OrderFlowTests(TestCase):
         self.assertEqual(event.actor_type, OrderItemEvent.ACTOR_TYPE_CUSTOMER)
         self.assertTrue(event.visible_to_customer)
 
+    @legacy_endpoint_test("LP-BE-601..807")
     def test_notice_only_weight_action_cannot_be_cancelled_by_customer(self):
         order, item = self._create_order_from_cart()
 
@@ -702,6 +724,7 @@ class OrderFlowTests(TestCase):
 
 
 
+    @legacy_endpoint_test("LP-BE-601..807")
     def test_customer_can_send_order_support_message(self):
         order, item = self._create_order_from_cart()
 
@@ -731,6 +754,7 @@ class OrderFlowTests(TestCase):
         self.assertEqual(response.data["support_messages"][0]["message"], message.message)
         self.assertEqual(response.data["support_unread_count"], 0)
 
+    @legacy_endpoint_test("LP-BE-601..807")
     def test_support_message_blocks_different_verified_phone(self):
         order, item = self._create_order_from_cart()
 
@@ -754,6 +778,7 @@ class OrderFlowTests(TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertEqual(OrderSupportMessage.objects.count(), 0)
 
+    @legacy_endpoint_test("LP-BE-601..807")
     def test_customer_can_acknowledge_operator_support_reply(self):
         order, item = self._create_order_from_cart()
 
@@ -793,6 +818,7 @@ class OrderFlowTests(TestCase):
 
 
 
+    @legacy_endpoint_test("LP-BE-601..807")
     def test_operator_support_reply_creates_public_notification_link(self):
         order, item = self._create_order_from_cart()
 
@@ -865,6 +891,7 @@ class OrderFlowTests(TestCase):
 
 
 
+    @legacy_endpoint_test("LP-BE-601..807")
     def test_checkout_links_order_to_customer_account(self):
         response = self.client.post(
             "/api/orders/checkout/",
@@ -885,6 +912,7 @@ class OrderFlowTests(TestCase):
         self.assertEqual(order.customer_id, self.customer.id)
         self.assertEqual(order.customer_phone, self.customer.phone)
 
+    @legacy_endpoint_test("LP-BE-601..807")
     def test_order_detail_still_works_after_admin_changes_customer_phone(self):
         order, _item = self._create_order_from_cart()
 
@@ -898,6 +926,7 @@ class OrderFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["order_number"], order.order_number)
 
+    @legacy_endpoint_test("LP-BE-601..807")
     def test_orders_list_still_works_after_admin_changes_customer_phone(self):
         order, _item = self._create_order_from_cart()
 
@@ -914,6 +943,7 @@ class OrderFlowTests(TestCase):
 
 
 
+    @legacy_endpoint_test("LP-BE-601..807")
     def test_order_api_shows_current_customer_phone_and_keeps_order_snapshot(self):
         order, _item = self._create_order_from_cart()
 
@@ -930,23 +960,33 @@ class OrderFlowTests(TestCase):
 
 
     def _create_order_from_cart(self):
-        response = self.client.post(
-            "/api/orders/checkout/",
-            {
-                "session_id": self.session_id,
-                "customer_name": "Lado",
-                "customer_phone": "599123456",
-                "vin": "",
-                "note": "",
-            },
-            format="json",
+        # Built with the ORM: the legacy checkout endpoint is disabled (LP-BE-103).
+        order = Order.objects.create(
+            order_number="LP-FLOW-0001",
+            session_id=self.session_id,
+            customer=self.customer,
+            customer_name="Lado",
+            customer_phone="599123456",
+            payment_type=Order.PAYMENT_FULL,
+            status=Order.STATUS_PAYMENT_PENDING,
+            total_gel=self.cart_item.final_price_gel * self.cart_item.quantity,
         )
-
-        self.assertEqual(response.status_code, 201)
-
-        order = Order.objects.get(session_id=self.session_id)
-        item = order.items.first()
-
+        item = OrderItem.objects.create(
+            order=order,
+            cart_item_id=self.cart_item.cart_item_id,
+            quote_id=self.cart_item.quote_id,
+            part_option_id=self.cart_item.part_option_id,
+            part_number=self.cart_item.part_number,
+            name=self.cart_item.name,
+            condition=self.cart_item.condition,
+            brand=self.cart_item.brand,
+            availability=self.cart_item.availability,
+            eta_days=self.cart_item.eta_days,
+            weight_kg=self.cart_item.weight_kg,
+            final_price_gel=self.cart_item.final_price_gel,
+            currency="GEL",
+            quantity=self.cart_item.quantity,
+        )
         return order, item
 
 
@@ -1308,6 +1348,7 @@ class DisabledDemoEndpointTests(TestCase):
     def setUp(self):
         self.client = APIClient()
 
+    @legacy_endpoint_test("LP-BE-106/807")
     def test_demo_payment_endpoint_is_disabled_by_default(self):
         response = self.client.post(
             "/api/orders/LP-TEST/demo-confirm-payment/",
@@ -1317,6 +1358,7 @@ class DisabledDemoEndpointTests(TestCase):
 
         self.assertEqual(response.status_code, 404)
 
+    @legacy_endpoint_test("LP-BE-106/807")
     def test_verify_payment_endpoint_is_disabled_by_default(self):
         response = self.client.post(
             "/api/orders/LP-TEST/verify-payment/",
@@ -1329,6 +1371,7 @@ class DisabledDemoEndpointTests(TestCase):
 
         self.assertEqual(response.status_code, 404)
 
+    @legacy_endpoint_test("LP-BE-106/807")
     def test_demo_operator_endpoints_are_disabled_by_default(self):
         request_change_response = self.client.post(
             "/api/orders/items/999/demo-request-change/",

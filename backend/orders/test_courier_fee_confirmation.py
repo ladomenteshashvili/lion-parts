@@ -7,10 +7,11 @@ from django.test import RequestFactory, TestCase
 from rest_framework.test import APIClient
 
 from accounts.models import Customer, CustomerSession
-from cart.models import Cart, CartItem
 from orders.admin import OrderAdmin
-from orders.models import Order, OrderCustomerNotification, OrderSupportMessage
+from orders.models import Order, OrderCustomerNotification, OrderItem, OrderSupportMessage
 from orders.serializers import OrderSerializer
+
+from api.legacy import legacy_endpoint_test
 
 
 def create_customer(session_id):
@@ -24,11 +25,22 @@ def create_customer(session_id):
     return customer
 
 
-def create_cart(session_id):
-    cart = Cart.objects.create(session_id=session_id)
-
-    CartItem.objects.create(
-        cart=cart,
+def create_order(session_id):
+    # Built with the ORM: the legacy checkout endpoint is disabled (LP-BE-103).
+    customer = create_customer(session_id)
+    order = Order.objects.create(
+        order_number="LP-COURIER-0001",
+        session_id=session_id,
+        customer=customer,
+        customer_name=customer.name,
+        customer_phone=customer.phone,
+        payment_type=Order.PAYMENT_FULL,
+        status=Order.STATUS_PAYMENT_PENDING,
+        courier_delivery_requested=True,
+        total_gel=Decimal("150.00"),
+    )
+    OrderItem.objects.create(
+        order=order,
         cart_item_id="courier-fee-cart-item",
         quote_id="courier-fee-quote",
         part_option_id="courier-fee-option",
@@ -43,25 +55,7 @@ def create_cart(session_id):
         currency="GEL",
         quantity=1,
     )
-
-
-def create_order(session_id):
-    create_customer(session_id)
-    create_cart(session_id)
-
-    response = APIClient().post(
-        "/api/orders/checkout/",
-        {
-            "session_id": session_id,
-            "customer_name": "Courier Fee Customer",
-            "customer_phone": "+995555123456",
-            "courier_delivery_requested": True,
-        },
-        format="json",
-    )
-
-    assert response.status_code == 201, response.data
-    return Order.objects.get()
+    return order
 
 
 class CourierFeeConfirmationTests(TestCase):
@@ -85,6 +79,7 @@ class CourierFeeConfirmationTests(TestCase):
             "დაადასტურეთ კურიერის ფასი.",
         )
 
+    @legacy_endpoint_test("LP-BE-805")
     def test_customer_confirms_courier_fee_and_total_updates(self):
         order = create_order(self.session_id)
         order.proposed_courier_delivery_fee_gel = Decimal("12.00")
@@ -110,6 +105,7 @@ class CourierFeeConfirmationTests(TestCase):
         self.assertEqual(order.total_gel, Decimal("162.00"))
         self.assertEqual(order.payment.amount_gel, Decimal("162.00"))
 
+    @legacy_endpoint_test("LP-BE-805")
     def test_customer_declines_courier_fee_without_changing_total(self):
         order = create_order(self.session_id)
         order.proposed_courier_delivery_fee_gel = Decimal("12.00")

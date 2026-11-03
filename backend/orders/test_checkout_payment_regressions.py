@@ -7,6 +7,8 @@ from accounts.models import Customer, CustomerSession
 from cart.models import Cart, CartItem
 from orders.models import Order, OrderItem, OrderItemEvent, Payment
 
+from api.legacy import legacy_endpoint_test
+
 
 def create_customer(session_id, verified=True, phone="555123456"):
     customer = Customer.objects.create(
@@ -55,6 +57,7 @@ class CheckoutRegressionTests(TestCase):
         self.client = APIClient()
         self.session_id = "checkout-session"
 
+    @legacy_endpoint_test("LP-BE-603")
     def test_checkout_creates_order_payment_items_and_clears_cart(self):
         customer = create_customer(self.session_id, verified=True)
         cart = create_cart_with_item(self.session_id)
@@ -120,6 +123,7 @@ class CheckoutRegressionTests(TestCase):
         self.assertEqual(response.data["total_gel"], "300.00")
         self.assertEqual(len(response.data["items"]), 1)
 
+    @legacy_endpoint_test("LP-BE-603")
     def test_checkout_rejects_unverified_customer_and_keeps_cart(self):
         create_customer(self.session_id, verified=False)
         cart = create_cart_with_item(self.session_id)
@@ -142,6 +146,7 @@ class CheckoutRegressionTests(TestCase):
         cart.refresh_from_db()
         self.assertEqual(cart.items.count(), 1)
 
+    @legacy_endpoint_test("LP-BE-603")
     def test_checkout_rejects_phone_that_does_not_match_verified_customer(self):
         create_customer(self.session_id, verified=True, phone="555123456")
         cart = create_cart_with_item(self.session_id)
@@ -166,6 +171,7 @@ class CheckoutRegressionTests(TestCase):
         cart.refresh_from_db()
         self.assertEqual(cart.items.count(), 1)
 
+    @legacy_endpoint_test("LP-BE-603")
     def test_checkout_rejects_empty_cart(self):
         create_customer(self.session_id, verified=True)
         Cart.objects.create(session_id=self.session_id)
@@ -229,6 +235,7 @@ class PaymentVerificationRegressionTests(TestCase):
             item_status=OrderItem.ITEM_STATUS_CREATED,
         )
 
+    @legacy_endpoint_test("LP-BE-702/704")
     @override_settings(ENABLE_DEMO_ENDPOINTS=True)
     def test_verify_payment_marks_payment_order_and_items_as_paid(self):
         response = self.client.post(
@@ -270,6 +277,7 @@ class PaymentVerificationRegressionTests(TestCase):
             OrderItem.ITEM_STATUS_PAYMENT_CONFIRMED,
         )
 
+    @legacy_endpoint_test("LP-BE-702/704")
     @override_settings(ENABLE_DEMO_ENDPOINTS=True)
     def test_verify_payment_rejects_wrong_payment_reference(self):
         response = self.client.post(
@@ -295,6 +303,7 @@ class PaymentVerificationRegressionTests(TestCase):
         self.assertEqual(self.order.status, Order.STATUS_PAYMENT_PENDING)
         self.assertEqual(self.item.item_status, OrderItem.ITEM_STATUS_CREATED)
 
+    @legacy_endpoint_test("LP-BE-702/704")
     @override_settings(ENABLE_DEMO_ENDPOINTS=False)
     def test_verify_payment_is_hidden_when_demo_endpoints_are_disabled(self):
         response = self.client.post(
