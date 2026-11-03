@@ -47,7 +47,7 @@ class CartTests(TestCase):
         self.assertFalse(Cart.objects.exists())
 
     def test_contract_keys_and_totals_with_a_discount(self):
-        Discount.objects.create(name="OEM -10", kind="fixed", value=10, brand="OEM")
+        Discount.objects.create(name="OEM -10 USD", kind="fixed", value=10, brand="OEM")
         self.add(index=0, quantity=2)
         self.add(index=1, quantity=1)
         cart = self.get()
@@ -55,12 +55,12 @@ class CartTests(TestCase):
         for item in cart["items"]:
             self.assertEqual(set(item), ITEM_KEYS)
         first, second = cart["items"]
-        self.assertEqual((first["discount_unit_amount"], second["discount_unit_amount"]), ("10.00", "0.00"))
+        self.assertEqual((first["discount_unit_amount"], second["discount_unit_amount"]), ("26.00", "0.00"))  # 10 USD x 2.6
         self.assertEqual(first["line_total"], f"{D(first['unit_price']) * 2:.2f}")
         items_total = D(first["list_unit_price"]) * 2 + D(second["list_unit_price"])
         self.assertEqual(cart["summary"], {
-            "items_count": 3, "items_total": f"{items_total:.2f}", "discount_total": "20.00", "delivery_fee": None,
-            "total": f"{items_total - 20:.2f}"})
+            "items_count": 3, "items_total": f"{items_total:.2f}", "discount_total": "52.00", "delivery_fee": None,
+            "total": f"{items_total - 52:.2f}"})
 
     def test_expired_and_unavailable_block_checkout_price_changed_does_not(self):
         self.add(index=0)

@@ -13,8 +13,8 @@ from accounts.testing import make_customer
 from cart.models import Cart, CartItem
 from parts.models import PartQuoteRequest, PartSearchLog
 from parts.services import mark_quote_price_ready
-from pricing.engine import PriceInput, price_offer
-from pricing.models import ExchangeRate
+from pricing.engine import PriceInput, convert, price_offer
+from pricing.models import ExchangeRate, SiteSettings
 
 D = Decimal
 CART_KEYS = {"currency", "items", "summary", "payment_terms", "checkout_blocked", "checkout_blocked_reasons", "merge"}
@@ -88,13 +88,16 @@ class AddToCartTests(TestCase):
         self.assertEqual(codes(self.add(source="prepared_quote")), {"quote_request_id": ["required"]})
         self.assertEqual(codes(self.add(source="other")), {"source": ["invalid"]})
 
-    def test_search_offer_in_another_currency_is_repriced_into_the_cart_currency(self):
+    def test_search_offer_in_another_currency_is_converted_into_the_cart_currency(self):
+        SiteSettings.objects.update(multi_currency_enabled=True)
+        self.client.patch("/api/cart/", {"currency": "GEL"}, format="json")
         self.add(**{"source": "search", "search_id": self.search(currency="USD")[0], "offer_id": "DEMO-1-G9010-60020"})
         line = CartItem.objects.get()
         self.assertEqual(line.cart.currency, "GEL")
-        expected = price_offer(PriceInput(D("180.00"), D("2.00"), D("8.00")), customer=None, currency="GEL",
-                               part_number="G9010-60020", brand="OEM")
-        self.assertEqual(line.unit_price, expected.unit_price)
+        canonical = price_offer(PriceInput(D("180.00"), D("2.00"), D("8.00")), customer=None,
+                                part_number="G9010-60020", brand="OEM")
+        self.assertEqual((line.unit_price_usd, line.unit_price),
+                         (canonical.unit_price_usd, convert(canonical, "GEL", D("2.6")).unit_price))
 
     def test_search_shows_in_cart_quantity(self):
         search_id, offers = self.search()
@@ -143,7 +146,7 @@ class AddCustomerSourcesTests(TestCase):
         item = response.json()["items"][0]
         qr.refresh_from_db()
         self.assertEqual((item["source"], item["unit_price"], item["weight_kg"], item["weight_source"]),
-                         ("prepared_quote", f"{qr.unit_price:.2f}", "3.00", "operator"))
+                         ("prepared_quote", f"{(qr.unit_price_usd * D('2.6')).quantize(D('0.01'))}", "3.00", "operator"))
         line = CartItem.objects.get()
         self.assertGreater(line.price_valid_until, timezone.now() + timedelta(minutes=59))
 

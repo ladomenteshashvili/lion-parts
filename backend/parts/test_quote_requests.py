@@ -16,8 +16,10 @@ from pricing.models import ExchangeRate
 
 D = Decimal
 QR_KEYS = {"id", "request_type", "part_number", "vin", "name", "brand", "status", "is_price_ready", "unit_price",
+           "price_valid_until",
            "currency", "weight_kg", "operator_message", "created_at"}
-PUBLIC_KEYS = {"quote_request_id", "part_number", "name", "brand", "unit_price", "currency", "eta_min_days",
+PUBLIC_KEYS = {"quote_request_id", "part_number", "name", "brand", "unit_price", "currency", "price_valid_until",
+               "eta_min_days",
                "eta_max_days", "weight_kg", "operator_message", "requires_login"}
 
 
@@ -120,7 +122,7 @@ class PublicQuoteTests(TestCase):
         data = response.json()
         self.assertEqual(set(data), PUBLIC_KEYS)
         self.assertEqual((data["unit_price"], data["weight_kg"], data["requires_login"]),
-                         (f"{self.qr.unit_price:.2f}", "3.00", True))
+                         (f"{(self.qr.unit_price_usd * D('2.6')).quantize(D('0.01'))}", "3.00", True))
         text = response.content.decode()
         for private in ("555123456", "nino@example.com", "Nino", "Beridze"):
             self.assertNotIn(private, text)

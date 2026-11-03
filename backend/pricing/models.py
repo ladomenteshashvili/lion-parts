@@ -1,18 +1,36 @@
-"""Pricing configuration (G§6.2): site settings, currencies, NBG rates, discounts, pickup points."""
+"""Pricing configuration (G§6.2): site settings (currency mode, VAT, validity), NBG rates, discounts, pickup points."""
+
+from datetime import date
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from accounts.validators import normalize_part_number
 
-CURRENCIES = [("GEL", "GEL"), ("USD", "USD")]
+BASE_CURRENCY = "USD"
+
+
+def _is_iso_date(value):
+    try:
+        date.fromisoformat(str(value))
+    except ValueError:
+        return False
+    return len(str(value)) == 10
 
 
 class SiteSettings(models.Model):
     """Singleton (pk=1). Cities: [{"code", "name": {lang: text}}]; districts add "city"."""
 
-    price_valid_minutes = models.PositiveIntegerField(default=60)
+    # Currency: USD is always the base (canonical) pricing currency. Off: customers see and pay GEL only.
+    # On: USD is the default customer currency and customers may choose USD or GEL (G§4.6).
+    multi_currency_enabled = models.BooleanField(default=False)
+    vat_percent = models.DecimalField(max_digits=5, decimal_places=2, default=18,
+                                      validators=[MinValueValidator(0), MaxValueValidator(100)])
+    # Customer-facing price validity in Georgian business days (Mon-Fri minus public_holidays), G§7.5.
+    price_valid_business_days = models.PositiveSmallIntegerField(default=10, validators=[MinValueValidator(1)])
+    public_holidays = models.JSONField(default=list, blank=True)  # ["2026-01-01", ...]
     default_shipping_usd_per_kg = models.DecimalField(max_digits=8, decimal_places=2, default=8)
     rate_max_age_days = models.PositiveSmallIntegerField(default=3)
     delivery_cities = models.JSONField(default=list, blank=True)
@@ -56,6 +74,9 @@ class SiteSettings(models.Model):
                     return _("%(code)s: unknown city.") % {"code": row["code"]}
             return None
 
+        if not isinstance(self.public_holidays, list) or not all(_is_iso_date(d) for d in self.public_holidays):
+            raise ValidationError({"public_holidays": _('Enter a list of dates like ["2026-01-01", "2026-01-07"].')})
+
         city_codes = {c.get("code") for c in self.delivery_cities if isinstance(c, dict)} \
             if isinstance(self.delivery_cities, list) else set()
         errors = {field: message for field, message in (
@@ -74,33 +95,6 @@ class SiteSettings(models.Model):
     @classmethod
     def get(cls):
         return cls.objects.get_or_create(pk=1)[0]
-
-
-class CurrencySettings(models.Model):
-    currency = models.CharField(max_length=3, unique=True, choices=CURRENCIES)
-    vat_percent = models.DecimalField(max_digits=5, decimal_places=2, default=18)
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ["currency"]
-        verbose_name_plural = "Currency settings"
-
-    def __str__(self):
-        return f"{self.currency} (VAT {self.vat_percent}%)"
-
-    def clean(self):
-        from accounts.models import TariffMarkup
-
-        if self.is_active and not TariffMarkup.objects.filter(tariff__is_default=True, currency=self.currency).exists():
-            raise ValidationError({"is_active": _(
-                "Add a %(currency)s markup to the default tariff before activating %(currency)s.")
-                % {"currency": self.currency}})
-
-    @classmethod
-    def active_codes(cls):
-        return list(cls.objects.filter(is_active=True).values_list("currency", flat=True))
 
 
 class ExchangeRate(models.Model):
@@ -126,8 +120,8 @@ class Discount(models.Model):
     tariff = models.ForeignKey("accounts.CustomerTariff", on_delete=models.CASCADE, null=True, blank=True)
     part_number = models.CharField(max_length=120, blank=True)  # normalized (G§7.1)
     brand = models.CharField(max_length=120, blank=True)
-    kind = models.CharField(max_length=10, choices=[(KIND_PERCENT, "Percent"), (KIND_FIXED, "Fixed GEL per unit")])
-    value = models.DecimalField(max_digits=10, decimal_places=2)  # percent 0-100 or fixed GEL per unit
+    kind = models.CharField(max_length=10, choices=[(KIND_PERCENT, "Percent"), (KIND_FIXED, "Fixed USD per unit")])
+    value = models.DecimalField(max_digits=10, decimal_places=2)  # percent 0-100 or fixed USD per unit (canonical)
     valid_from = models.DateTimeField(null=True, blank=True)
     valid_to = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)

@@ -11,6 +11,7 @@ from api.errors import ApiError
 from api.pagination import Pagination
 from api.permissions import IsPhoneVerified
 from api.throttles import SearchThrottle
+from pricing.validity import is_expired
 
 from . import services
 from .history import FILTERS, build_history, unseen_ready_quotes
@@ -54,8 +55,8 @@ def quote_requests(request):
 @permission_classes([AllowAny])
 def public_quote(request, token):
     qr = PartQuoteRequest.objects.filter(notification_token=token, price_ready_at__isnull=False,
-                                         unit_price__isnull=False).first()
-    if qr is None:
+                                         unit_price_usd__isnull=False).first()
+    if qr is None or is_expired(qr.price_valid_until):  # an expired quote needs operator re-approval
         raise ApiError("not_found", status=404)
     return Response(services.public_quote_data(qr))
 
@@ -92,4 +93,5 @@ def calculate_price(request):
     log = services.owned_log(request, data["search_id"])
     new_log = services.calculate_weight_price(request, log, data["offer_id"], data["weight_kg"])
     return Response({"search_id": new_log.pk, "price_valid_until": new_log.price_valid_until,
-                     "offer": services.present_offer(request, new_log.offers()[0], new_log.part_number)})
+                     "offer": services.present_offer(request, new_log.offers()[0], new_log.part_number,
+                                                     new_log.currency, new_log.exchange_rate)})

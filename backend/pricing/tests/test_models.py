@@ -7,28 +7,27 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.utils import timezone
 
-from pricing.models import CurrencySettings, Discount, ExchangeRate, PickupPoint, SiteSettings
+from pricing.models import Discount, ExchangeRate, PickupPoint, SiteSettings
 
 
 class SeedTests(TestCase):
     def test_seeded_rows(self):
         site = SiteSettings.get()
-        self.assertEqual((site.pk, site.price_valid_minutes, site.rate_max_age_days), (1, 60, 3))
+        self.assertEqual((site.pk, site.price_valid_business_days, site.rate_max_age_days), (1, 10, 3))
+        self.assertEqual((site.multi_currency_enabled, site.vat_percent, site.public_holidays), (False, Decimal("18.00"), []))
         self.assertEqual(site.default_shipping_usd_per_kg, Decimal("8.00"))
         self.assertIn("vake", [d["code"] for d in site.delivery_districts])
         self.assertEqual(site.invoice_seller_name_i18n["en"], "Lion Parts")
-        self.assertEqual(dict(CurrencySettings.objects.values_list("currency", "vat_percent")),
-                         {"GEL": Decimal("18.00"), "USD": Decimal("18.00")})
         self.assertEqual(PickupPoint.objects.get().name_i18n["en"], "Beliashvili pickup point")
 
     def test_site_settings_is_a_singleton(self):
         with self.assertRaises(ValidationError):
-            SiteSettings(price_valid_minutes=30).save()
+            SiteSettings(price_valid_business_days=5).save()
         self.assertEqual(SiteSettings.objects.count(), 1)
         site = SiteSettings.get()
-        site.price_valid_minutes = 30
+        site.price_valid_business_days = 5
         site.save()
-        self.assertEqual(SiteSettings.get().price_valid_minutes, 30)
+        self.assertEqual(SiteSettings.get().price_valid_business_days, 5)
 
 
 class DiscountModelTests(TestCase):
@@ -62,12 +61,17 @@ class MetaPricingTests(TestCase):
         self.assertEqual(en["delivery"]["cities"], [{"code": "tbilisi", "name": "Tbilisi"}])
         self.assertEqual(set(en["pickup_points"][0]), {"id", "name", "address", "working_hours"})
 
-    def test_only_active_currencies_and_points_and_latest_rate(self):
-        CurrencySettings.objects.filter(currency="USD").update(is_active=False)
+    def test_currency_mode_active_points_and_latest_rate(self):
         PickupPoint.objects.create(name_i18n={"ka": "x"}, is_active=False)
         ExchangeRate.objects.create(date=date(2026, 10, 23), rate=Decimal("2.6000"))
         ExchangeRate.objects.create(date=date(2026, 10, 24), rate=Decimal("2.5971"))
         data = self.meta("en")
-        self.assertEqual(data["currencies"], [{"code": "GEL", "symbol": "₾"}])
+        self.assertEqual((data["currencies"], data["multi_currency_enabled"], data["default_currency"],
+                          data["base_currency"], data["price_valid_business_days"]),
+                         ([{"code": "GEL", "symbol": "₾"}], False, "GEL", "USD", 10))
+        SiteSettings.objects.update(multi_currency_enabled=True)
+        on = self.meta("en")
+        self.assertEqual((on["currencies"], on["multi_currency_enabled"], on["default_currency"]),
+                         ([{"code": "USD", "symbol": "$"}, {"code": "GEL", "symbol": "₾"}], True, "USD"))
         self.assertEqual(len(data["pickup_points"]), 1)
         self.assertEqual(data["usd_rate"], {"rate": "2.5971", "date": "2026-10-24"})

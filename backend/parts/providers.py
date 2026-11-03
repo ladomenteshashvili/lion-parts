@@ -11,8 +11,7 @@ import requests
 from django.conf import settings
 
 from api.errors import ApiError
-from pricing.engine import PriceInput, default_shipping_usd_per_kg, price_offer
-from pricing.rates import get_usd_rate
+from pricing.engine import PriceInput, convert, default_shipping_usd_per_kg, price_offer
 
 from .amt_provider import AMTProviderError, get_price_by_oem
 from .models import CarrierService, PartSearchLog
@@ -88,36 +87,38 @@ def fetch_rows(part_number):
     return (PartSearchLog.PROVIDER_DEMO, *_demo_rows(part_number))
 
 
-def build_offers(rows, *, customer, currency, part_number, weight_source="api", weight_override=None, usd_rate=None):
-    """Price every row for `customer` (None = guest) in `currency`. A row without a weight is
-    `checking` with null prices. `weight_override` (customer weight calculation) replaces the
-    supplier weight and sets `weight_source`."""
+def build_offers(rows, *, customer, part_number, weight_source="api", weight_override=None):
+    """Price every row for `customer` (None = guest) in canonical USD. A row without a weight is
+    `checking` with no price. `weight_override` (customer weight calculation) replaces the supplier
+    weight and sets `weight_source`. Customer-currency amounts are added when shown (public_offer)."""
     carrier = CarrierService.get_default()
     shipping = default_shipping_usd_per_kg()
     eta_min, eta_max = (carrier.min_eta_days, carrier.max_eta_days) if carrier else (None, None)
-    rate = usd_rate
     offers = []
     for row in rows:
         weight = weight_override if weight_override is not None else row["weight_kg"]
         offer = {"offer_id": row["offer_id"], "name": row["name"], "brand": row["brand"], "condition": "New",
-                 "currency": currency, "eta_min_days": eta_min, "eta_max_days": eta_max, "note": row["note"],
+                 "eta_min_days": eta_min, "eta_max_days": eta_max, "note": row["note"],
                  "supplier_price_usd": str(row["supplier_price_usd"])}
         if weight is None:
-            offer.update(status="checking", list_unit_price=None, discount_unit_amount=None, unit_price=None,
-                         weight_kg=None, weight_source="", requires_weight=True, snapshot=None)
+            offer.update(status="checking", weight_kg=None, weight_source="", requires_weight=True, snapshot=None)
         else:
-            rate = rate if rate is not None else get_usd_rate()
             snap = price_offer(PriceInput(row["supplier_price_usd"], weight, shipping), customer=customer,
-                               currency=currency, part_number=part_number, brand=row["brand"], usd_rate=rate)
-            offer.update(status="ready", list_unit_price=str(snap.list_unit_price),
-                         discount_unit_amount=str(snap.discount_unit_amount), unit_price=str(snap.unit_price),
-                         weight_kg=f"{weight:.2f}", weight_source=weight_source if weight_override is not None else "api",
+                               part_number=part_number, brand=row["brand"])
+            offer.update(status="ready", weight_kg=f"{weight:.2f}",
+                         weight_source=weight_source if weight_override is not None else "api",
                          requires_weight=False, snapshot=snap.to_json())
         offers.append(offer)
     return offers
 
 
-def public_offer(offer, *, in_cart_quantity=0, image_urls=(), customer_notice=""):
-    """The G§8.0 Offer for clients: never the supplier price or the internal snapshot."""
-    return {**{key: offer.get(key) for key in OFFER_KEYS}, "in_cart_quantity": in_cart_quantity,
-            "image_urls": list(image_urls), "customer_notice": customer_notice}
+def public_offer(offer, *, currency, rate, in_cart_quantity=0, image_urls=(), customer_notice=""):
+    """The G§8.0 Offer for clients in `currency` (converted from the canonical USD price with `rate`):
+    never the supplier price or the internal snapshot."""
+    snap = offer.get("snapshot")
+    money = convert(snap, currency, rate) if snap else None
+    amounts = {"list_unit_price": f"{money.list_unit_price:.2f}" if money else None,
+               "discount_unit_amount": f"{money.discount_unit_amount:.2f}" if money else None,
+               "unit_price": f"{money.unit_price:.2f}" if money else None}
+    return {**{key: offer.get(key) for key in OFFER_KEYS}, **amounts, "currency": currency,
+            "in_cart_quantity": in_cart_quantity, "image_urls": list(image_urls), "customer_notice": customer_notice}

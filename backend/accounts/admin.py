@@ -1,45 +1,18 @@
 from django.contrib import admin
-from django.core.exceptions import ValidationError
-from django.forms.models import BaseInlineFormSet
-from django.utils.translation import gettext_lazy as _
 
 from api.admin_i18n import TranslatedFieldsAdminMixin
-from pricing.models import CurrencySettings
 
-from .models import Customer, CustomerTariff, LegalEntityProfile, PhoneVerificationCode, TariffMarkup
-
-
-class TariffMarkupFormSet(BaseInlineFormSet):
-    """The default tariff must keep one markup per active currency: guests and tariffs without
-    their own row are priced with it (pricing never falls back to zero)."""
-
-    def clean(self):
-        super().clean()
-        if not self.instance.is_default or any(self.errors):
-            return
-        kept = {form.cleaned_data.get("currency") for form in self.forms
-                if form.cleaned_data and not form.cleaned_data.get("DELETE")}
-        missing = sorted(set(CurrencySettings.active_codes()) - kept)
-        if missing:
-            raise ValidationError(_("The default tariff needs a markup for every active currency: %(codes)s")
-                                  % {"codes": ", ".join(missing)})
-
-
-class TariffMarkupInline(admin.TabularInline):
-    model = TariffMarkup
-    formset = TariffMarkupFormSet
-    extra = 0
+from .models import Customer, CustomerTariff, LegalEntityProfile, PhoneVerificationCode
 
 
 @admin.register(CustomerTariff)
 class CustomerTariffAdmin(TranslatedFieldsAdminMixin, admin.ModelAdmin):
     textarea_i18n_fields = ("benefits_text_i18n",)
-    list_display = ("name", "is_default", "payment_terms", "split_upfront_percent",
+    list_display = ("name", "is_default", "markup_percent", "payment_terms", "split_upfront_percent",
                     "can_enter_weight", "can_request_quote", "updated_at")
     list_filter = ("is_default", "payment_terms", "can_enter_weight", "can_request_quote")
     search_fields = ("name",)
     readonly_fields = ("created_at", "updated_at")
-    inlines = [TariffMarkupInline]
 
     # Customer.get_tariff() needs a default tariff: it can't be deleted, not even in bulk.
     def has_delete_permission(self, request, obj=None):

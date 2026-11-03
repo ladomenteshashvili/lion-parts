@@ -1,4 +1,4 @@
-"""Seed (G§6.2): GEL/USD with VAT 18, the Beliashvili pickup point, Tbilisi and its districts,
+"""Seed (G§6.2): the Beliashvili pickup point, Tbilisi and its districts,
 SiteSettings from the env values in use before the pricing app (invoice texts: same text in every
 language until translated in admin, LP-BE-1306)."""
 
@@ -26,12 +26,8 @@ def same_text(value):
 
 
 def seed(apps, schema_editor):
-    CurrencySettings = apps.get_model("pricing", "CurrencySettings")
     PickupPoint = apps.get_model("pricing", "PickupPoint")
     SiteSettings = apps.get_model("pricing", "SiteSettings")
-
-    for code in ("GEL", "USD"):
-        CurrencySettings.objects.get_or_create(currency=code, defaults={"vat_percent": Decimal("18.00")})
 
     if not PickupPoint.objects.exists():
         PickupPoint.objects.create(name_i18n={

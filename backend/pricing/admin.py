@@ -3,7 +3,7 @@ from django.utils.translation import gettext_lazy as _
 
 from api.admin_i18n import TranslatedFieldsAdminMixin
 
-from .models import CurrencySettings, Discount, ExchangeRate, PickupPoint, SiteSettings
+from .models import Discount, ExchangeRate, PickupPoint, SiteSettings
 from .rates import RateUnavailable, fetch_nbg_usd
 
 
@@ -15,7 +15,16 @@ class SiteSettingsAdmin(TranslatedFieldsAdminMixin, admin.ModelAdmin):
                             "invoice_payment_due_text_i18n", "invoice_footer_text_i18n")
     readonly_fields = ("created_at", "updated_at")
     fieldsets = (
-        (_("Prices"), {"fields": ("price_valid_minutes", "default_shipping_usd_per_kg", "rate_max_age_days")}),
+        (_("Currency"), {
+            "description": _("USD is always the base pricing currency. Off: customers see and pay GEL only. "
+                             "On: USD is the default and customers can choose USD or GEL."),
+            "fields": ("multi_currency_enabled", "rate_max_age_days"),
+        }),
+        (_("Prices"), {
+            "description": _("Prices stay valid for this many Georgian business days (Monday to Friday, without "
+                             'the public holidays below, e.g. ["2026-01-01", "2026-01-07"]).'),
+            "fields": ("vat_percent", "price_valid_business_days", "public_holidays", "default_shipping_usd_per_kg"),
+        }),
         (_("Delivery areas"), {
             "description": _('Cities: [{"code": "tbilisi", "name": {"ka": "...", "en": "...", "ru": "..."}}]. '
                              'Districts also need "city" with an existing city code.'),
@@ -32,13 +41,6 @@ class SiteSettingsAdmin(TranslatedFieldsAdminMixin, admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
-
-
-@admin.register(CurrencySettings)
-class CurrencySettingsAdmin(admin.ModelAdmin):
-    list_display = ("currency", "vat_percent", "is_active", "updated_at")
-    list_editable = ("vat_percent", "is_active")
-    readonly_fields = ("created_at", "updated_at")
 
 
 @admin.register(ExchangeRate)

@@ -4,15 +4,15 @@ from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 
 from accounts.validators import normalize_vin
-from pricing.models import CurrencySettings
+from pricing.currency import allowed_currencies, default_currency
 
 
 class CurrencyField(serializers.CharField):
-    """An active currency code (CurrencySettings.is_active); unknown or inactive -> `invalid`."""
+    """A currency customers may use now (GEL only unless multi-currency is on); else `invalid`."""
 
     def to_internal_value(self, data):
         value = super().to_internal_value(data).upper()
-        if value not in CurrencySettings.active_codes():
+        if value not in allowed_currencies():
             raise serializers.ValidationError(_("Choose one of the available currencies."), code="invalid")
         return value
 
@@ -29,7 +29,7 @@ class VinField(serializers.CharField):
 class SearchSerializer(serializers.Serializer):
     part_number = serializers.CharField(max_length=120)
     vin = VinField()
-    currency = CurrencyField(required=False, default="GEL")
+    currency = CurrencyField(required=False, default=default_currency)
 
 
 class QuoteRequestSerializer(serializers.Serializer):

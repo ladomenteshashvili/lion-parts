@@ -115,16 +115,17 @@ class PartQuoteRequest(models.Model):
         (STATUS_CANCELLED, "Cancelled")])
     prepared_weight_kg = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
     supplier_price_usd = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
-    # price snapshot when ready (G§7.2)
+    # Operator-approved canonical USD price (G§7.2). It stays the base while the quote is valid; a GEL
+    # amount is always converted from it with the current rate when shown or added to a cart.
     shipping_usd_per_kg = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
     markup_percent = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     vat_percent = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
-    exchange_rate = models.DecimalField(max_digits=10, decimal_places=4, null=True, blank=True)
-    list_unit_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
-    discount_unit_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
-    unit_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    list_price_usd = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    discount_usd = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    unit_price_usd = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     discount = models.ForeignKey("pricing.Discount", on_delete=models.SET_NULL, null=True, blank=True)
-    currency = models.CharField(max_length=3, default="GEL")
+    price_valid_until = models.DateTimeField(null=True, blank=True)  # business days from approval (G§7.5)
+    currency = models.CharField(max_length=3, default="GEL")  # the customer's display currency
     operator_message = models.TextField(blank=True)
     notification_token = models.UUIDField(default=uuid.uuid4, unique=True)
     price_ready_at = models.DateTimeField(null=True, blank=True)
@@ -140,7 +141,7 @@ class PartQuoteRequest(models.Model):
 
     @property
     def is_price_ready(self):
-        return self.price_ready_at is not None and self.unit_price is not None
+        return self.price_ready_at is not None and self.unit_price_usd is not None
 
 
 MAX_IMAGE_BYTES = 5 * 1024 * 1024

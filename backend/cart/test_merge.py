@@ -7,11 +7,11 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from accounts.models import CustomerTariff, TariffMarkup
+from accounts.models import CustomerTariff
 from accounts.test_register import PHYSICAL
 from accounts.testing import PASSWORD, make_customer
 from cart.models import Cart, CartItem
-from pricing.models import ExchangeRate
+from pricing.models import ExchangeRate, SiteSettings
 from pricing.rates import RateUnavailable
 
 D = Decimal
@@ -52,8 +52,7 @@ class MergeTests(TestCase):
         self.assertEqual(Cart.objects.count(), 1)  # the guest cart is gone
 
     def test_partner_sees_tariff_prices_on_guest_lines(self):
-        partner = CustomerTariff.objects.create(name="Partner")
-        TariffMarkup.objects.create(tariff=partner, currency="GEL", markup_percent=D("5"))
+        partner = CustomerTariff.objects.create(name="Partner", markup_percent=D("5"))
         self.customer.tariff = partner
         self.customer.save()
         guest = APIClient()
@@ -81,6 +80,7 @@ class MergeTests(TestCase):
     def test_new_customer_cart_keeps_the_guest_currency(self):
         guest = APIClient()
         self.add(guest)
+        SiteSettings.objects.update(multi_currency_enabled=True)
         guest.patch("/api/cart/", {"currency": "USD"}, format="json")
         self.login(guest)
         cart = guest.get("/api/cart/").json()
@@ -105,7 +105,7 @@ class MergeTests(TestCase):
     def test_rate_outage_does_not_break_login(self):
         guest = APIClient()
         self.add(guest)
-        with mock.patch("cart.services.get_usd_rate", side_effect=RateUnavailable()):
+        with mock.patch("cart.services.display_rate", side_effect=RateUnavailable()):
             self.login(guest)
         cart = guest.get("/api/cart/").json()
         line = CartItem.objects.get()

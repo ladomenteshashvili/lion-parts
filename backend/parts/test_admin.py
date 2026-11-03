@@ -8,7 +8,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from accounts.models import CustomerTariff, TariffMarkup
+from accounts.models import CustomerTariff
 from accounts.testing import make_customer
 from parts.models import PartQuoteRequest
 from pricing.models import ExchangeRate
@@ -38,23 +38,22 @@ class PriceReadyActionTests(TestCase):
         self.run_action(weight, manual)
         weight.refresh_from_db()
         manual.refresh_from_db()
-        self.assertEqual((weight.unit_price, weight.list_unit_price, weight.currency), (D("427.07"), D("427.07"), "GEL"))
-        self.assertEqual((manual.unit_price, manual.currency), (D("164.26"), "USD"))
-        for qr in (weight, manual):
+        for qr in (weight, manual):  # the approved base is canonical USD, whatever the display currency
+            self.assertEqual((qr.unit_price_usd, qr.list_price_usd, qr.discount_usd), (D("164.26"), D("164.26"), D("0.00")))
             self.assertEqual(qr.status, "resolved")
             self.assertTrue(qr.is_price_ready)
-            self.assertEqual((qr.markup_percent, qr.vat_percent, qr.exchange_rate, qr.shipping_usd_per_kg),
-                             (D("20.00"), D("18.00"), D("2.6000"), D("8.00")))
+            self.assertEqual((qr.markup_percent, qr.vat_percent, qr.shipping_usd_per_kg), (D("20.00"), D("18.00"), D("8.00")))
+            self.assertGreater(qr.price_valid_until, qr.price_ready_at)
+        self.assertEqual((weight.currency, manual.currency), ("GEL", "USD"))
 
     def test_partner_customer_gets_partner_prices(self):
-        partner = CustomerTariff.objects.create(name="Partner")
-        TariffMarkup.objects.create(tariff=partner, currency="GEL", markup_percent=D("10"))
+        partner = CustomerTariff.objects.create(name="Partner", markup_percent=D("10"))
         self.customer.tariff = partner
         self.customer.save()
         qr = self.request_()
         self.run_action(qr)
         qr.refresh_from_db()
-        self.assertEqual(qr.unit_price, D("391.48"))
+        self.assertEqual(qr.unit_price_usd, D("150.57"))
 
     def test_missing_weight_or_price_is_skipped(self):
         no_weight, no_price = self.request_(prepared_weight_kg=None), self.request_(supplier_price_usd=None)

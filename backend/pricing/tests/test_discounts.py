@@ -19,10 +19,9 @@ class BestDiscountTests(TestCase):
         self.now = timezone.now()
         self.customer = make_customer()
 
-    def best(self, customer="default", part="17940-25020", brand="Toyota", price=D("100.00"), currency="GEL",
-             rate=D("2.5")):
+    def best(self, customer="default", part="17940-25020", brand="Toyota", price=D("100.00")):
         customer = self.customer if customer == "default" else customer
-        return best_discount(customer, part, brand, price, currency, rate, self.now)
+        return best_discount(customer, part, brand, price, self.now)
 
     def rule(self, value, kind="percent", **fields):
         return Discount.objects.create(name=f"r{value}", kind=kind, value=value, **fields)
@@ -35,10 +34,9 @@ class BestDiscountTests(TestCase):
         part_rule = self.rule(10, part_number="17940 25020")
         self.assertEqual(self.best(), (part_rule, D("10.00")))
 
-    def test_fixed_gel_on_a_usd_line(self):
-        rule = self.rule(50, kind="fixed")
-        self.assertEqual(self.best(currency="USD", price=D("120.00"), rate=D("2.5")), (rule, D("20.00")))
-        self.assertEqual(self.best(currency="GEL"), (rule, D("50.00")))
+    def test_fixed_discount_is_usd_per_unit(self):
+        rule = self.rule(20, kind="fixed")
+        self.assertEqual(self.best(price=D("120.00")), (rule, D("20.00")))
 
     def test_equal_amounts_lower_id_wins(self):
         first = self.rule(10)

@@ -9,11 +9,12 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework.test import APIClient
 
-from accounts.models import CustomerTariff, TariffMarkup
+from accounts.models import CustomerTariff
 from accounts.testing import make_customer
 from parts.amt_provider import AMTProviderError
 from parts.models import PartSearchLog
-from pricing.models import CurrencySettings, ExchangeRate
+from pricing.models import ExchangeRate, SiteSettings
+from pricing.validity import price_valid_until
 from pricing.rates import RateUnavailable
 
 D = Decimal
@@ -38,8 +39,7 @@ class SearchTests(TestCase):
         self.assertEqual(set(data), SEARCH_KEYS)
         self.assertEqual((data["part_number"], data["vin"], data["currency"], data["exchange_rate"], data["not_found"]),
                          ("G9010-60020", "WBA8E9G50GNU12345", "GEL", "2.5971", False))
-        valid_until = parse_datetime(data["price_valid_until"])
-        self.assertTrue(before + timedelta(minutes=59) < valid_until <= timezone.now() + timedelta(minutes=60))
+        self.assertEqual(parse_datetime(data["price_valid_until"]), price_valid_until(before))  # 10 business days
         self.assertEqual(len(data["offers"]), 4)
         ready = data["offers"][0]
         self.assertEqual((ready["status"], ready["currency"], ready["in_cart_quantity"], ready["image_urls"]),
@@ -55,14 +55,30 @@ class SearchTests(TestCase):
         data = self.search(part_number="NF-1").json()
         self.assertEqual((data["not_found"], data["offers"]), (True, []))
 
-    def test_usd(self):
-        data = self.search(currency="usd").json()
-        self.assertEqual((data["currency"], data["offers"][0]["currency"]), ("USD", "USD"))
+    def test_multi_currency_off_gel_only(self):
+        self.assertEqual(self.search().json()["currency"], "GEL")
+        response = self.search(currency="USD")
+        self.assertEqual((response.status_code, response.json()["fields"]["currency"][0]["code"]), (400, "invalid"))
+
+    def test_multi_currency_on_usd_default_and_gel_converted(self):
+        SiteSettings.objects.update(multi_currency_enabled=True)
+        usd = self.search().json()
+        self.assertEqual((usd["currency"], usd["exchange_rate"], usd["offers"][0]["currency"]), ("USD", "1.0000", "USD"))
+        gel = self.search(currency="gel").json()
+        self.assertEqual((gel["currency"], gel["exchange_rate"]), ("GEL", "2.5971"))
+        self.assertEqual(gel["offers"][0]["unit_price"],
+                         f"{(D(usd['offers'][0]['unit_price']) * D('2.5971')).quantize(D('0.01'))}")
+
+    def test_usd_search_needs_no_exchange_rate(self):
+        SiteSettings.objects.update(multi_currency_enabled=True)
+        ExchangeRate.objects.all().delete()
+        with mock.patch("pricing.rates.fetch_nbg_usd", side_effect=RateUnavailable()):
+            self.assertEqual(self.search(currency="USD").status_code, 200)
+            self.assertEqual(self.search(currency="GEL").json()["code"], "rate_unavailable")
 
     def test_partner_gets_partner_prices_and_guest_default_prices(self):
         guest_price = self.search().json()["offers"][0]["unit_price"]
-        partner = CustomerTariff.objects.create(name="Partner")
-        TariffMarkup.objects.create(tariff=partner, currency="GEL", markup_percent=D("5"))
+        partner = CustomerTariff.objects.create(name="Partner", markup_percent=D("5"))
         customer = make_customer(tariff=partner)
         client = APIClient()
         client.force_login(customer.user)
@@ -82,7 +98,6 @@ class SearchTests(TestCase):
         self.assertEqual(PartSearchLog.objects.latest("id").customer, customer)
 
     def test_validation(self):
-        CurrencySettings.objects.filter(currency="USD").update(is_active=False)
         response = self.client.post("/api/parts/search/", {"vin": "123", "currency": "USD"}, format="json")
         fields = {k: [e["code"] for e in v] for k, v in response.json()["fields"].items()}
         self.assertEqual(fields, {"part_number": ["required"], "vin": ["invalid_vin"], "currency": ["invalid"]})

@@ -1,16 +1,19 @@
 """LP-BE-1101: configuration admin (G§10)."""
 
+import json
+
 from datetime import date
 from decimal import Decimal
 from unittest import mock
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from accounts.models import CustomerTariff, TariffMarkup
+from accounts.models import CustomerTariff
 from pricing.engine import PriceInput, price_offer
-from pricing.models import CurrencySettings, Discount, ExchangeRate, SiteSettings
+from pricing.models import Discount, ExchangeRate, SiteSettings
 from pricing.rates import RateUnavailable
 
 D = Decimal
@@ -21,29 +24,70 @@ class AdminTestCase(TestCase):
         self.client.force_login(get_user_model().objects.create_superuser("root", "r@example.com", "x"))
 
 
+def site_form(**changes):
+    """The SiteSettings admin form data for the current row, with `changes` applied."""
+    site = SiteSettings.get()
+    data = {}
+    for field in ("multi_currency_enabled", "rate_max_age_days", "vat_percent", "price_valid_business_days",
+                  "default_shipping_usd_per_kg", "invoice_seller_code", "invoice_seller_phone", "invoice_seller_email"):
+        value = getattr(site, field)
+        if isinstance(value, bool):
+            if value:
+                data[field] = "on"
+        else:
+            data[field] = str(value)
+    for field in ("public_holidays", "delivery_cities", "delivery_districts"):
+        data[field] = json.dumps(getattr(site, field))
+    for field in ("invoice_seller_name_i18n", "invoice_seller_address_i18n", "invoice_bank_details_i18n",
+                  "invoice_payment_due_text_i18n", "invoice_footer_text_i18n"):
+        for i, (code, _name) in enumerate(settings.LANGUAGES):
+            data[f"{field}_{i}"] = getattr(site, field).get(code, "")
+    for key, value in changes.items():
+        if value is False:
+            data.pop(key, None)
+        else:
+            data[key] = "on" if value is True else value
+    return data
+
+
 class OperatorChangesPricesTests(AdminTestCase):
     def usd_price(self):
-        return price_offer(PriceInput(D("100"), D("2"), D("8")), customer=None, currency="USD", part_number="P",
-                           brand="", usd_rate=D("2.6")).list_unit_price
+        return price_offer(PriceInput(D("100"), D("2"), D("8")), customer=None, part_number="P",
+                           brand="").list_price_usd
 
-    def test_usd_markup_and_vat_changes_reach_the_next_price(self):
+    def test_markup_and_vat_changes_reach_the_next_price(self):
         self.assertEqual(self.usd_price(), D("164.26"))
         tariff = CustomerTariff.objects.get(is_default=True)
-        markups = list(TariffMarkup.objects.filter(tariff=tariff).order_by("currency"))  # GEL, USD
-        data = {"name": tariff.name, "is_default": "on", "payment_terms": "full", "split_upfront_percent": "70",
-                "benefits_text_i18n_0": "", "benefits_text_i18n_1": "", "benefits_text_i18n_2": "",
-                "markups-TOTAL_FORMS": "2", "markups-INITIAL_FORMS": "2", "markups-MIN_NUM_FORMS": "0",
-                "markups-MAX_NUM_FORMS": "1000"}
-        for i, (markup, percent) in enumerate(zip(markups, ("20", "30"))):
-            data.update({f"markups-{i}-id": markup.pk, f"markups-{i}-tariff": tariff.pk,
-                         f"markups-{i}-currency": markup.currency, f"markups-{i}-markup_percent": percent})
+        data = {"name": tariff.name, "is_default": "on", "markup_percent": "30", "payment_terms": "full",
+                "split_upfront_percent": "70", "benefits_text_i18n_0": "", "benefits_text_i18n_1": "",
+                "benefits_text_i18n_2": ""}
         response = self.client.post(f"/admin/accounts/customertariff/{tariff.pk}/change/", data)
         self.assertEqual(response.status_code, 302, response.content[:2000])
-        usd = CurrencySettings.objects.get(currency="USD")
-        response = self.client.post(f"/admin/pricing/currencysettings/{usd.pk}/change/",
-                                    {"currency": "USD", "vat_percent": "20", "is_active": "on"})
-        self.assertEqual(response.status_code, 302)
+        response = self.client.post("/admin/pricing/sitesettings/1/change/", site_form(vat_percent="20"))
+        self.assertEqual(response.status_code, 302, response.content[:3000])
         self.assertEqual(self.usd_price(), D("180.96"))  # 116 x 1.3 x 1.2
+
+
+class CurrencyAndValidityAdminTests(AdminTestCase):
+    URL = "/admin/pricing/sitesettings/1/change/"
+
+    def test_multi_currency_toggle_and_validity_are_editable(self):
+        response = self.client.post(self.URL, site_form(multi_currency_enabled=True, price_valid_business_days="5",
+                                                        public_holidays='["2026-01-01", "2026-01-07"]'))
+        self.assertEqual(response.status_code, 302, response.content[:3000])
+        site = SiteSettings.get()
+        self.assertEqual((site.multi_currency_enabled, site.price_valid_business_days, site.public_holidays),
+                         (True, 5, ["2026-01-01", "2026-01-07"]))
+
+    def test_invalid_values_are_refused(self):
+        for changes in ({"price_valid_business_days": "0"}, {"vat_percent": "101"}, {"vat_percent": "-1"},
+                        {"public_holidays": '["2026-13-01"]'}, {"public_holidays": '"2026-01-01"'},
+                        {"public_holidays": '["01.01.2026"]'}):
+            with self.subTest(**changes):
+                response = self.client.post(self.URL, site_form(**changes))
+                self.assertEqual(response.status_code, 200)  # re-rendered with the error
+        site = SiteSettings.get()
+        self.assertEqual((site.price_valid_business_days, site.vat_percent, site.public_holidays), (10, D("18.00"), []))
 
 
 class SiteSettingsAdminTests(AdminTestCase):
@@ -111,6 +155,6 @@ class DiscountAdminTests(AdminTestCase):
 class PageSmokeTests(AdminTestCase):
     def test_pages_render(self):
         for url in ("/admin/pricing/pickuppoint/", "/admin/pricing/pickuppoint/1/change/",
-                    "/admin/pricing/currencysettings/", "/admin/parts/partimage/", "/admin/parts/partimage/add/"):
+                    "/admin/pricing/sitesettings/1/change/", "/admin/parts/partimage/", "/admin/parts/partimage/add/"):
             with self.subTest(url=url):
                 self.assertEqual(self.client.get(url).status_code, 200)

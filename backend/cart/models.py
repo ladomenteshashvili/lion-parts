@@ -43,16 +43,20 @@ class CartItem(models.Model):
     weight_source = models.CharField(max_length=20, blank=True)  # api / customer / operator
     eta_min_days = models.PositiveSmallIntegerField(null=True, blank=True)
     eta_max_days = models.PositiveSmallIntegerField(null=True, blank=True)
-    # price snapshot (G§7.2), in cart.currency
+    # canonical price snapshot (G§7.2, USD; never changed by the exchange rate)
     supplier_price_usd = models.DecimalField(max_digits=12, decimal_places=2)
     shipping_usd_per_kg = models.DecimalField(max_digits=8, decimal_places=2)
     markup_percent = models.DecimalField(max_digits=6, decimal_places=2)
     vat_percent = models.DecimalField(max_digits=5, decimal_places=2)
+    list_price_usd = models.DecimalField(max_digits=12, decimal_places=2)
+    discount_usd = models.DecimalField(max_digits=12, decimal_places=2)
+    unit_price_usd = models.DecimalField(max_digits=12, decimal_places=2)
+    discount = models.ForeignKey("pricing.Discount", on_delete=models.SET_NULL, null=True, blank=True)
+    # the same price in cart.currency, converted with exchange_rate (kept current, see cart.services)
     exchange_rate = models.DecimalField(max_digits=10, decimal_places=4)
     list_unit_price = models.DecimalField(max_digits=12, decimal_places=2)
     discount_unit_amount = models.DecimalField(max_digits=12, decimal_places=2)
     unit_price = models.DecimalField(max_digits=12, decimal_places=2)
-    discount = models.ForeignKey("pricing.Discount", on_delete=models.SET_NULL, null=True, blank=True)
     previous_unit_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     price_valid_until = models.DateTimeField()
     availability_status = models.CharField(max_length=20, default=STATUS_OK)  # ok / price_changed / unavailable
@@ -67,8 +71,13 @@ class CartItem(models.Model):
         return f"{self.part_number} x {self.quantity}"
 
     def apply_snapshot(self, snapshot):
-        """Store a pricing.engine.PriceSnapshot on this line (not saved)."""
+        """Store a canonical pricing.engine.PriceSnapshot on this line (not saved)."""
         for field in ("supplier_price_usd", "weight_kg", "shipping_usd_per_kg", "markup_percent", "vat_percent",
-                      "exchange_rate", "list_unit_price", "discount_unit_amount", "unit_price"):
+                      "list_price_usd", "discount_usd", "unit_price_usd"):
             setattr(self, field, getattr(snapshot, field))
         self.discount_id = snapshot.discount_id
+
+    def apply_converted(self, converted):
+        """Store the customer-currency amounts (pricing.engine.Converted, not saved)."""
+        for field in ("exchange_rate", "list_unit_price", "discount_unit_amount", "unit_price"):
+            setattr(self, field, getattr(converted, field))

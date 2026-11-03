@@ -7,7 +7,8 @@ from rest_framework.permissions import AllowAny
 
 from api.pagination import Pagination
 
-META_KEYS = {"languages", "default_language", "currencies", "usd_rate", "pickup_points", "delivery",
+META_KEYS = {"languages", "default_language", "currencies", "multi_currency_enabled", "default_currency",
+             "base_currency", "price_valid_business_days", "usd_rate", "pickup_points", "delivery",
              "otp_length", "otp_resend_seconds", "password_rules"}
 
 
@@ -35,7 +36,7 @@ class MetaTests(TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(set(data), META_KEYS)
-        self.assertEqual(data["currencies"], [{"code": "GEL", "symbol": "₾"}, {"code": "USD", "symbol": "$"}])
+        self.assertEqual(data["currencies"], [{"code": "GEL", "symbol": "₾"}])  # multi-currency off by default
         self.assertIsNone(data["usd_rate"])  # no rate fetched yet
         self.assertEqual((data["otp_length"], data["otp_resend_seconds"]), (6, 60))
         self.assertEqual(data["password_rules"],

@@ -6,10 +6,10 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from accounts.models import CustomerTariff, TariffMarkup
+from accounts.models import CustomerTariff
 from accounts.testing import PASSWORD, make_customer
 from cart.models import CartItem
-from pricing.engine import PriceInput, price_offer
+from pricing.engine import PriceInput, convert, price_offer
 from pricing.models import Discount, ExchangeRate
 
 D = Decimal
@@ -19,8 +19,7 @@ D = Decimal
 class GuestSearchAddedAfterLoginTests(TestCase):
     def setUp(self):
         ExchangeRate.objects.create(date=timezone.localdate(), rate=D("2.6000"))
-        partner = CustomerTariff.objects.create(name="Partner")
-        TariffMarkup.objects.create(tariff=partner, currency="GEL", markup_percent=D("5"))
+        partner = CustomerTariff.objects.create(name="Partner", markup_percent=D("5"))
         self.customer = make_customer(tariff=partner)
         self.client = APIClient()
 
@@ -35,8 +34,8 @@ class GuestSearchAddedAfterLoginTests(TestCase):
         self.client.post("/api/auth/login/", {"email": "nino@example.com", "password": PASSWORD}, format="json")
 
     def partner_price(self):
-        return price_offer(PriceInput(D("180.00"), D("2.00"), D("8.00")), customer=self.customer, currency="GEL",
-                           part_number="G9010-60020", brand="OEM").unit_price
+        return convert(price_offer(PriceInput(D("180.00"), D("2.00"), D("8.00")), customer=self.customer,
+                                   part_number="G9010-60020", brand="OEM"), "GEL", D("2.6")).unit_price
 
     def test_partner_gets_their_tariff_price_not_the_guest_price(self):
         guest_search = self.search()

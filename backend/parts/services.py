@@ -1,17 +1,14 @@
 """Parts services: part images and pricing a prepared quote (G§7.6)."""
 
-from datetime import timedelta
-from decimal import Decimal
-
 from django.conf import settings
 from django.utils import timezone
 
 from accounts.validators import normalize_part_number
 from api.errors import ApiError
 from orders.texts import render_text
-from pricing.engine import PriceInput, default_shipping_usd_per_kg, price_offer
-from pricing.models import SiteSettings
-from pricing.rates import get_usd_rate
+from pricing.currency import default_currency, display_rate
+from pricing.engine import PriceInput, convert, default_shipping_usd_per_kg, price_offer
+from pricing.validity import price_valid_until
 
 from .models import PartImage, PartQuoteRequest, PartSearchLog
 from .providers import build_offers, fetch_rows, public_offer
@@ -27,20 +24,20 @@ def image_urls(request, part_number, brand):
 
 
 def mark_quote_price_ready(quote_request):
-    """Price a quote request from its supplier price and the operator's weight for its customer and
-    currency, store the snapshot and mark it ready. Raises RateUnavailable; callers check
-    prepared_weight_kg and supplier_price_usd first."""
+    """The operator approves a price: canonical USD from the supplier price and the operator's weight
+    for the request's customer, valid for the configured business days. Running it again re-approves
+    an expired quote. Callers check prepared_weight_kg and supplier_price_usd first."""
     snapshot = price_offer(
         PriceInput(quote_request.supplier_price_usd, quote_request.prepared_weight_kg, default_shipping_usd_per_kg()),
-        customer=quote_request.customer, currency=quote_request.currency,
-        part_number=quote_request.part_number, brand=quote_request.brand,
+        customer=quote_request.customer, part_number=quote_request.part_number, brand=quote_request.brand,
     )
-    for field in ("shipping_usd_per_kg", "markup_percent", "vat_percent", "exchange_rate", "list_unit_price",
-                  "discount_unit_amount", "unit_price"):
+    for field in ("shipping_usd_per_kg", "markup_percent", "vat_percent", "list_price_usd", "discount_usd",
+                  "unit_price_usd"):
         setattr(quote_request, field, getattr(snapshot, field))
     quote_request.discount_id = snapshot.discount_id
     quote_request.status = PartQuoteRequest.STATUS_RESOLVED
     quote_request.price_ready_at = timezone.now()
+    quote_request.price_valid_until = price_valid_until(quote_request.price_ready_at)
     quote_request.seen_at = None
     quote_request.save()
     # LP-BE-1104/903: notify(price_ready) once notifications exist.
@@ -69,9 +66,9 @@ def run_search(request, *, part_number, vin, currency):
     log = PartSearchLog(kind=PartSearchLog.KIND_SEARCH, customer=customer, session_key=session_key,
                         part_number=part_number, vin=vin, currency=currency, provider=settings.PARTS_PROVIDER)
     try:
+        rate = display_rate(currency)  # no outdated GEL: an unavailable rate fails before the supplier call
         provider, raw, rows = fetch_rows(part_number)
-        rate = get_usd_rate()
-        offers = build_offers(rows, customer=customer, currency=currency, part_number=part_number, usd_rate=rate)
+        offers = build_offers(rows, customer=customer, part_number=part_number)
     except ApiError as exc:
         log.status, log.error_message = PartSearchLog.STATUS_FAILED, exc.code
         log.save()
@@ -79,7 +76,7 @@ def run_search(request, *, part_number, vin, currency):
     log.provider, log.raw_response = provider, {"data": raw}
     log.normalized_response, log.found_count = {"offers": offers, "priced_for": priced_for(customer)}, len(offers)
     log.exchange_rate = rate
-    log.price_valid_until = timezone.now() + timedelta(minutes=SiteSettings.get().price_valid_minutes)
+    log.price_valid_until = price_valid_until()
     log.save()
     return log
 
@@ -87,20 +84,20 @@ def run_search(request, *, part_number, vin, currency):
 def search_response(request, log):
     from cart.services import cart_quantities  # cart builds on parts
 
-    in_cart = cart_quantities(request)
+    in_cart, rate = cart_quantities(request), display_rate(log.currency)
     return {
         "search_id": log.pk, "part_number": log.part_number, "vin": log.vin, "currency": log.currency,
-        "exchange_rate": f"{log.exchange_rate:.4f}" if log.exchange_rate is not None else None,
-        "price_valid_until": log.price_valid_until, "not_found": not log.offers(),
-        "offers": [present_offer(request, offer, log.part_number, in_cart) for offer in log.offers()],
+        "exchange_rate": f"{rate:.4f}", "price_valid_until": log.price_valid_until, "not_found": not log.offers(),
+        "offers": [present_offer(request, offer, log.part_number, log.currency, rate, in_cart)
+                   for offer in log.offers()],
     }
 
 
-def present_offer(request, offer, part_number, in_cart=None):
+def present_offer(request, offer, part_number, currency, rate, in_cart=None):
     """Public offer with the request-dependent parts: cart quantity (LP-BE-501), image URLs and the
     weight disclaimer in the request language (stored as weight_source only, G§7.6)."""
     notice = render_text("weight_customer_notice") if offer.get("weight_source") == "customer" else ""
-    return public_offer(offer, in_cart_quantity=(in_cart or {}).get(offer["offer_id"], 0),
+    return public_offer(offer, currency=currency, rate=rate, in_cart_quantity=(in_cart or {}).get(offer["offer_id"], 0),
                         image_urls=image_urls(request, part_number, offer.get("brand")),
                         customer_notice=notice)
 
@@ -111,18 +108,18 @@ def calculate_weight_price(request, log, offer_id, weight_kg):
     customer = request_customer(request)
     if log.offer(offer_id) is None:
         raise ApiError("not_found", status=404)
+    rate = display_rate(log.currency)
     provider, raw, rows = fetch_rows(log.part_number)
     row = next((r for r in rows if r["offer_id"] == offer_id), None)
     if row is None:
         raise ApiError("not_found", status=404)  # the supplier no longer returns this offer
-    offers = build_offers([row], customer=customer, currency=log.currency, part_number=log.part_number,
+    offers = build_offers([row], customer=customer, part_number=log.part_number,
                           weight_source="customer", weight_override=weight_kg)
     return PartSearchLog.objects.create(
         kind=PartSearchLog.KIND_WEIGHT_CALC, customer=customer, session_key=request.session.session_key or "",
         provider=provider, part_number=log.part_number, vin=log.vin, found_count=1, raw_response={"data": raw},
         normalized_response={"offers": offers, "priced_for": priced_for(customer)}, currency=log.currency,
-        exchange_rate=Decimal(offers[0]["snapshot"]["exchange_rate"]),
-        price_valid_until=timezone.now() + timedelta(minutes=SiteSettings.get().price_valid_minutes),
+        exchange_rate=rate, price_valid_until=price_valid_until(),
     )
 
 
@@ -157,7 +154,7 @@ def create_quote_request(customer, data, log=None):
                   "supplier_price_usd": offer.get("supplier_price_usd")}
     else:
         fields = {"part_number": data["part_number"], "vin": data.get("vin", ""), "offer_id": "",
-                  "currency": data.get("currency", "GEL")}
+                  "currency": default_currency()}
     existing = next((qr for qr in PartQuoteRequest.objects.filter(
         customer=customer, request_type=data["request_type"], offer_id=fields["offer_id"],
         status__in=PartQuoteRequest.OPEN_STATUSES,
@@ -168,11 +165,18 @@ def create_quote_request(customer, data, log=None):
                                            comment=data.get("comment", ""), **fields), True
 
 
+def quote_unit_price(qr):
+    """The approved unit price in the quote's currency at the current rate (GEL follows the rate,
+    the USD base doesn't change). Raises RateUnavailable for GEL without a current rate."""
+    return f"{convert(qr, qr.currency, display_rate(qr.currency)).unit_price:.2f}"
+
+
 def quote_request_data(qr):
     """The G§8.0 QuoteRequest."""
     return {"id": qr.pk, "request_type": qr.request_type, "part_number": qr.part_number, "vin": qr.vin,
             "name": qr.name, "brand": qr.brand, "status": qr.status, "is_price_ready": qr.is_price_ready,
-            "unit_price": f"{qr.unit_price:.2f}" if qr.is_price_ready else None, "currency": qr.currency,
+            "unit_price": quote_unit_price(qr) if qr.is_price_ready else None, "currency": qr.currency,
+            "price_valid_until": qr.price_valid_until,
             "weight_kg": f"{qr.prepared_weight_kg:.2f}" if qr.prepared_weight_kg is not None else None,
             "operator_message": qr.operator_message, "created_at": qr.created_at}
 
@@ -180,7 +184,8 @@ def quote_request_data(qr):
 def public_quote_data(qr):
     """GET /api/public/q/<token>/: the prepared price only, never customer data."""
     return {"quote_request_id": qr.pk, "part_number": qr.part_number, "name": qr.name, "brand": qr.brand,
-            "unit_price": f"{qr.unit_price:.2f}", "currency": qr.currency, "eta_min_days": qr.eta_min_days,
+            "unit_price": quote_unit_price(qr), "currency": qr.currency, "price_valid_until": qr.price_valid_until,
+            "eta_min_days": qr.eta_min_days,
             "eta_max_days": qr.eta_max_days,
             "weight_kg": f"{qr.prepared_weight_kg:.2f}" if qr.prepared_weight_kg is not None else None,
             "operator_message": qr.operator_message, "requires_login": True}

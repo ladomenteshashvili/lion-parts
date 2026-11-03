@@ -8,7 +8,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from accounts.models import TariffMarkup
+from accounts.models import CustomerTariff
 from accounts.testing import make_customer
 from orders.models import Order, OrderItem
 from parts.models import PartQuoteRequest, PartSearchLog
@@ -52,12 +52,12 @@ class HistoryTests(TestCase):
         self.assertEqual(set(item), ITEM_KEYS)
         self.assertEqual((item["id"], item["search_id"], item["status"], item["offers_count"]),
                          (f"log-{latest['search_id']}", latest["search_id"], "ready", 4))
-        cheapest = min(D(o["unit_price"]) for o in latest["offers"] if o["unit_price"])
+        cheapest = min(D(o["unit_price"]) for o in latest["offers"] if o["unit_price"])  # GEL at today's rate
         self.assertEqual(item["unit_price"], f"{cheapest:.2f}")
 
     def test_price_changed_against_the_previous_search(self):
         first = self.search()
-        TariffMarkup.objects.filter(tariff__is_default=True, currency="GEL").update(markup_percent=D("25"))
+        CustomerTariff.objects.filter(is_default=True).update(markup_percent=D("25"))
         self.search()
         item = self.history()["results"][0]
         previous = min(D(o["unit_price"]) for o in first["offers"] if o["unit_price"])

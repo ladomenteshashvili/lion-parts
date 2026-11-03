@@ -40,15 +40,16 @@ class PartSearchLogAdmin(admin.ModelAdmin):
 @admin.register(PartQuoteRequest)
 class PartQuoteRequestAdmin(admin.ModelAdmin):
     list_display = ("id", "request_type", "part_number", "customer", "status", "prepared_weight_kg",
-                    "supplier_price_usd", "unit_price", "currency", "price_ready_at", "customer_link", "created_at")
+                    "supplier_price_usd", "unit_price_usd", "currency", "price_ready_at", "price_valid_until",
+                    "customer_link", "created_at")
     list_filter = ("request_type", "status", "currency", "price_ready_at")
     search_fields = ("part_number", "vin", "customer__phone", "customer__user__email", "notification_token")
     list_select_related = ("customer",)
     raw_id_fields = ("customer", "search_log")
     actions = ("mark_price_ready",)
     readonly_fields = ("customer", "search_log", "request_type", "part_number", "vin", "comment", "offer_id",
-                       "quote_id", "shipping_usd_per_kg", "markup_percent", "vat_percent", "exchange_rate",
-                       "list_unit_price", "discount_unit_amount", "unit_price", "discount", "notification_token",
+                       "quote_id", "shipping_usd_per_kg", "markup_percent", "vat_percent", "list_price_usd",
+                       "discount_usd", "unit_price_usd", "discount", "price_valid_until", "notification_token",
                        "customer_link", "price_ready_at", "seen_at", "created_at", "updated_at")
     fieldsets = (
         (_("Request"), {"fields": ("customer", "request_type", "part_number", "vin", "comment", "status")}),
@@ -59,8 +60,11 @@ class PartQuoteRequestAdmin(admin.ModelAdmin):
                              "“price ready” action: the price is calculated for the customer automatically."),
             "fields": ("prepared_weight_kg", "supplier_price_usd", "currency", "operator_message"),
         }),
-        (_("Price snapshot"), {"fields": ("shipping_usd_per_kg", "markup_percent", "vat_percent", "exchange_rate",
-                                          "list_unit_price", "discount_unit_amount", "unit_price", "discount")}),
+        (_("Price snapshot"), {
+            "description": _("The approved price in USD (the base). Customers paying in GEL see it converted "
+                             "with the current NBG rate. Run “price ready” again to re-approve an expired quote."),
+            "fields": ("shipping_usd_per_kg", "markup_percent", "vat_percent", "list_price_usd", "discount_usd",
+                       "unit_price_usd", "discount", "price_valid_until")}),
         (_("Customer link"), {"fields": ("notification_token", "customer_link", "price_ready_at", "seen_at",
                                          "created_at", "updated_at")}),
     )

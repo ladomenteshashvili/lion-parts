@@ -2,9 +2,8 @@
 
 from api.i18n import tr
 
-from .models import CurrencySettings, ExchangeRate, PickupPoint, SiteSettings
-
-CURRENCY_SYMBOLS = {"GEL": "₾", "USD": "$"}
+from .currency import SYMBOLS, allowed_currencies, default_currency
+from .models import BASE_CURRENCY, ExchangeRate, PickupPoint, SiteSettings
 
 
 def latest_usd_rate():
@@ -12,12 +11,15 @@ def latest_usd_rate():
 
 
 def meta_pricing():
-    """Active currencies, the latest stored USD rate, active pickup points and delivery areas,
-    names in the request language."""
+    """Currency mode (whether to show a currency selector), the latest stored USD rate, price validity,
+    active pickup points and delivery areas, names in the request language."""
     site, rate = SiteSettings.get(), latest_usd_rate()
     return {
-        "currencies": [{"code": code, "symbol": CURRENCY_SYMBOLS.get(code, code)}
-                       for code in CurrencySettings.active_codes()],
+        "currencies": [{"code": code, "symbol": SYMBOLS[code]} for code in allowed_currencies()],
+        "multi_currency_enabled": site.multi_currency_enabled,
+        "default_currency": default_currency(),
+        "base_currency": BASE_CURRENCY,
+        "price_valid_business_days": site.price_valid_business_days,
         "usd_rate": {"rate": f"{rate.rate:.4f}", "date": rate.date.isoformat()} if rate else None,
         "pickup_points": [
             {"id": p.pk, "name": tr(p.name_i18n), "address": tr(p.address_i18n), "working_hours": tr(p.working_hours_i18n)}

@@ -15,8 +15,8 @@ def round2(value):
     return Decimal(value).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
-def best_discount(customer, part_number, brand, list_unit_price, currency, usd_rate, now):
-    """-> (rule or None, discount per unit in `currency`). Fixed values are GEL per unit."""
+def best_discount(customer, part_number, brand, list_price_usd, now):
+    """-> (rule or None, canonical USD discount per unit). Fixed values are USD per unit."""
     # shortcut: in-memory matching; add DB-side filtering if rules exceed a few thousand
     rules = Discount.objects.filter(is_active=True).filter(
         Q(valid_from__isnull=True) | Q(valid_from__lte=now),
@@ -37,11 +37,8 @@ def best_discount(customer, part_number, brand, list_unit_price, currency, usd_r
         return True
 
     def amount(rule):
-        if rule.kind == Discount.KIND_PERCENT:
-            raw = list_unit_price * rule.value / 100
-        else:
-            raw = rule.value if currency == "GEL" else rule.value / usd_rate
-        return min(round2(raw), list_unit_price)
+        raw = list_price_usd * rule.value / 100 if rule.kind == Discount.KIND_PERCENT else rule.value
+        return min(round2(raw), list_price_usd)
 
     best = max((r for r in rules if matches(r)), key=lambda r: (amount(r), -r.id), default=None)
     return best, amount(best) if best else ZERO

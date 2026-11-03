@@ -13,7 +13,7 @@ from accounts.testing import make_customer
 from orders.texts import EVENT_TEXTS
 from parts.models import PartSearchLog
 from parts.providers import DEMO_ROWS
-from pricing.engine import PriceInput, price_offer
+from pricing.engine import PriceInput, convert, price_offer
 from pricing.models import ExchangeRate
 
 D = Decimal
@@ -41,8 +41,9 @@ class CalculatePriceTests(TestCase):
         data = response.json()
         self.assertEqual(set(data), {"search_id", "price_valid_until", "offer"})
         offer = data["offer"]
-        expected = price_offer(PriceInput(D(DEMO_ROWS[-1]["supplier_price_usd"]), D("2.4"), D("8.00")),
-                               customer=self.customer, currency="GEL", part_number="68275354AC", brand="Denso")
+        expected = convert(price_offer(PriceInput(D(DEMO_ROWS[-1]["supplier_price_usd"]), D("2.4"), D("8.00")),
+                                       customer=self.customer, part_number="68275354AC", brand="Denso"),
+                           "GEL", D("2.6000"))
         self.assertEqual((offer["status"], offer["unit_price"], offer["weight_kg"], offer["weight_source"]),
                          ("ready", str(expected.unit_price), "2.40", "customer"))
         with translation.override("en"):
@@ -61,8 +62,8 @@ class CalculatePriceTests(TestCase):
         rows = [{**DEMO_ROWS[-1], "supplier_price_usd": "120.00"}]
         with mock.patch("parts.providers.DEMO_ROWS", DEMO_ROWS[:-1] + rows):
             offer = self.calc().json()["offer"]
-        expected = price_offer(PriceInput(D("120.00"), D("2.4"), D("8.00")), customer=self.customer, currency="GEL",
-                               part_number="68275354AC", brand="Denso")
+        expected = convert(price_offer(PriceInput(D("120.00"), D("2.4"), D("8.00")), customer=self.customer,
+                                       part_number="68275354AC", brand="Denso"), "GEL", D("2.6000"))
         self.assertEqual(offer["unit_price"], str(expected.unit_price))
 
     def test_without_permission_403(self):
