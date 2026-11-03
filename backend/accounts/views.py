@@ -9,12 +9,12 @@ from rest_framework.response import Response
 
 from api.errors import ApiError
 from api.throttles import (
-    EmailLoginThrottle, LoginIpThrottle, OtpSendIpThrottle, OtpVerifyThrottle, PhoneThrottle, RegisterThrottle,
+    EmailLoginThrottle, EmailSendThrottle, LoginIpThrottle, OtpSendIpThrottle, OtpVerifyThrottle, PhoneThrottle, RegisterThrottle,
 )
 
 from . import services
 from . import otp
-from .serializers import CodeSerializer, CustomerSerializer, LoginSerializer, RegisterSerializer
+from .serializers import CodeSerializer, CustomerSerializer, LoginSerializer, RegisterSerializer, TokenSerializer
 
 
 @api_view(["POST"])
@@ -89,3 +89,23 @@ def me(request):
         "cart_count": 0,  # filled by the cart (LP-BE-503)
         "badges": None,   # filled by notifications (LP-BE-904)
     })
+
+
+@api_view(["POST"])
+@throttle_classes([EmailSendThrottle])
+def email_send_verification(request):
+    customer = request.user.customer
+    if customer.is_email_verified:
+        raise ApiError("already_verified", status=409)
+    services.send_email_verification(customer)
+    return Response({"sent_to": customer.user.email, "resend_in": 60})
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def email_verify(request):
+    serializer = TokenSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    customer = services.verify_email_token(serializer.validated_data["token"])
+    own = request.user.is_authenticated and request.user.pk == customer.user_id
+    return Response({"verified": True, "customer": CustomerSerializer(customer).data if own else None})

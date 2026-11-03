@@ -182,3 +182,7 @@ class LoginSerializer(serializers.Serializer):
 
 class CodeSerializer(serializers.Serializer):
     code = serializers.CharField(max_length=6)
+
+
+class TokenSerializer(serializers.Serializer):
+    token = serializers.CharField(max_length=1000)

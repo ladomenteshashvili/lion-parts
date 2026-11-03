@@ -20,7 +20,7 @@ One row per backlog story (76). Status: `done` (committed, tests green), `in pro
 | LP-BE-205 | TBD | Registration step 2 (verify phone → create account → login) | 5 | M1 | 204, 207 | done |  | accounts/test_register_verify.py: one User+Customer(+company), authenticated session, verify email in outbox, session key rotates, wrong code keeps draft, race -> 409 email_taken; 5 verify_phone_code_* + 16 legacy legal-entity tests replaced |
 | LP-BE-206 | TBD | Login, logout, me, csrf | 3 | M1 | 103, 201 | done |  | accounts/test_login.py: identical body for unknown/wrong/staff/inactive/anonymized, old sessionid rejected after logout, staff can't log in, session key rotates, CSRF required + rotated, login_ip/login_email throttles; 2 legacy login tests replaced |
 | LP-BE-207 | TBD | Email infrastructure | 2 | M1 | 101, 1301, 1303 | done |  | api/tests/test_mail.py: 4 templates reach the outbox with links; ru email + lang=ru; SMTP failure -> False + log; every template translated ka/ru |
-| LP-BE-208 | TBD | Email verification (send & verify) | 3 | M1 | 207, 206 | todo |  |  |
+| LP-BE-208 | TBD | Email verification (send & verify) | 3 | M1 | 207, 206 | done |  | accounts/test_email_verification.py: tampered/48h+/pre-email-change/inactive/anonymized -> token_invalid, idempotent, customer only for own session, already_verified 409, email_send throttle |
 | LP-BE-209 | TBD | Password reset (request & confirm) | 3 | M1 | 207 | todo |  |  |
 | LP-BE-210 | TBD | Profile: read, update, change password | 2 | M1 | 206 | todo |  |  |
 | LP-BE-211 | TBD | Email change | 3 | M1 | 207 | todo |  |  |

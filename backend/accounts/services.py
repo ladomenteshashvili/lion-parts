@@ -124,3 +124,23 @@ def send_email_verification(customer):
     language = customer_language(customer)
     link = frontend_link("/verify-email", language, token=token)
     return send_templated_email(user.email, "verify_email", {"name": customer.first_name, "link": link}, language)
+
+
+EMAIL_TOKEN_MAX_AGE = 48 * 3600
+
+
+def verify_email_token(token):
+    """Mark the email verified. Invalid: tampered, older than 48 h, unknown/inactive user, or issued
+    for an address the user no longer has (email changed since)."""
+    try:
+        data = signing.loads(str(token or ""), salt=EMAIL_VERIFY_SALT, max_age=EMAIL_TOKEN_MAX_AGE)
+        customer = Customer.objects.select_related("user").get(user__pk=data["u"], user__is_active=True)
+    except (signing.BadSignature, Customer.DoesNotExist, KeyError, TypeError):
+        raise ApiError("token_invalid") from None
+    if customer.user.email != data["e"] or customer.anonymized_at:
+        raise ApiError("token_invalid")
+    if not customer.is_email_verified:
+        customer.is_email_verified = True
+        customer.email_verified_at = timezone.now()
+        customer.save(update_fields=["is_email_verified", "email_verified_at", "updated_at"])
+    return customer
