@@ -15,7 +15,7 @@ from api.throttles import SearchThrottle
 from . import services
 from .history import FILTERS, build_history, unseen_ready_quotes
 from .models import PartQuoteRequest, PartSearchLog
-from .serializers import QuoteRequestSerializer, SearchSerializer
+from .serializers import CalculatePriceSerializer, QuoteRequestSerializer, SearchSerializer
 
 
 @api_view(["POST"])
@@ -79,3 +79,16 @@ def history(request):
 def history_seen(request):
     unseen_ready_quotes(request.user.customer).update(seen_at=timezone.now())
     return Response(status=204)
+
+
+@api_view(["POST"])
+def calculate_price(request):
+    if not request.user.customer.get_tariff().can_enter_weight:
+        raise ApiError("weight_entry_not_allowed", status=403)
+    serializer = CalculatePriceSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    data = serializer.validated_data
+    log = services.owned_log(request, data["search_id"])
+    new_log = services.calculate_weight_price(request, log, data["offer_id"], data["weight_kg"])
+    return Response({"search_id": new_log.pk, "price_valid_until": new_log.price_valid_until,
+                     "offer": services.present_offer(request, new_log.offers()[0], new_log.part_number)})

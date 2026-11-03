@@ -1,12 +1,14 @@
 """Parts services: part images and pricing a prepared quote (G§7.6)."""
 
 from datetime import timedelta
+from decimal import Decimal
 
 from django.conf import settings
 from django.utils import timezone
 
 from accounts.validators import normalize_part_number
 from api.errors import ApiError
+from orders.texts import render_text
 from pricing.engine import PriceInput, default_shipping_usd_per_kg, price_offer
 from pricing.models import SiteSettings
 from pricing.rates import get_usd_rate
@@ -87,8 +89,32 @@ def search_response(request, log):
 
 
 def present_offer(request, offer, part_number):
-    """Public offer with the request-dependent parts: cart quantity (LP-BE-501) and image URLs."""
-    return public_offer(offer, in_cart_quantity=0, image_urls=image_urls(request, part_number, offer.get("brand")))
+    """Public offer with the request-dependent parts: cart quantity (LP-BE-501), image URLs and the
+    weight disclaimer in the request language (stored as weight_source only, G§7.6)."""
+    notice = render_text("weight_customer_notice") if offer.get("weight_source") == "customer" else ""
+    return public_offer(offer, in_cart_quantity=0, image_urls=image_urls(request, part_number, offer.get("brand")),
+                        customer_notice=notice)
+
+
+def calculate_weight_price(request, log, offer_id, weight_kg):
+    """Re-query the supplier for a fresh price, price the offer with the customer's weight and save it
+    as a new weight_calc log (its search_id + offer_id can be added to the cart)."""
+    customer = request_customer(request)
+    if log.offer(offer_id) is None:
+        raise ApiError("not_found", status=404)
+    provider, raw, rows = fetch_rows(log.part_number)
+    row = next((r for r in rows if r["offer_id"] == offer_id), None)
+    if row is None:
+        raise ApiError("not_found", status=404)  # the supplier no longer returns this offer
+    offers = build_offers([row], customer=customer, currency=log.currency, part_number=log.part_number,
+                          weight_source="customer", weight_override=weight_kg)
+    return PartSearchLog.objects.create(
+        kind=PartSearchLog.KIND_WEIGHT_CALC, customer=customer, session_key=request.session.session_key or "",
+        provider=provider, part_number=log.part_number, vin=log.vin, found_count=1, raw_response={"data": raw},
+        normalized_response={"offers": offers}, currency=log.currency,
+        exchange_rate=Decimal(offers[0]["snapshot"]["exchange_rate"]),
+        price_valid_until=timezone.now() + timedelta(minutes=SiteSettings.get().price_valid_minutes),
+    )
 
 
 def owned_log(request, search_id):

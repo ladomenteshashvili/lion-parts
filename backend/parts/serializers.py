@@ -48,3 +48,32 @@ class QuoteRequestSerializer(serializers.Serializer):
         if missing:
             raise serializers.ValidationError({f: [e] for f, e in missing.items()})
         return data
+
+
+class WeightField(serializers.DecimalField):
+    """kg, > 0 and <= 500; any problem is `invalid_weight` (G§7.1)."""
+
+    def __init__(self, **kwargs):
+        super().__init__(max_digits=8, decimal_places=2, **kwargs)
+
+    def to_internal_value(self, data):
+        try:
+            value = super().to_internal_value(data)
+        except serializers.ValidationError:
+            value = None
+        if value is None or not (0 < value <= 500):
+            raise serializers.ValidationError(_("Enter a weight above 0 and up to 500 kg."), code="invalid_weight")
+        return value
+
+
+class CalculatePriceSerializer(serializers.Serializer):
+    search_id = serializers.IntegerField()
+    offer_id = serializers.CharField(max_length=120)
+    weight_kg = WeightField()
+    weight_consent = serializers.BooleanField()
+
+    def validate_weight_consent(self, value):
+        if value is not True:
+            raise serializers.ValidationError(
+                _("Confirm that the price may change with the actual weight."), code="required")
+        return value

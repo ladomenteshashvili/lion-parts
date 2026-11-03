@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 12:52+0000\n"
+"POT-Creation-Date: 2026-11-03 12:53+0000\n"
 "Language: ru\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -394,6 +394,10 @@ msgstr "Английский"
 msgid "Russian"
 msgstr "Русский"
 
+#: orders/texts.py:8
+msgid "The price is calculated with the estimated weight you entered. The final weight is set when the part arrives at the US warehouse. If it differs, the final amount may change: you may pay extra or get a refund."
+msgstr "Цена рассчитана по указанному вами примерному весу. Окончательный вес определяется при получении детали на складе в США. Если он отличается, итоговая сумма может измениться: возможна доплата или возврат."
+
 #: parts/admin.py:54
 msgid "Request"
 msgstr "Запрос"
@@ -451,6 +455,14 @@ msgstr "Изображение не должно превышать 5 МБ."
 #: parts/serializers.py:16
 msgid "Choose one of the available currencies."
 msgstr "Выберите одну из доступных валют."
+
+#: parts/serializers.py:65
+msgid "Enter a weight above 0 and up to 500 kg."
+msgstr "Введите вес больше 0 и не более 500 кг."
+
+#: parts/serializers.py:78
+msgid "Confirm that the price may change with the actual weight."
+msgstr "Подтвердите, что цена может измениться в зависимости от фактического веса."
 
 #: parts/views.py:72
 msgid "Choose one of: all, ready, checking, other."
