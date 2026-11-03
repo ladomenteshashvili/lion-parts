@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 11:25+0000\n"
+"POT-Creation-Date: 2026-11-03 11:26+0000\n"
 "Language: ru\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -39,9 +39,13 @@ msgstr "Компания с этим идентификационным кодо
 msgid "You must accept the terms to register."
 msgstr "Для регистрации необходимо принять условия."
 
-#: accounts/serializers.py:88
+#: accounts/serializers.py:88 accounts/serializers.py:209
 msgid "Choose one of the supported languages."
 msgstr "Выберите один из поддерживаемых языков."
+
+#: accounts/serializers.py:219
+msgid "The current password is incorrect."
+msgstr "Текущий пароль неверен."
 
 #: accounts/validators.py:19
 msgid "Enter a valid Georgian mobile number."

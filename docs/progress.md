@@ -22,7 +22,7 @@ One row per backlog story (76). Status: `done` (committed, tests green), `in pro
 | LP-BE-207 | TBD | Email infrastructure | 2 | M1 | 101, 1301, 1303 | done |  | api/tests/test_mail.py: 4 templates reach the outbox with links; ru email + lang=ru; SMTP failure -> False + log; every template translated ka/ru |
 | LP-BE-208 | TBD | Email verification (send & verify) | 3 | M1 | 207, 206 | done |  | accounts/test_email_verification.py: tampered/48h+/pre-email-change/inactive/anonymized -> token_invalid, idempotent, customer only for own session, already_verified 409, email_send throttle |
 | LP-BE-209 | TBD | Password reset (request & confirm) | 3 | M1 | 207 | done |  | accounts/test_password_reset.py: identical body known/unknown, no email for unknown/inactive/anonymized, single-use token, other sessions end, no login, new_password field errors, throttle; legacy reset test replaced |
-| LP-BE-210 | TBD | Profile: read, update, change password | 2 | M1 | 206 | todo |  |  |
+| LP-BE-210 | TBD | Profile: read, update, change password | 2 | M1 | 206 | done |  | accounts/test_profile.py: exact Customer keys + tariff/company shapes, PATCH ignores other keys, xx -> invalid, password change keeps this session/ends others; legacy profile (3) + password (2) tests replaced; demo_login (5) removed per G§8.11 (unreachable route asserted in api/tests/test_legacy.py) |
 | LP-BE-211 | TBD | Email change | 3 | M1 | 207 | todo |  |  |
 | LP-BE-212 | TBD | Phone change | 3 | M1 | 203 | todo |  |  |
 | LP-BE-213 | TBD | Account deletion (anonymize) + retention command | 5 | M1 | 210 (open-orders check becomes real after LP-BE-601) | todo |  |  |
@@ -78,7 +78,7 @@ One row per backlog story (76). Status: `done` (committed, tests green), `in pro
 | LP-BE-1205 | TBD | Frontend handoff package | 1 | M6 | 1203, 1204 | todo |  |  |
 | LP-BE-1301 | LPK-166 | i18n foundation: languages, middleware, catalogs | 3 | M0 | 101 | done | 24ebd86 | PR #58, CI green (PostgreSQL 16) |
 | LP-BE-1302 | TBD | Translated content fields & admin widget | 5 | M1 | 1301 | done |  | api/tests/test_translated_fields.py (tr fallback, +1 language -> +1 input, default required); cities/districts editor ships with SiteSettings in LP-BE-301/1101 (plan G4) |
-| LP-BE-1303 | TBD | Customer preferred language | 2 | M1 | 201, 1301 | in progress |  | model field (201) + customer_language() (accounts/test_services.py); API ACs land in 205/210 |
+| LP-BE-1303 | TBD | Customer preferred language | 2 | M1 | 201, 1301 | done |  | customer_language() (accounts/test_services.py); Accept-Language en at registration -> en (test_register_verify.py); PATCH xx -> invalid (test_profile.py) |
 | LP-BE-1304 | TBD | Localized system texts (events, timeline, banners, system messages) | 5 | M3 | 601, 1301 | todo |  |  |
 | LP-BE-1305 | TBD | Notification & SMS templates per language | 3 | M5 | 901, 1303 | todo |  |  |
 | LP-BE-1306 | TBD | Translation pass & language QA | 3 | M6 | 1201 | todo |  |  |

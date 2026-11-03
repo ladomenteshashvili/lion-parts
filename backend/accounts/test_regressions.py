@@ -94,7 +94,7 @@ class CustomerAccountOrderRegressionTests(TestCase):
             session_id=self.session_id,
         )
 
-    @legacy_endpoint_test("LP-BE-206/210")
+    @legacy_endpoint_test("LP-BE-801")
     def test_phone_change_keeps_order_access_and_preserves_order_snapshot(self):
         self.customer.phone = "599777777"
         self.customer.save(update_fields=["phone", "updated_at"])
@@ -133,7 +133,7 @@ class CustomerAccountOrderRegressionTests(TestCase):
             "555123456",
         )
 
-    @legacy_endpoint_test("LP-BE-206/210")
+    @legacy_endpoint_test("LP-BE-801")
     def test_password_login_reuses_customer_and_keeps_order_access(self):
         self.customer.set_password("Strong1!")
 
@@ -171,7 +171,7 @@ class CustomerAccountOrderRegressionTests(TestCase):
             self.order.order_number,
         )
 
-    @legacy_endpoint_test("LP-BE-206/210")
+    @legacy_endpoint_test("LP-BE-801")
     def test_unverified_session_cannot_open_verified_customer_order(self):
         unverified_customer = Customer.objects.create(
             session_id="unverified-session",

@@ -1,6 +1,6 @@
 """Auth and profile endpoints (G§8.2, G§8.3). Thin views: validation in serializers, logic in services."""
 
-from django.contrib.auth import authenticate, logout
+from django.contrib.auth import authenticate, logout, update_session_auth_hash
 from django.middleware.csrf import get_token
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -17,8 +17,8 @@ from api.throttles import (
 
 from . import otp, services
 from .serializers import (
-    CodeSerializer, CustomerSerializer, LoginSerializer, PasswordResetConfirmSerializer, PasswordResetSerializer,
-    RegisterSerializer, TokenSerializer, check_password_rules,
+    CodeSerializer, CustomerSerializer, LoginSerializer, PasswordChangeSerializer, PasswordResetConfirmSerializer,
+    PasswordResetSerializer, ProfileUpdateSerializer, RegisterSerializer, TokenSerializer, check_password_rules,
 )
 
 
@@ -145,3 +145,25 @@ def password_reset_confirm(request):
     user.set_password(data["new_password"])  # rotates the session hash: other sessions end
     user.save(update_fields=["password"])
     return Response({"detail": str(PASSWORD_CHANGED)})
+
+
+@api_view(["GET", "PATCH"])
+def profile(request):
+    customer = request.user.customer
+    if request.method == "PATCH":
+        serializer = ProfileUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        for field, value in serializer.validated_data.items():
+            setattr(customer, field, value)
+        customer.save(update_fields=[*serializer.validated_data, "updated_at"])
+    return Response(CustomerSerializer(customer).data)
+
+
+@api_view(["POST"])
+def profile_password(request):
+    serializer = PasswordChangeSerializer(data=request.data, context={"user": request.user})
+    serializer.is_valid(raise_exception=True)
+    request.user.set_password(serializer.validated_data["new_password"])
+    request.user.save(update_fields=["password"])
+    update_session_auth_hash(request, request.user)  # keep this session; the others end
+    return Response({"customer": CustomerSerializer(request.user.customer).data, "csrf_token": get_token(request)})

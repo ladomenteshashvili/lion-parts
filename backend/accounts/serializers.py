@@ -196,3 +196,30 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
     uid = serializers.CharField(max_length=64)
     token = serializers.CharField(max_length=128)
     new_password = serializers.CharField(max_length=128, trim_whitespace=False)
+
+
+class ProfileUpdateSerializer(serializers.Serializer):
+    """Only these two fields are writable through the API (G§8.3); other keys are ignored."""
+
+    marketing_opt_in = serializers.BooleanField(required=False)
+    preferred_language = serializers.CharField(required=False)
+
+    def validate_preferred_language(self, value):
+        if value not in language_codes():
+            raise serializers.ValidationError(_("Choose one of the supported languages."), code="invalid")
+        return value
+
+
+class PasswordChangeSerializer(serializers.Serializer):
+    current_password = serializers.CharField(max_length=128, trim_whitespace=False)
+    new_password = serializers.CharField(max_length=128, trim_whitespace=False)
+
+    def validate_current_password(self, value):
+        if not self.context["user"].check_password(value):
+            raise serializers.ValidationError(_("The current password is incorrect."), code="incorrect")
+        return value
+
+    def validate_new_password(self, value):
+        user = self.context["user"]
+        check_password_rules(value, user.email, user.first_name, user.last_name)
+        return value
