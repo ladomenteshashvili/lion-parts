@@ -1,363 +1,123 @@
-from decimal import Decimal
-from typing import Any
+"""Supplier rows -> priced offers (G§7.6).
 
+Providers (AMT SOAP, or demo data) only return raw rows; build_offers() prices every row through
+pricing.engine, so demo and AMT prices follow the same rules. Stored offers (PartSearchLog
+.normalized_response["offers"]) keep internal keys (supplier price, snapshot); public_offer() is the
+only way they reach a client."""
+
+from decimal import Decimal, InvalidOperation
+
+import requests
 from django.conf import settings
 
-from accounts.models import Customer
-from .amt_provider import AMTProviderError, get_price_by_oem
-from pricing.rates import RateUnavailable, get_usd_rate
-from .models import CarrierService, PartSearchLog
+from api.errors import ApiError
 from pricing.engine import PriceInput, default_shipping_usd_per_kg, price_offer
+from pricing.rates import get_usd_rate
+
+from .amt_provider import AMTProviderError, get_price_by_oem
+from .models import CarrierService, PartSearchLog
+
+OFFER_KEYS = ("offer_id", "name", "brand", "condition", "status", "list_unit_price", "discount_unit_amount",
+              "unit_price", "currency", "eta_min_days", "eta_max_days", "weight_kg", "weight_source",
+              "requires_weight", "in_cart_quantity", "image_urls", "customer_notice", "note")
+
+# Demo supplier rows (USD supplier prices, kg). One row has no weight, so staging can exercise the
+# "checking" / weight-calculation / quote-request flows. Part numbers starting with NF find nothing.
+DEMO_ROWS = [
+    {"name": "Demo OEM Part", "brand": "OEM", "supplier_price_usd": "180.00", "weight_kg": "2.00",
+     "note": "Original new part. Demo offer."},
+    {"name": "Demo Aftermarket Part", "brand": "Aftermarket", "supplier_price_usd": "140.00", "weight_kg": "1.80",
+     "note": "Lower price option. Compatibility must be confirmed before purchase."},
+    {"name": "Demo OEM Express Part", "brand": "OEM", "supplier_price_usd": "230.00", "weight_kg": "2.00",
+     "note": "Faster option. Final availability is checked after payment."},
+    {"name": "Demo Part Without Weight", "brand": "Denso", "supplier_price_usd": "95.00", "weight_kg": None,
+     "note": ""},
+]
 
 
-class PartsProviderError(Exception):
-    pass
+class PartsProviderError(ApiError):
+    """The supplier failed: 502 supplier_unavailable."""
 
-CUSTOMER_WEIGHT_NOTICE = (
-    "ფასი დათვლილია თქვენს მიერ შეყვანილი სავარაუდო წონით. "
-    "საბოლოო წონა დადგინდება აშშ-ის საწყობში მიღების შემდეგ. "
-    "თუ რეალური წონა განსხვავებული იქნება, საბოლოო თანხა შეიძლება დაკორექტირდეს — "
-    "შესაძლოა დაემატოს ან დაბრუნდეს თანხა."
-)
+    def __init__(self):
+        super().__init__("supplier_unavailable", status=502)
 
-def _save_part_search_log(
-    *,
-    provider: str,
-    part_number: str,
-    vin: str | None,
-    session_id: str | None,
-    customer: Customer | None,
-    raw_response: object,
-    normalized_response: dict[str, Any],
-    status: str = PartSearchLog.STATUS_SUCCESS,
-    error_message: str = "",
-) -> None:
+
+def _decimal(value):
+    if value in ("", None) or isinstance(value, dict):
+        return None
     try:
-        PartSearchLog.objects.create(
-            provider=provider,
-            part_number=part_number,
-            vin=vin or "",
-            session_id=session_id or "",
-            customer_phone=(customer.phone if customer and customer.is_phone_verified else ""),
-            customer_name=(customer.full_name if customer and customer.is_phone_verified else ""),
-            found_count=len(normalized_response.get("results", [])),
-            status=status,
-            raw_response={"data": raw_response},
-            normalized_response=normalized_response,
-            error_message=error_message,
-        )
-    except Exception:
-        # Search logging must never break customer search.
-        pass
+        number = Decimal(str(value))
+    except InvalidOperation:
+        return None
+    return number if number.is_finite() and number > 0 else None
 
 
-def search_demo_parts(
-    part_number: str,
-    vin: str | None = None,
-    customer: Customer | None = None,
-    session_id: str | None = None,
-) -> dict[str, Any]:
+def _text(value):
+    return "" if value in ("", None) or isinstance(value, dict) else str(value).strip()
+
+
+def _amt_rows(part_number):
+    try:
+        rows = get_price_by_oem(part_number)
+    except (AMTProviderError, requests.RequestException):
+        raise PartsProviderError() from None
+    out = []
+    for index, row in enumerate(rows, start=1):
+        price = _decimal(row.get("list_price"))
+        if _text(row.get("descr")).upper() == "NO_PART_FOUND" or price is None:
+            continue
+        oem = _text(row.get("oem")) or part_number
+        replacement = _text(row.get("replace"))
+        out.append({"offer_id": f"AMT-{index}-{oem}", "name": _text(row.get("descr")) or oem,
+                    "brand": _text(row.get("brand")), "supplier_price_usd": price,
+                    "weight_kg": _decimal(row.get("weight")), "note": f"Replace: {replacement}" if replacement else ""})
+    return rows, out
+
+
+def _demo_rows(part_number):
     if part_number.upper().startswith("NF"):
-        response = {
-            "quote_id": "Q-DEMO-NOT-FOUND",
-            "part_number": part_number,
-            "vin": vin,
-            "results": [],
-        }
-
-        _save_part_search_log(
-            provider=PartSearchLog.PROVIDER_DEMO,
-            part_number=part_number,
-            vin=vin,
-            session_id=session_id,
-            customer=customer,
-            raw_response=response,
-            normalized_response=response,
-        )
-
-        return response
-
-    response = {
-        "quote_id": "Q-DEMO-0001",
-        "part_number": part_number,
-        "vin": vin,
-        "results": [
-            {
-                "part_option_id": "P-DEMO-001",
-                "name": "Demo OEM Part",
-                "condition": "New",
-                "brand": "OEM",
-                "availability": "Available",
-                "eta_days": 14,
-                "final_price_gel": 650.00,
-                "currency": "GEL",
-                "requires_weight_input": False,
-                "weight_kg": 2.00,
-                "weight_source": "api",
-                "customer_notice": "",
-                "note": "Original new part. Demo offer. Supplier integration will be added later.",
-            },
-            {
-                "part_option_id": "P-DEMO-002",
-                "name": "Demo Aftermarket Part",
-                "condition": "New",
-                "brand": "Aftermarket",
-                "availability": "Available",
-                "eta_days": 10,
-                "final_price_gel": 520.00,
-                "currency": "GEL",
-                "requires_weight_input": False,
-                "weight_kg": 1.80,
-                "weight_source": "api",
-                "customer_notice": "",
-                "note": "Lower price option. Compatibility must be confirmed before purchase.",
-            },
-            {
-                "part_option_id": "P-DEMO-003",
-                "name": "Demo OEM Express Part",
-                "condition": "New",
-                "brand": "OEM",
-                "availability": "Limited",
-                "eta_days": 7,
-                "final_price_gel": 790.00,
-                "currency": "GEL",
-                "requires_weight_input": False,
-                "weight_kg": 2.00,
-                "weight_source": "api",
-                "customer_notice": "",
-                "note": "Faster ETA option. Final availability will be checked after payment.",
-            },
-        ],
-    }
-
-    _save_part_search_log(
-        provider=PartSearchLog.PROVIDER_DEMO,
-        part_number=part_number,
-        vin=vin,
-        session_id=session_id,
-        customer=customer,
-        raw_response=response,
-        normalized_response=response,
-    )
-
-    return response
+        return [], []
+    return DEMO_ROWS, [{**row, "offer_id": f"DEMO-{i}-{part_number}", "supplier_price_usd": Decimal(row["supplier_price_usd"]),
+                        "weight_kg": _decimal(row["weight_kg"])} for i, row in enumerate(DEMO_ROWS, start=1)]
 
 
-def _to_decimal(value: Any) -> Decimal | None:
-    if value in ("", None):
-        return None
-
-    try:
-        return Decimal(str(value))
-    except Exception:
-        return None
-
-
-def _clean_api_text(value: Any) -> str:
-    if value in ("", None):
-        return ""
-
-    if isinstance(value, dict):
-        return ""
-
-    return str(value).strip()
-
-
-def _is_no_part_found_row(row: dict[str, Any]) -> bool:
-    description = _clean_api_text(row.get("descr")).upper()
-    price = row.get("list_price")
-
-    return description == "NO_PART_FOUND" or price in ("", None)
-
-
-def _get_carrier_values() -> tuple[Decimal, int]:
-    carrier = CarrierService.get_default()
-
-    if carrier:
-        return carrier.usd_per_kg, carrier.max_eta_days
-
-    return (
-        default_shipping_usd_per_kg(),
-        settings.DEFAULT_ETA_DAYS,
-    )
-
-
-def _build_amt_part_option(
-    *,
-    row: dict[str, Any],
-    index: int,
-    part_number: str,
-    usd_to_gel_rate: Decimal,
-    customer: Customer | None,
-    manual_weight_kg: Decimal | None = None,
-) -> dict[str, Any] | None:
-    if _is_no_part_found_row(row):
-        return None
-
-    api_price_usd = _to_decimal(row.get("list_price"))
-
-    if api_price_usd is None:
-        return None
-
-    api_weight_kg = _to_decimal(row.get("weight"))
-    effective_weight_kg = manual_weight_kg if manual_weight_kg is not None else api_weight_kg
-
-    requires_weight_input = (
-        effective_weight_kg is None or effective_weight_kg <= 0
-    )
-
-    shipping_usd_per_kg, eta_days = _get_carrier_values()
-
-    final_price_gel = None
-
-    if not requires_weight_input:
-        final_price_gel = price_offer(
-            PriceInput(api_price_usd, effective_weight_kg, shipping_usd_per_kg),
-            customer=customer, currency="GEL", part_number=part_number,
-            brand=_clean_api_text(row.get("brand")), usd_rate=usd_to_gel_rate,
-        ).unit_price
-
-    oem = _clean_api_text(row.get("oem")) or part_number
-    description = _clean_api_text(row.get("descr")) or f"Part {oem}"
-    brand = _clean_api_text(row.get("brand")) or "Unknown"
-
-    note_parts = []
-
-    if requires_weight_input:
-        note_parts.append("ფასის დასათვლელად საჭიროა წონის შეყვანა.")
-    elif manual_weight_kg is not None:
-        note_parts.append("ფასი დათვლილია მომხმარებლის მიერ შეყვანილი სავარაუდო წონით.")
-
-    replacement = _clean_api_text(row.get("replace"))
-
-    if replacement:
-        note_parts.append(f"Replace: {replacement}")
-
-    return {
-        "part_option_id": f"AMT-{index}-{oem}",
-        "name": description,
-        "condition": "New",
-        "brand": brand,
-        "availability": "Price returned",
-        "eta_days": eta_days,
-        "final_price_gel": float(final_price_gel)
-        if final_price_gel is not None
-        else None,
-        "currency": "GEL",
-        "requires_weight_input": requires_weight_input,
-        "weight_kg": float(effective_weight_kg)
-        if effective_weight_kg is not None
-        else None,
-        "weight_source": "customer" if manual_weight_kg is not None else "api",
-        "customer_notice": (
-            CUSTOMER_WEIGHT_NOTICE
-            if manual_weight_kg is not None
-            else ""
-        ),        
-        "note": " ".join(note_parts),
-    }
-
-
-def search_amt_parts(
-    part_number: str,
-    vin: str | None = None,
-    customer: Customer | None = None,
-    session_id: str | None = None,
-) -> dict[str, Any]:
-    try:
-        rows = get_price_by_oem(part_number)
-        usd_to_gel_rate = get_usd_rate()
-    except (AMTProviderError, RateUnavailable) as error:
-        raise PartsProviderError(str(error)) from error
-
-    results = []
-
-    for index, row in enumerate(rows, start=1):
-        option = _build_amt_part_option(
-            row=row,
-            index=index,
-            part_number=part_number,
-            usd_to_gel_rate=usd_to_gel_rate,
-            customer=customer,
-        )
-
-        if option:
-            results.append(option)
-
-    response = {
-        "quote_id": f"AMT-{part_number}",
-        "part_number": part_number,
-        "vin": vin,
-        "results": results,
-    }
-
-    _save_part_search_log(
-        provider=PartSearchLog.PROVIDER_AMT,
-        part_number=part_number,
-        vin=vin,
-        session_id=session_id or "",
-        customer=customer,
-        raw_response=rows,
-        normalized_response=response,
-    )
-
-    return response
-
-
-def calculate_amt_part_price(
-    *,
-    part_number: str,
-    part_option_id: str,
-    weight_kg: Decimal,
-    customer: Customer,
-) -> dict[str, Any]:
-    try:
-        rows = get_price_by_oem(part_number)
-        usd_to_gel_rate = get_usd_rate()
-    except (AMTProviderError, RateUnavailable) as error:
-        raise PartsProviderError(str(error)) from error
-
-    for index, row in enumerate(rows, start=1):
-        option = _build_amt_part_option(
-            row=row,
-            index=index,
-            part_number=part_number,
-            usd_to_gel_rate=usd_to_gel_rate,
-            customer=customer,
-            manual_weight_kg=weight_kg,
-        )
-
-        if option and option["part_option_id"] == part_option_id:
-            return option
-
-    raise PartsProviderError("part option was not found")
-
-
-def search_parts_provider(
-    part_number: str,
-    vin: str | None = None,
-    customer: Customer | None = None,
-    session_id: str | None = None,
-) -> dict[str, Any]:
+def fetch_rows(part_number):
+    """-> (provider, raw response, normalized rows). Raises PartsProviderError."""
     if settings.PARTS_PROVIDER == "amt":
-        return search_amt_parts(part_number, vin, customer, session_id)
+        return (PartSearchLog.PROVIDER_AMT, *_amt_rows(part_number))
+    return (PartSearchLog.PROVIDER_DEMO, *_demo_rows(part_number))
 
-    return search_demo_parts(part_number, vin, customer, session_id)
+
+def build_offers(rows, *, customer, currency, part_number, weight_source="api", weight_override=None):
+    """Price every row for `customer` (None = guest) in `currency`. A row without a weight is
+    `checking` with null prices. `weight_override` (customer weight calculation) replaces the
+    supplier weight and sets `weight_source`."""
+    carrier = CarrierService.get_default()
+    shipping = default_shipping_usd_per_kg()
+    eta_min, eta_max = (carrier.min_eta_days, carrier.max_eta_days) if carrier else (None, None)
+    rate = None
+    offers = []
+    for row in rows:
+        weight = weight_override if weight_override is not None else row["weight_kg"]
+        offer = {"offer_id": row["offer_id"], "name": row["name"], "brand": row["brand"], "condition": "New",
+                 "currency": currency, "eta_min_days": eta_min, "eta_max_days": eta_max, "note": row["note"],
+                 "supplier_price_usd": str(row["supplier_price_usd"])}
+        if weight is None:
+            offer.update(status="checking", list_unit_price=None, discount_unit_amount=None, unit_price=None,
+                         weight_kg=None, weight_source="", requires_weight=True, snapshot=None)
+        else:
+            rate = rate if rate is not None else get_usd_rate()
+            snap = price_offer(PriceInput(row["supplier_price_usd"], weight, shipping), customer=customer,
+                               currency=currency, part_number=part_number, brand=row["brand"], usd_rate=rate)
+            offer.update(status="ready", list_unit_price=str(snap.list_unit_price),
+                         discount_unit_amount=str(snap.discount_unit_amount), unit_price=str(snap.unit_price),
+                         weight_kg=f"{weight:.2f}", weight_source=weight_source if weight_override is not None else "api",
+                         requires_weight=False, snapshot=snap.to_json())
+        offers.append(offer)
+    return offers
 
 
-def calculate_part_price_provider(
-    *,
-    part_number: str,
-    part_option_id: str,
-    weight_kg: Decimal,
-    customer: Customer,
-) -> dict[str, Any]:
-    if settings.PARTS_PROVIDER != "amt":
-        raise PartsProviderError("manual weight calculation is available only for AMT")
-
-    return calculate_amt_part_price(
-        part_number=part_number,
-        part_option_id=part_option_id,
-        weight_kg=weight_kg,
-        customer=customer,
-    )
+def public_offer(offer, *, in_cart_quantity=0, image_urls=(), customer_notice=""):
+    """The G§8.0 Offer for clients: never the supplier price or the internal snapshot."""
+    return {**{key: offer.get(key) for key in OFFER_KEYS}, "in_cart_quantity": in_cart_quantity,
+            "image_urls": list(image_urls), "customer_notice": customer_notice}

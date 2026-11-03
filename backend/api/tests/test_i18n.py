@@ -27,7 +27,6 @@ UNTRANSLATED_CODES = set()
 # shortcut: legacy files that still contain Georgian literals; each is cleaned up by the named story.
 # The test fails once a listed file has none left, so this list only shrinks.
 LEGACY_GEORGIAN_FILES = {
-    "parts/providers.py": "LP-BE-402/405 (CUSTOMER_WEIGHT_NOTICE -> EVENT_TEXTS)",
     "orders/views.py": "LP-BE-1304 / LP-BE-1201",
     "orders/admin.py": "LP-BE-1103 / LP-BE-1304",
     "orders/invoices.py": "LP-BE-604",

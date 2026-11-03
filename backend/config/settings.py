@@ -228,8 +228,6 @@ AMT_VERIFY_SSL = config("AMT_VERIFY_SSL", default=True, cast=bool)
 AMT_TIMEOUT_SECONDS = config("AMT_TIMEOUT_SECONDS", default=15, cast=int)
 
 
-# Legacy ETA fallback; LP-BE-402 takes ETAs from the default CarrierService only.
-DEFAULT_ETA_DAYS = config("DEFAULT_ETA_DAYS", default=14, cast=int)
 
 
 # Sender.ge SMS

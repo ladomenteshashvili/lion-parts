@@ -23,7 +23,8 @@ def legacy_paths():
 class LegacyEndpointsDisabledTests(SimpleTestCase):
     def test_no_legacy_route_resolves(self):
         paths = list(legacy_paths())
-        self.assertGreaterEqual(len(paths), 37)
+        # 37 legacy routes minus /api/parts/search/, calculate-price/, quote-requests/ (served again, new contract)
+        self.assertGreaterEqual(len(paths), 34)
         for url in paths:
             with self.subTest(url=url), self.assertRaises(Resolver404):
                 resolve(url)
