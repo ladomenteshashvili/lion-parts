@@ -169,6 +169,7 @@ REST_FRAMEWORK = {
         "otp_send_phone": "5/hour", "otp_send_ip": "20/hour", "otp_verify": "10/min",
         "login_ip": "10/min", "login_email": "5/min", "password_reset": "5/hour",
         "email_send": "5/hour", "register": "10/hour", "search": "30/min", "support_guest": "5/hour",
+        "public_link": "30/min",
     },
 }
 
@@ -282,3 +283,18 @@ PHONE_VERIFICATION_MAX_ATTEMPTS = config(
 )
 
 
+
+# Logging: Django's defaults, plus masking of public link tokens in request logs (D23).
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "filters": {"mask_tokens": {"()": "api.log_filters.MaskTokensFilter"}},
+    "formatters": {"django.server": {"()": "django.utils.log.ServerFormatter", "format": "[{server_time}] {message}",
+                                     "style": "{"}},
+    "handlers": {"django.server": {"level": "INFO", "class": "logging.StreamHandler", "formatter": "django.server"}},
+    "loggers": {
+        "django.request": {"filters": ["mask_tokens"]},
+        "django.server": {"handlers": ["django.server"], "level": "INFO", "propagate": False,
+                          "filters": ["mask_tokens"]},
+    },
+}

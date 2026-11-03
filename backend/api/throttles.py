@@ -56,6 +56,12 @@ class SupportGuestThrottle(IpThrottle):
     scope = "support_guest"
 
 
+class PublicLinkThrottle(IpThrottle):
+    """Public token links (/api/public/n/, /api/public/q/): slows down token guessing per IP (D23)."""
+
+    scope = "public_link"
+
+
 class PhoneThrottle(SettingsRateThrottle):
     """Per phone number, whatever the session or IP (stops SMS bombing one number)."""
 

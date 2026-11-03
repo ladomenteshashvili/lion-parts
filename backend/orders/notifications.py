@@ -11,8 +11,37 @@ from .texts import DEFAULT_TITLES
 logger = logging.getLogger(__name__)
 
 
+PUBLIC_LINK_DAYS = 30  # owner decision D23
+
+
 def notification_title(notification):
     return str(DEFAULT_TITLES[notification.event_type])
+
+
+def notification_target(n):
+    """G§8.0 Notification.target."""
+    if n.event_type == "price_ready" and n.quote_request_id:
+        return {"screen": "search_history", "quote_request_id": n.quote_request_id}
+    if n.event_type == "action_required" and n.order_id:
+        return {"screen": "decision", "order_number": n.order.order_number, "item_id": n.item_id}
+    if n.support_ticket_id and not n.order_id:
+        return {"screen": "support_ticket", "ticket_id": n.support_ticket_id}
+    return {"screen": "order", "order_number": n.order.order_number if n.order_id else None}
+
+
+def notification_data(n):
+    """The customer's own notification (authenticated, owner-scoped): operator text as written."""
+    return {"id": n.pk, "event_type": n.event_type, "title": notification_title(n), "message": n.message,
+            "target": notification_target(n), "blocking": n.event_type == "support_reply", "read_at": n.read_at,
+            "created_at": n.created_at}
+
+
+def public_notification_data(n):
+    """GET /api/public/n/<token>/ (D23): no names, phone, email, VIN, amounts, addresses or operator text."""
+    return {"event_type": n.event_type, "title": notification_title(n), "message": "",
+            "order_number": n.order.order_number if n.order_id else None,
+            "item_part_number": n.item.part_number if n.item_id else None,
+            "target": notification_target(n), "requires_login": True}
 
 
 def pick_template(event_type, language):

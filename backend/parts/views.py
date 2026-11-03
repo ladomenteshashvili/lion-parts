@@ -10,7 +10,7 @@ from rest_framework.response import Response
 from api.errors import ApiError
 from api.pagination import Pagination
 from api.permissions import IsPhoneVerified
-from api.throttles import SearchThrottle
+from api.throttles import PublicLinkThrottle, SearchThrottle
 from pricing.validity import is_expired
 
 from . import services
@@ -53,6 +53,7 @@ def quote_requests(request):
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
+@throttle_classes([PublicLinkThrottle])
 def public_quote(request, token):
     qr = PartQuoteRequest.objects.filter(notification_token=token, price_ready_at__isnull=False,
                                          unit_price_usd__isnull=False).first()

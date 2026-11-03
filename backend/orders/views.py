@@ -1,22 +1,29 @@
 """Checkout and order endpoints (G§8.6, G§8.7). Thin views: logic in orders.checkout / orders.services."""
 
+import uuid
+from datetime import timedelta
+
 from django.db.models import Case, Count, Exists, IntegerField, OuterRef, Q, When
 from django.http import HttpResponse
+from django.utils import timezone
 from django.utils.translation import get_language
 from rest_framework import serializers
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, authentication_classes, permission_classes, throttle_classes
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from api.errors import MESSAGES, ApiError
 from api.pagination import Pagination
 from api.permissions import IsFullyVerified
+from api.throttles import PublicLinkThrottle
 
 from payments.models import Payment
 from payments.services import request_payment, start_payment
 
 from . import checkout, services
 from .invoices import invoice_language, render_invoice
-from .models import Order, OrderItem, OrderSupportMessage
+from .models import Notification, Order, OrderItem, OrderSupportMessage
+from .notifications import PUBLIC_LINK_DAYS, notification_data, public_notification_data
 from .serializers import order_data, order_queryset, orders_data, payment_data
 
 
@@ -187,3 +194,46 @@ def support_acknowledge(request, order_number):
     order.support_messages.filter(is_read_by_customer=False).exclude(
         sender_type=OrderSupportMessage.SENDER_CUSTOMER).update(is_read_by_customer=True)
     return _order_response(request, order)
+
+
+# Notifications (G§8.9, LP-BE-904)
+
+@api_view(["GET"])
+def notification_list(request):
+    mine = Notification.objects.filter(customer=request.user.customer).select_related("order", "item")
+    unread = mine.filter(read_at__isnull=True)
+    shown = unread if request.query_params.get("unread") in ("1", "true") else mine
+    paginator = Pagination()
+    page = paginator.paginate_queryset(shown, request)
+    return paginator.get_paginated_response([notification_data(n) for n in page], unread_count=unread.count())
+
+
+@api_view(["POST"])
+def notification_read(request, notification_id):
+    """-> 204. A support reply also marks its order message read by the customer (support_unread_count)."""
+    n = Notification.objects.filter(pk=notification_id, customer=request.user.customer).first()
+    if n is None:
+        raise ApiError("not_found", status=404)
+    if n.read_at is None:
+        Notification.objects.filter(pk=n.pk, read_at__isnull=True).update(read_at=timezone.now())
+    if n.event_type == "support_reply" and n.support_message_id:
+        OrderSupportMessage.objects.filter(pk=n.support_message_id, order__customer=request.user.customer).update(
+            is_read_by_customer=True)
+    return Response(status=204)
+
+
+@api_view(["GET"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+@throttle_classes([PublicLinkThrottle])
+def public_notification(request, token):
+    """D23: unknown, malformed, guest and expired (> 30 days) tokens are the same 404."""
+    try:
+        token = uuid.UUID(token)
+    except ValueError:
+        raise ApiError("not_found", status=404) from None
+    n = Notification.objects.filter(token=token, customer__isnull=False, created_at__gte=timezone.now() - timedelta(
+        days=PUBLIC_LINK_DAYS)).select_related("order", "item").first()
+    if n is None:
+        raise ApiError("not_found", status=404)
+    return Response(public_notification_data(n))
