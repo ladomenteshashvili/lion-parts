@@ -8,6 +8,11 @@ from rest_framework.throttling import SimpleRateThrottle
 from accounts.views import normalize_georgian_phone
 
 
+def body(request):
+    """Request JSON as a dict; throttles run before validation, so a JSON array/string must not crash."""
+    return request.data if isinstance(request.data, dict) else {}
+
+
 class SettingsRateThrottle(SimpleRateThrottle):
     """Reads the rate at request time (DRF caches it at import), so settings changes apply."""
 
@@ -58,7 +63,7 @@ class PhoneThrottle(SettingsRateThrottle):
 
     def get_cache_key(self, request, view):
         try:
-            phone = normalize_georgian_phone(request.data.get("phone", ""))
+            phone = normalize_georgian_phone(body(request).get("phone", ""))
         except ValueError:  # invalid input is rejected by the view's serializer
             phone = request.session.get("registration_draft", {}).get("phone")
         return self.key(phone)
@@ -70,7 +75,7 @@ class EmailLoginThrottle(SettingsRateThrottle):
     scope = "login_email"
 
     def get_cache_key(self, request, view):
-        return self.key(str(request.data.get("email", "")).strip().lower())
+        return self.key(str(body(request).get("email", "")).strip().lower())
 
 
 class EmailSendThrottle(SettingsRateThrottle):

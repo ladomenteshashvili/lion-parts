@@ -59,6 +59,12 @@ class ThrottleTests(TestCase):
             self.assertEqual(self.post("/send-code/", {}, ip=f"10.0.2.{i}", client=client).status_code, 200)
         self.assertEqual(self.post("/send-code/", {"phone": "555000111"}, ip="10.0.2.50").status_code, 429)
 
+    def test_non_object_json_body_does_not_crash(self):
+        # Throttles run before the view's serializer; a JSON array must not cause a 500.
+        for url in ("/send-code/", "/login/"):
+            with self.subTest(url=url):
+                self.assertEqual(self.post(url, [1]).status_code, 200)
+
     def test_eleventh_login_per_minute_from_one_ip_is_throttled(self):
         for i in range(10):
             self.assertEqual(self.post("/login/", {"email": f"u{i}@example.com"}).status_code, 200)
