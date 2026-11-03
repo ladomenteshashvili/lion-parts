@@ -402,8 +402,16 @@ class SupportTicketAdmin(OperatePermissionMixin, ReadOnlyAdminMixin, admin.Model
 class NotificationDeliveryAdmin(OperatePermissionMixin, ReadOnlyAdminMixin, admin.ModelAdmin):
     """LP-BE-1105: the delivery log is read-only; "resend" writes a new row and never edits an old one."""
 
-    list_display = ("id", "notification", "channel", "recipient", "status", "created_at")
+    list_display = ("id", "notification", "channel", "recipient", "status_display", "error", "created_at")
     list_filter = ("channel", "status", "notification__event_type")
+
+    @admin.display(description=_("Status"), ordering="status")
+    def status_display(self, obj):
+        """sent / failed / skipped (the channel is switched off here: nothing left the server)."""
+        colors = {NotificationDelivery.STATUS_FAILED: "#ba2121", NotificationDelivery.STATUS_SKIPPED: "#a66b00"}
+        if obj.status in colors:
+            return format_html('<strong style="color:{}">{}</strong>', colors[obj.status], obj.get_status_display())
+        return obj.get_status_display()
     search_fields = ("recipient", "notification__order__order_number")
     list_select_related = ("notification",)
     actions = ["resend"]
@@ -423,6 +431,13 @@ class NotificationDeliveryAdmin(OperatePermissionMixin, ReadOnlyAdminMixin, admi
                 self.message_user(request, _("#%(id)s: already resent in the last minute.") % {"id": delivery.pk},
                                   messages.WARNING)
                 continue
-            resend(delivery)
-            self.log_change(request, delivery, "Resent")
-            self.message_user(request, _("#%(id)s: resent.") % {"id": delivery.pk}, messages.SUCCESS)
+            new = resend(delivery)
+            status = new[0].status if new else None
+            self.log_change(request, delivery, f"Resent: {status or 'nothing to send'}")
+            if status == NotificationDelivery.STATUS_SENT:
+                self.message_user(request, _("#%(id)s: resent.") % {"id": delivery.pk}, messages.SUCCESS)
+            elif status == NotificationDelivery.STATUS_SKIPPED:
+                self.message_user(request, _("#%(id)s: not sent, the channel is switched off here.")
+                                  % {"id": delivery.pk}, messages.WARNING)
+            else:
+                self.message_user(request, _("#%(id)s: resending failed.") % {"id": delivery.pk}, messages.ERROR)

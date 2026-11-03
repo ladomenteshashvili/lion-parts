@@ -57,21 +57,44 @@ class DeliveryAdminTests(TestCase):
                                             follow=True, headers={"accept-language": "en"})
 
     def test_resend_creates_a_new_row_and_never_edits_the_old_one(self):
-        with mock.patch("accounts.sms.send_sms", return_value={"messageId": "ok"}) as sms:
-            self.resend()
+        with mock.patch("accounts.sms.send_sms", return_value={"statusId": 1, "messageId": "ok"}) as sms:
+            page = self.resend()
+        self.assertContains(page, "resent.")
         self.assertEqual(sms.call_count, 1)
         self.failed.refresh_from_db()
         self.assertEqual(self.failed.status, "failed")
         self.assertEqual(list(self.notification.deliveries.order_by("id").values_list("status", flat=True)),
                          ["failed", "sent"])
-        self.assertTrue(LogEntry.objects.filter(change_message="Resent").exists())
+        self.assertTrue(LogEntry.objects.filter(change_message="Resent: sent").exists())
 
     def test_a_second_resend_within_a_minute_is_refused(self):
-        with mock.patch("accounts.sms.send_sms", return_value={}) as sms:
+        with mock.patch("accounts.sms.send_sms", return_value={"statusId": 1}) as sms:
             self.resend()
             page = self.resend()
         self.assertEqual(sms.call_count, 1)
         self.assertContains(page, "already resent in the last minute")
+
+    def test_resend_while_sms_is_disabled_is_skipped_not_sent(self):
+        page = self.resend()  # SENDER_GE_ENABLED=False: send_sms answers with its console stub
+        self.assertContains(page, "the channel is switched off here")
+        latest = self.notification.deliveries.latest("id")
+        self.assertEqual(latest.status, "skipped")
+        self.assertTrue(LogEntry.objects.filter(change_message="Resent: skipped").exists())
+
+    def test_failed_resend_is_reported_as_failed(self):
+        with mock.patch("accounts.sms.send_sms", return_value={"statusId": 5}):
+            page = self.resend()
+        self.assertContains(page, "resending failed")
+
+    def test_the_log_shows_each_status(self):
+        from orders.models import NotificationDelivery
+
+        NotificationDelivery.objects.create(notification=self.notification, channel="sms", recipient="1",
+                                            status="skipped")
+        page = self.client.get(self.URL, headers={"accept-language": "en"}).content.decode()
+        self.assertIn("Skipped (channel disabled)", page)
+        self.assertIn(">Failed<", page)
+        self.assertIn("?status__exact=skipped", page)  # filter
 
     def test_log_is_read_only_and_resend_needs_permission(self):
         self.assertEqual(self.client.post(f"{self.URL}{self.failed.pk}/change/", {"status": "sent"}).status_code, 403)

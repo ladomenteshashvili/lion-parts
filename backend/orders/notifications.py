@@ -177,55 +177,89 @@ def _content(notification):
 
 
 def send(notification, channels):
-    """Deliver on `channels` (sms/email); each attempt is a NotificationDelivery row. Never raises."""
+    """Deliver on `channels` (sms/email); each attempt is a NotificationDelivery row. Never raises.
+    -> the delivery rows created."""
     if not channels:
-        return
+        return []
     try:
         content = _content(notification)
     except Exception:
         logger.exception("Rendering notification %s failed", notification.pk)
         content = None
     if content is None:
-        return
+        return []
     _language, phone, email, sms, subject, body = content
+    deliveries = []
     if "sms" in channels and phone and "@" not in phone:
-        deliver_sms(notification, phone, sms)
+        deliveries.append(deliver_sms(notification, phone, sms))
     if "email" in channels and email and "@" in email:
-        deliver_email(notification, email, subject, body)
+        deliveries.append(deliver_email(notification, email, subject, body))
+    return deliveries
+
+
+def _delivery(notification, channel, recipient, status, *, message_id="", error=""):
+    from .models import NotificationDelivery
+
+    return NotificationDelivery.objects.create(notification=notification, channel=channel, recipient=recipient,
+                                               status=status, provider_message_id=str(message_id)[:120],
+                                               error=error[:500])
 
 
 def deliver_sms(notification, phone, text):
+    """sent: the provider accepted it (statusId 1); skipped: SMS is switched off (SENDER_GE_ENABLED=False, send_sms
+    answers with its console stub, nothing leaves the server); failed: any error or other answer. The text is
+    never logged (it holds the link token)."""
     from accounts.sms import send_sms
 
     from .models import NotificationDelivery
 
     try:
         result = send_sms(phone, text)
-        message_id = str(result.get("messageId", "")) if isinstance(result, dict) else ""
-        return NotificationDelivery.objects.create(notification=notification, channel="sms", recipient=phone,
-                                                   status="sent", provider_message_id=message_id[:120])
-    except Exception as error:  # the text is never logged (it holds the link token)
+    except Exception as error:
         logger.warning("SMS for notification %s failed: %s", notification.pk, type(error).__name__)
-        return NotificationDelivery.objects.create(notification=notification, channel="sms", recipient=phone,
-                                                   status="failed", error=str(error)[:500])
+        return _delivery(notification, "sms", phone, NotificationDelivery.STATUS_FAILED, error=str(error))
+    result = result if isinstance(result, dict) else {}
+    if result.get("provider") == "console":
+        return _delivery(notification, "sms", phone, NotificationDelivery.STATUS_SKIPPED,
+                         error="SMS provider disabled (SENDER_GE_ENABLED=False)")
+    if str(result.get("statusId")) != "1":
+        logger.warning("SMS for notification %s: the provider did not confirm it", notification.pk)
+        return _delivery(notification, "sms", phone, NotificationDelivery.STATUS_FAILED,
+                         error=f"unexpected provider answer (statusId={result.get('statusId')!r})")
+    return _delivery(notification, "sms", phone, NotificationDelivery.STATUS_SENT,
+                     message_id=result.get("messageId", ""))
+
+
+NON_DELIVERING_EMAIL_BACKENDS = ("django.core.mail.backends.console.EmailBackend",
+                                 "django.core.mail.backends.dummy.EmailBackend")
 
 
 def deliver_email(notification, address, subject, body):
+    """sent: the backend accepted the message; skipped: a backend that delivers nothing (console, dummy; refused in
+    production); failed: an error, or no message accepted (send_mail returned 0)."""
     from django.core.mail import send_mail
 
     from .models import NotificationDelivery
 
+    backend = settings.MAILERS.get("default", {}).get("BACKEND", "")  # Django 6.1 MAILERS (no EMAIL_BACKEND)
+    if backend in NON_DELIVERING_EMAIL_BACKENDS:
+        return _delivery(notification, "email", address, NotificationDelivery.STATUS_SKIPPED,
+                         error=f"email backend delivers nothing ({backend.rsplit('.', 2)[-2]})")
     try:
-        send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [address])
-        return NotificationDelivery.objects.create(notification=notification, channel="email", recipient=address,
-                                                   status="sent")
+        accepted = send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [address])
     except Exception as error:
         logger.warning("Email for notification %s failed: %s", notification.pk, type(error).__name__)
-        return NotificationDelivery.objects.create(notification=notification, channel="email", recipient=address,
-                                                   status="failed", error=str(error)[:500])
+        return _delivery(notification, "email", address, NotificationDelivery.STATUS_FAILED, error=str(error))
+    if not accepted:
+        logger.warning("Email for notification %s: no message accepted", notification.pk)
+        return _delivery(notification, "email", address, NotificationDelivery.STATUS_FAILED,
+                         error="the email backend accepted no message")
+    return _delivery(notification, "email", address, NotificationDelivery.STATUS_SENT)
 
 
 def resend(delivery):
-    """Admin "resend" (LP-BE-1105): the same notification on the same channel again, as a new delivery row."""
-    send(delivery.notification, {delivery.channel})
+    """Admin "resend" (LP-BE-1105): the same notification on the same channel again, as new delivery rows."""
+    return send(delivery.notification, {delivery.channel})
+
+
 # shortcut: synchronous SMS/email delivery; move to a task queue when send latency or retries become a problem.

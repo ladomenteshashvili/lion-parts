@@ -288,10 +288,15 @@ class Notification(models.Model):
 class NotificationDelivery(models.Model):
     """One SMS/email attempt (never edited)."""
 
+    STATUS_SENT = "sent"  # a real provider/backend accepted it
+    STATUS_FAILED = "failed"  # an error or no confirmation
+    STATUS_SKIPPED = "skipped"  # the channel is switched off here (no SMS provider, non-delivering email backend)
+
     notification = models.ForeignKey(Notification, on_delete=models.CASCADE, related_name="deliveries")
     channel = models.CharField(max_length=10, choices=[("sms", "SMS"), ("email", "Email")])
     recipient = models.CharField(max_length=255)
-    status = models.CharField(max_length=10, choices=[("sent", "Sent"), ("failed", "Failed")])
+    status = models.CharField(max_length=10, db_index=True, choices=[
+        (STATUS_SENT, "Sent"), (STATUS_FAILED, "Failed"), (STATUS_SKIPPED, "Skipped (channel disabled)")])
     provider_message_id = models.CharField(max_length=120, blank=True)
     error = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

@@ -32,7 +32,8 @@ class NotifyTests(TestCase):
     def test_channel_both_none_and_sms_failure(self):
         channel("status_update", "both")
         n = notify(self.customer, "status_update", order=self.order)
-        self.assertEqual(sorted(n.deliveries.values_list("channel", "status")), [("email", "sent"), ("sms", "sent")])
+        # SENDER_GE_ENABLED=False here: the SMS is skipped (nothing left the server), the email really went out
+        self.assertEqual(sorted(n.deliveries.values_list("channel", "status")), [("email", "sent"), ("sms", "skipped")])
         self.assertEqual(mail.outbox[-1].to, ["nino@example.com"])
         channel("payment_update", "none")
         self.assertEqual(notify(self.customer, "payment_update", order=self.order).deliveries.count(), 0)
@@ -46,7 +47,7 @@ class NotifyTests(TestCase):
 
     def test_links_language_and_text(self):
         channel("status_update", "sms")
-        with mock.patch("accounts.sms.send_sms", return_value={"messageId": "m1"}) as sms:
+        with mock.patch("accounts.sms.send_sms", return_value={"statusId": 1, "messageId": "m1"}) as sms:
             n = notify(self.customer, "status_update", order=self.order)
         text = sms.call_args.args[1]
         self.assertEqual(text, f"Lion Parts: the status of order {self.order.order_number} was updated. "
@@ -54,7 +55,7 @@ class NotifyTests(TestCase):
         self.assertEqual(n.deliveries.get().provider_message_id, "m1")
         qr = PartQuoteRequest.objects.create(customer=self.customer, request_type="manual_search", part_number="P-9")
         channel("price_ready", "sms")
-        with mock.patch("accounts.sms.send_sms", return_value={}) as sms:
+        with mock.patch("accounts.sms.send_sms", return_value={"statusId": 1}) as sms:
             notify(self.customer, "price_ready", quote_request=qr)
         self.assertTrue(sms.call_args.args[1].endswith(f"https://lionparts.ge/q/{qr.notification_token}?lang=en"))
 
@@ -165,3 +166,55 @@ class ParallelNotifyTests(TransactionTestCase):
             t.join()
         self.assertEqual(Notification.objects.filter(event_type="payment_update").count(), 1)
         self.assertEqual(NotificationDelivery.objects.count(), 1)
+
+
+class DeliveryStatusTests(TestCase):
+    """M5 review: "sent" only when a real provider/backend accepted the message."""
+
+    def setUp(self):
+        self.customer = make_customer()
+        self.n = Notification.objects.create(customer=self.customer, event_type="status_update")
+
+    def sms(self, **patch):
+        from orders.notifications import deliver_sms
+
+        with mock.patch("accounts.sms.send_sms", **patch):
+            return deliver_sms(self.n, "555123456", "secret-token-text")
+
+    @override_settings(SENDER_GE_ENABLED=False)
+    def test_disabled_sms_is_skipped_and_never_logged_with_its_text(self):
+        from orders.notifications import deliver_sms
+
+        with self.assertLogs("accounts.sms", "WARNING") as logs:
+            delivery = deliver_sms(self.n, "555123456", "Lion Parts: https://x/n/secret-token")
+        self.assertEqual((delivery.status, delivery.provider_message_id), ("skipped", ""))
+        self.assertIn("disabled", delivery.error)
+        self.assertNotIn("secret-token", "".join(logs.output) + delivery.error)
+
+    def test_provider_accepted(self):
+        delivery = self.sms(return_value={"statusId": 1, "messageId": 991})
+        self.assertEqual((delivery.status, delivery.provider_message_id, delivery.error), ("sent", "991", ""))
+
+    def test_provider_errors_and_unconfirmed_answers_fail(self):
+        from accounts.sms import SenderGeError
+
+        for patch in ({"side_effect": SenderGeError("Sender.ge returned HTTP 500")}, {"return_value": {}},
+                      {"return_value": {"statusId": 0}}, {"return_value": None}):
+            with self.subTest(patch=patch), self.assertLogs("orders.notifications", "WARNING") as logs:
+                delivery = self.sms(**patch)
+            self.assertEqual(delivery.status, "failed")
+            self.assertNotIn("secret-token-text", "".join(logs.output) + delivery.error)
+
+    def test_email_accepted_none_accepted_and_non_delivering_backends(self):
+        from orders.notifications import deliver_email
+
+        self.assertEqual(deliver_email(self.n, "a@b.ge", "S", "B").status, "sent")  # locmem: really in the outbox
+        with mock.patch("django.core.mail.send_mail", return_value=0), \
+                self.assertLogs("orders.notifications", "WARNING"):
+            self.assertEqual(deliver_email(self.n, "a@b.ge", "S", "B").status, "failed")
+        for backend in ("console", "dummy"):
+            with self.subTest(backend=backend), \
+                    override_settings(MAILERS={"default": {
+                        "BACKEND": f"django.core.mail.backends.{backend}.EmailBackend"}}):
+                delivery = deliver_email(self.n, "a@b.ge", "S", "B")
+            self.assertEqual((delivery.status, backend in delivery.error), ("skipped", True))
