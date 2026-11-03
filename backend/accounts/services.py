@@ -269,7 +269,7 @@ CLOSED_ORDER_STATUSES = ("completed", "cancelled")
 def anonymize_customer(customer):
     """Shared by DELETE /api/profile/ and the admin action (LP-BE-1102). Raises account_has_open_orders."""
     from cart.models import Cart
-    from orders.models import Order
+    from orders.models import Notification, Order, SupportTicket
     from parts.models import PartQuoteRequest, PartSearchLog
 
     with transaction.atomic():
@@ -284,7 +284,9 @@ def anonymize_customer(customer):
         PartQuoteRequest.objects.filter(customer=customer, status__in=PartQuoteRequest.OPEN_STATUSES).delete()
         PartSearchLog.objects.filter(customer=customer).update(customer=None, hidden_at=now)
         Cart.objects.filter(customer=customer).delete()
-        # LP-BE-901 adds deleting the notifications.
+        # notifications and support tickets hold personal data (messages, contacts): removed with the account
+        Notification.objects.filter(customer=customer).delete()
+        SupportTicket.objects.filter(customer=customer).delete()
 
         # shortcut: scans every session (fine at this scale); add a user->session index if sessions grow large.
         for session in Session.objects.all():

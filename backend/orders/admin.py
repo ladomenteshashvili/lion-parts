@@ -20,7 +20,8 @@ from payments.services import MANUAL_PROVIDERS, confirm_manual_payment, record_r
 from . import services
 from .admin_actions import OperatePermissionMixin, form_action
 from .invoices import invoice_language, render_invoice
-from .models import CourierFeeProposal, Order, OrderItem, OrderItemEvent, OrderSupportMessage
+from .models import (CourierFeeProposal, Notification, NotificationChannelSetting, Order, OrderItem,
+                     OrderItemEvent, OrderSupportMessage)
 
 
 class ReadOnlyAdminMixin:
@@ -319,3 +320,27 @@ class OrderSupportMessageAdmin(OperatePermissionMixin, ReadOnlyAdminMixin, admin
     @admin.action(description=_("Mark read"), permissions=["operate"])
     def mark_read(self, request, queryset):
         queryset.update(is_read_by_operator=True)
+
+
+@admin.register(NotificationChannelSetting)
+class NotificationChannelSettingAdmin(admin.ModelAdmin):
+    """One row per event (seeded); only the channel is editable."""
+
+    list_display = ("event_type", "channel")
+    list_editable = ("channel",)
+    readonly_fields = ("event_type",)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(Notification)
+class NotificationAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
+    list_display = ("id", "event_type", "customer", "order", "read_at", "created_at")
+    list_filter = ("event_type",)
+    search_fields = ("order__order_number", "customer__user__email")
+    list_select_related = ("customer", "order")
+    exclude = ("token",)  # the public link token is never shown
