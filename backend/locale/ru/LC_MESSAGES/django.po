@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 17:37+0000\n"
+"POT-Creation-Date: 2026-11-03 17:38+0000\n"
 "Language: ru\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -597,6 +597,14 @@ msgstr "Выберите город из списка."
 #: orders/checkout.py:106
 msgid "Choose a district of this city."
 msgstr "Выберите район этого города."
+
+#: orders/notifications.py:119
+#, python-format
+msgid ""
+"Lion Parts support replied to your request:\n"
+"\n"
+"%(reply)s"
+msgstr "Служба поддержки Lion Parts ответила на ваш запрос:\n\n%(reply)s"
 
 #: orders/services.py:206
 msgid "Courier fees can be proposed for open delivery orders only."
