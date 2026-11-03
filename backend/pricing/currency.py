@@ -18,6 +18,12 @@ def default_currency():
     return BASE_CURRENCY if SiteSettings.get().multi_currency_enabled else "GEL"
 
 
+def effective_currency(currency):
+    """The currency to show a stored price in now: its own while allowed, else the default
+    (e.g. a USD quote after multi-currency was switched off is shown in GEL)."""
+    return currency if currency in allowed_currencies() else default_currency()
+
+
 def display_rate(currency):
     """The factor from USD to `currency`: 1 for USD, the current NBG rate for GEL.
     Raises RateUnavailable rather than converting with an outdated rate."""

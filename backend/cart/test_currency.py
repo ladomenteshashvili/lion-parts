@@ -89,3 +89,28 @@ class CurrencyModeTests(TestCase):
                          (D("242.84"), D("24.28"), D("218.56")))
         gel = self.switch("GEL").json()["items"][0]
         self.assertEqual((gel["unit_price"], gel["list_unit_price"]), ("568.26", "631.38"))  # x 2.6
+
+
+@override_settings(PARTS_PROVIDER="demo")
+class ModeSwitchedOffShowsGelEverywhereTests(TestCase):
+    def test_usd_quotes_and_searches_are_shown_in_gel_once_the_mode_is_off(self):
+        from parts.models import PartQuoteRequest
+        from parts.services import mark_quote_price_ready
+
+        ExchangeRate.objects.create(date=timezone.localdate(), rate=D("2.6000"))
+        SiteSettings.objects.update(multi_currency_enabled=True)
+        customer = make_customer(is_phone_verified=True)
+        client = APIClient()
+        client.force_login(customer.user)
+        client.post("/api/parts/search/", {"part_number": "USD-1"}, format="json")  # a USD search
+        qr = PartQuoteRequest.objects.create(customer=customer, request_type="weight_price", part_number="Q-1",
+                                             supplier_price_usd=D("50"), prepared_weight_kg=D("3"), currency="USD")
+        mark_quote_price_ready(qr)
+        qr.refresh_from_db()
+        SiteSettings.objects.update(multi_currency_enabled=False)
+        listed = client.get("/api/parts/quote-requests/").json()["results"][0]
+        self.assertEqual((listed["currency"], listed["unit_price"]),
+                         ("GEL", f"{round2(qr.unit_price_usd * D('2.6'))}"))
+        self.assertEqual({i["currency"] for i in client.get("/api/parts/history/").json()["results"]}, {"GEL"})
+        public = APIClient().get(f"/api/public/q/{qr.notification_token}/").json()
+        self.assertEqual(public["currency"], "GEL")

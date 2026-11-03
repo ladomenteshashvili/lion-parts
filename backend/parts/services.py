@@ -6,7 +6,7 @@ from django.utils import timezone
 from accounts.validators import normalize_part_number
 from api.errors import ApiError
 from orders.texts import render_text
-from pricing.currency import default_currency, display_rate
+from pricing.currency import default_currency, display_rate, effective_currency
 from pricing.engine import PriceInput, convert, default_shipping_usd_per_kg, price_offer
 from pricing.validity import price_valid_until
 
@@ -108,7 +108,8 @@ def calculate_weight_price(request, log, offer_id, weight_kg):
     customer = request_customer(request)
     if log.offer(offer_id) is None:
         raise ApiError("not_found", status=404)
-    rate = display_rate(log.currency)
+    currency = effective_currency(log.currency)
+    rate = display_rate(currency)
     provider, raw, rows = fetch_rows(log.part_number)
     row = next((r for r in rows if r["offer_id"] == offer_id), None)
     if row is None:
@@ -118,7 +119,7 @@ def calculate_weight_price(request, log, offer_id, weight_kg):
     return PartSearchLog.objects.create(
         kind=PartSearchLog.KIND_WEIGHT_CALC, customer=customer, session_key=request.session.session_key or "",
         provider=provider, part_number=log.part_number, vin=log.vin, found_count=1, raw_response={"data": raw},
-        normalized_response={"offers": offers, "priced_for": priced_for(customer)}, currency=log.currency,
+        normalized_response={"offers": offers, "priced_for": priced_for(customer)}, currency=currency,
         exchange_rate=rate, price_valid_until=price_valid_until(),
     )
 
@@ -168,14 +169,16 @@ def create_quote_request(customer, data, log=None):
 def quote_unit_price(qr):
     """The approved unit price in the quote's currency at the current rate (GEL follows the rate,
     the USD base doesn't change). Raises RateUnavailable for GEL without a current rate."""
-    return f"{convert(qr, qr.currency, display_rate(qr.currency)).unit_price:.2f}"
+    currency = effective_currency(qr.currency)
+    return f"{convert(qr, currency, display_rate(currency)).unit_price:.2f}"
 
 
 def quote_request_data(qr):
     """The G§8.0 QuoteRequest."""
     return {"id": qr.pk, "request_type": qr.request_type, "part_number": qr.part_number, "vin": qr.vin,
             "name": qr.name, "brand": qr.brand, "status": qr.status, "is_price_ready": qr.is_price_ready,
-            "unit_price": quote_unit_price(qr) if qr.is_price_ready else None, "currency": qr.currency,
+            "unit_price": quote_unit_price(qr) if qr.is_price_ready else None,
+            "currency": effective_currency(qr.currency),
             "price_valid_until": qr.price_valid_until,
             "weight_kg": f"{qr.prepared_weight_kg:.2f}" if qr.prepared_weight_kg is not None else None,
             "operator_message": qr.operator_message, "created_at": qr.created_at}
@@ -184,7 +187,8 @@ def quote_request_data(qr):
 def public_quote_data(qr):
     """GET /api/public/q/<token>/: the prepared price only, never customer data."""
     return {"quote_request_id": qr.pk, "part_number": qr.part_number, "name": qr.name, "brand": qr.brand,
-            "unit_price": quote_unit_price(qr), "currency": qr.currency, "price_valid_until": qr.price_valid_until,
+            "unit_price": quote_unit_price(qr), "currency": effective_currency(qr.currency),
+            "price_valid_until": qr.price_valid_until,
             "eta_min_days": qr.eta_min_days,
             "eta_max_days": qr.eta_max_days,
             "weight_kg": f"{qr.prepared_weight_kg:.2f}" if qr.prepared_weight_kg is not None else None,

@@ -6,7 +6,7 @@ from decimal import Decimal
 from django.utils import timezone
 
 from accounts.validators import normalize_part_number
-from pricing.currency import display_rate
+from pricing.currency import display_rate, effective_currency
 from pricing.engine import convert
 from pricing.validity import is_expired
 
@@ -46,6 +46,7 @@ class _Rates(dict):
 
 
 def _shown(usd_amount, currency, rates):
+    """A canonical USD amount in `currency` (already an allowed currency) at today's rate."""
     if usd_amount is None:
         return None
     return _money(convert({"list_price_usd": usd_amount, "unit_price_usd": usd_amount}, currency,
@@ -64,12 +65,13 @@ def _purchased_orders(customer):
 def _log_item(log, previous_usd, rates):
     best = _best_offer(log.offers())
     unit_usd = _usd(best)
+    currency = effective_currency(log.currency)
     item = {
         "id": f"log-{log.pk}", "kind": "search", "search_id": log.pk, "quote_request_id": None,
         "part_number": log.part_number, "vin": log.vin, "name": best["name"] if best else "",
         "brand": best["brand"] if best else "", "status": None,
-        "unit_price": _shown(unit_usd, log.currency, rates),
-        "previous_unit_price": None, "currency": log.currency, "offers_count": len(log.offers()),
+        "unit_price": _shown(unit_usd, currency, rates),
+        "previous_unit_price": None, "currency": currency, "offers_count": len(log.offers()),
         "eta_min_days": best.get("eta_min_days") if best else None,
         "eta_max_days": best.get("eta_max_days") if best else None,
         "weight_kg": best.get("weight_kg") if best else None, "weight_source": best.get("weight_source", "") if best else "",
@@ -83,7 +85,7 @@ def _log_item(log, previous_usd, rates):
     elif unit_usd is None:
         item["status"] = "checking"  # offers found, none priced yet (no weight)
     elif previous_usd is not None and previous_usd != unit_usd:  # canonical USD: FX alone is no change
-        item.update(status="price_changed", previous_unit_price=_shown(previous_usd, log.currency, rates))
+        item.update(status="price_changed", previous_unit_price=_shown(previous_usd, currency, rates))
     else:
         item["status"] = "ready"
     return item
@@ -91,6 +93,7 @@ def _log_item(log, previous_usd, rates):
 
 def _quote_item(qr, rates):
     ready = qr.is_price_ready
+    currency = effective_currency(qr.currency)
     if ready:
         status = "expired" if is_expired(qr.price_valid_until) else "price_ready"
     else:
@@ -98,8 +101,8 @@ def _quote_item(qr, rates):
     return {
         "id": f"qr-{qr.pk}", "kind": "quote_request", "search_id": qr.search_log_id, "quote_request_id": qr.pk,
         "part_number": qr.part_number, "vin": qr.vin, "name": qr.name, "brand": qr.brand, "status": status,
-        "unit_price": _shown(qr.unit_price_usd, qr.currency, rates) if ready else None, "previous_unit_price": None,
-        "currency": qr.currency,
+        "unit_price": _shown(qr.unit_price_usd, currency, rates) if ready else None, "previous_unit_price": None,
+        "currency": currency,
         "offers_count": 1, "eta_min_days": qr.eta_min_days, "eta_max_days": qr.eta_max_days,
         "weight_kg": _money(qr.prepared_weight_kg),
         "weight_source": "operator" if qr.prepared_weight_kg is not None else "",
