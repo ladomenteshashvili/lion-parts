@@ -202,7 +202,7 @@ def propose_courier_fee(order_id, fee_gel, message, actor=None):
     accepted ones stay as they are. Raises RateUnavailable (nothing changes) / OperatorError."""
     from pricing.rates import get_usd_rate
 
-    order = Order.objects.select_for_update().get(pk=order_id)
+    order = Order.objects.select_for_update(no_key=True).get(pk=order_id)
     if order.status not in Order.OPEN_STATUSES or order.delivery_method != "delivery":
         raise OperatorError("fee_gel", _("Courier fees can be proposed for open delivery orders only."))
     if fee_gel is None or fee_gel < 0:
@@ -309,14 +309,14 @@ def cancel_order(order_id, reason, *, actor, actor_name="", operator=False):
 
     if operator and not reason.strip():
         raise OperatorError("reason", _("A cancellation reason is required."))
-    open_payments = list(Payment.objects.select_for_update().filter(order_id=order_id,
+    open_payments = list(Payment.objects.select_for_update(no_key=True).filter(order_id=order_id,
                                                                      status__in=Payment.OPEN_STATUSES))
-    order = Order.objects.select_for_update().get(pk=order_id)
+    order = Order.objects.select_for_update(no_key=True).get(pk=order_id)
     allowed = order.status in Order.OPEN_STATUSES if operator else can_cancel(order)
     if not allowed:
         raise ApiError("not_cancellable", status=409)
     item = None
-    for item in _live_items(order).select_for_update():
+    for item in _live_items(order).select_for_update(no_key=True):
         old = item.item_status
         item.item_status = OrderItem.STATUS_CANCELLED
         for field, value in PROPOSED_CLEAR.items():
@@ -368,8 +368,8 @@ def respond_courier_fee(order_id, accept):
     from api.errors import ApiError
     from pricing.models import PickupPoint
 
-    order = Order.objects.select_for_update().get(pk=order_id)
-    proposal = order.courier_fee_proposals.select_for_update().filter(
+    order = Order.objects.select_for_update(no_key=True).get(pk=order_id)
+    proposal = order.courier_fee_proposals.select_for_update(no_key=True).filter(
         status=CourierFeeProposal.STATUS_PENDING).first()
     if proposal is None or not order.courier_fee_action_required or order.status not in Order.OPEN_STATUSES:
         raise ApiError("no_pending_action", status=409)
@@ -407,10 +407,10 @@ def _lock_for_operator(item_id, with_open_payments=False):
     from payments.models import Payment
 
     order_id = OrderItem.objects.values_list("order_id", flat=True).get(pk=item_id)
-    payments = list(Payment.objects.select_for_update().filter(order_id=order_id, status__in=Payment.OPEN_STATUSES)) \
+    payments = list(Payment.objects.select_for_update(no_key=True).filter(order_id=order_id, status__in=Payment.OPEN_STATUSES)) \
         if with_open_payments else []
-    order = Order.objects.select_for_update().get(pk=order_id)
-    item = OrderItem.objects.select_for_update().get(pk=item_id)
+    order = Order.objects.select_for_update(no_key=True).get(pk=order_id)
+    item = OrderItem.objects.select_for_update(no_key=True).get(pk=item_id)
     return (order, item, payments) if with_open_payments else (order, item)
 
 

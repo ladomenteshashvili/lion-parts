@@ -18,7 +18,7 @@ def mark_payment(payment, status, payload=None, confirmed_by=None):
     payment moves the order to processing and its items to payment_confirmed."""
     if status not in dict(Payment.STATUSES):
         raise ValueError(f"unknown payment status {status!r}")
-    payment = Payment.objects.select_for_update().get(pk=payment.pk)
+    payment = Payment.objects.select_for_update(no_key=True).get(pk=payment.pk)
     if (payment.status == status or payment.status in FINAL_STATUSES
             or (payment.status == Payment.STATUS_PAID and status != Payment.STATUS_REFUNDED)
             or (status == Payment.STATUS_REFUNDED and payment.status != Payment.STATUS_PAID)):
@@ -31,7 +31,7 @@ def mark_payment(payment, status, payload=None, confirmed_by=None):
         payment.confirmed_by = confirmed_by
     payment.save()
 
-    order = Order.objects.select_for_update().get(pk=payment.order_id)
+    order = Order.objects.select_for_update(no_key=True).get(pk=payment.order_id)
     recalculate_order(order)
     if status == Payment.STATUS_PAID and payment.kind == Payment.KIND_INITIAL \
             and order.status == Order.STATUS_PAYMENT_PENDING:
@@ -108,7 +108,7 @@ def request_payment(order_id, method):
     from orders.serializers import payment_data
 
     with transaction.atomic():
-        order = Order.objects.select_for_update().get(pk=order_id)
+        order = Order.objects.select_for_update(no_key=True).get(pk=order_id)
         if order.status == Order.STATUS_CANCELLED or order.balance_due <= 0:
             raise ApiError("nothing_to_pay", status=409)
         if blocking := open_payment(order):
@@ -124,8 +124,8 @@ def confirm_manual_payment(payment, user):
     same order as mark_payment (payment, then order). -> None when confirmed, else a reason code:
     not_manual / not_pending / overpayment."""
     with transaction.atomic():
-        payment = Payment.objects.select_for_update().get(pk=payment.pk)
-        order = Order.objects.select_for_update().get(pk=payment.order_id)
+        payment = Payment.objects.select_for_update(no_key=True).get(pk=payment.pk)
+        order = Order.objects.select_for_update(no_key=True).get(pk=payment.order_id)
         if payment.provider not in MANUAL_PROVIDERS:
             return "not_manual"
         if payment.status != Payment.STATUS_PENDING:
@@ -145,9 +145,9 @@ def refundable(payment):
 
 def _lock_paid(order_id):
     """Paid payments then the order, row-locked (mark_payment's lock order); money recalculated."""
-    payments = list(Payment.objects.select_for_update().filter(order_id=order_id, status=Payment.STATUS_PAID)
+    payments = list(Payment.objects.select_for_update(no_key=True).filter(order_id=order_id, status=Payment.STATUS_PAID)
                     .order_by("-paid_at", "-id"))
-    order = Order.objects.select_for_update().get(pk=order_id)
+    order = Order.objects.select_for_update(no_key=True).get(pk=order_id)
     recalculate_order(order)
     return payments, order
 

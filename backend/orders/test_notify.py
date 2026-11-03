@@ -98,10 +98,36 @@ class NotifyTests(TestCase):
             pass
         self.assertEqual((len(mail.outbox), Notification.objects.count()), (1, 1))
 
+    def test_a_transient_database_error_is_retried_not_lost(self):
+        from django.db import OperationalError
+
+        real_create = Notification.objects.create
+        calls = []
+
+        def flaky(**kwargs):
+            calls.append(1)
+            if len(calls) == 1:
+                raise OperationalError("deadlock detected")
+            return real_create(**kwargs)
+
+        with mock.patch.object(Notification.objects, "create", side_effect=flaky), \
+                self.assertLogs("orders.notifications", "WARNING"):
+            n = notify(self.customer, "status_update", order=self.order)
+        self.assertEqual((len(calls), Notification.objects.filter(pk=n.pk).exists()), (2, True))
+
+    def test_persistent_database_errors_are_reported_as_errors(self):
+        from django.db import OperationalError
+
+        with mock.patch.object(Notification.objects, "create", side_effect=OperationalError("deadlock")), \
+                self.assertLogs("orders.notifications", "ERROR") as logs:
+            self.assertIsNone(notify(self.customer, "status_update", order=self.order))
+        self.assertIn("was not created after 3 attempts", "".join(logs.output))
+
     def test_never_raises_and_anonymized_customers_get_nothing(self):
         with mock.patch("orders.notifications.send", side_effect=RuntimeError("boom")), \
                 self.assertLogs("orders.notifications", "ERROR"):
-            self.assertIsNone(notify(self.customer, "status_update", order=self.order))
+            n = notify(self.customer, "status_update", order=self.order)
+        self.assertTrue(Notification.objects.filter(pk=n.pk).exists())  # the in-app notification is kept
         from django.utils import timezone
         self.customer.anonymized_at = timezone.now()
         self.assertIsNone(notify(self.customer, "status_update", order=self.order, params={"x": 1}))

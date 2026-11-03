@@ -75,7 +75,7 @@ def reply_to_ticket(ticket_id, reply, user):
     if not reply:
         raise OperatorError("reply", _("Write a reply."))
     with transaction.atomic():
-        ticket = SupportTicket.objects.select_for_update().select_related("customer").get(pk=ticket_id)
+        ticket = SupportTicket.objects.select_for_update(no_key=True, of=("self",)).select_related("customer").get(pk=ticket_id)
         if ticket.status == SupportTicket.STATUS_CLOSED:
             raise OperatorError("reply", _("The ticket is closed."))
         if ticket.status == SupportTicket.STATUS_ANSWERED and ticket.operator_reply == reply:

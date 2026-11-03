@@ -81,6 +81,7 @@ def template_context(notification, link, title):
 # notify() and delivery (LP-BE-902)
 
 DEDUP_SECONDS = 60
+CREATE_ATTEMPTS = 3
 TARGETS = ("order", "item", "quote_request", "support_message", "support_ticket")
 
 
@@ -99,32 +100,46 @@ def notify(customer, event_type, *, message="", params=None, **targets):
     -> the Notification (or None when skipped)."""
     from datetime import timedelta
 
-    from django.db import transaction
+    from django.db import OperationalError, transaction
     from django.utils import timezone
 
     from accounts.models import Customer
 
     from .models import Notification
 
-    try:
-        if customer is None or customer.anonymized_at:
-            return None
-        params = params or {}
-        with transaction.atomic():
-            Customer.objects.select_for_update().filter(pk=customer.pk).first()
-            recent = Notification.objects.filter(
-                customer=customer, event_type=event_type, text_params=params,
-                created_at__gte=timezone.now() - timedelta(seconds=DEDUP_SECONDS),
-                **{f"{name}": targets.get(name) for name in TARGETS})
-            if recent.exists():
-                return None
-            notification = Notification.objects.create(customer=customer, event_type=event_type, message=message,
-                                                       text_params=params, **targets)
-        send(notification, _channels(event_type))
-        return notification
-    except Exception:  # a notification must never break the action that triggered it
-        logger.exception("Creating the %s notification failed", event_type)
+    if customer is None or customer.anonymized_at:
         return None
+    params = params or {}
+    for attempt in range(1, CREATE_ATTEMPTS + 1):
+        try:
+            with transaction.atomic():
+                # NO KEY UPDATE: serializes notify() for this customer without blocking (or deadlocking with)
+                # other transactions that only insert rows pointing at the customer or the order.
+                Customer.objects.select_for_update(no_key=True).filter(pk=customer.pk).first()
+                recent = Notification.objects.filter(
+                    customer=customer, event_type=event_type, text_params=params,
+                    created_at__gte=timezone.now() - timedelta(seconds=DEDUP_SECONDS),
+                    **{f"{name}": targets.get(name) for name in TARGETS})
+                if recent.exists():
+                    return None
+                notification = Notification.objects.create(customer=customer, event_type=event_type,
+                                                           message=message, text_params=params, **targets)
+            break
+        except OperationalError:  # deadlock / serialization failure: transient, try again
+            if attempt == CREATE_ATTEMPTS:
+                logger.error("The %s notification for customer %s was not created after %d attempts",
+                             event_type, customer.pk, attempt, exc_info=True)
+                return None
+            logger.warning("Creating the %s notification: retry %d after a transient database error", event_type,
+                           attempt)
+        except Exception:  # a notification must never break the action that triggered it
+            logger.exception("Creating the %s notification failed", event_type)
+            return None
+    try:
+        send(notification, _channels(event_type))
+    except Exception:  # the row exists (in-app); a delivery problem must not break the triggering action
+        logger.exception("Delivering the %s notification failed", event_type)
+    return notification
 
 
 def notify_after_commit(customer, event_type, **kwargs):
