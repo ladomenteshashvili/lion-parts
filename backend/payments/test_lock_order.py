@@ -21,9 +21,9 @@ from orders import services
 from orders.models import Order, OrderItem
 from orders.testing import make_order
 from payments.models import Payment
-from payments.providers import get_provider
-from payments.services import (confirm_manual_payment, mark_payment, recheck_payment, record_refund, refund_whole_payment,
-                               request_payment, start_payment)
+from payments.providers import FakeProvider, get_provider
+from payments.services import (confirm_manual_payment, mark_payment, recheck_payment, record_provider_result, record_refund,
+                               refund_whole_payment, request_payment, start_payment)
 from payments.testing import use_simulated_provider
 
 D = Decimal
@@ -84,6 +84,13 @@ class LockOrderTests(TestCase):
     def test_callback(self):
         payment = self.started()
         self.assertEqual(self.locks(lambda: self.gateway.send_callback(payment, "paid")), ["payment", "order"])
+
+    def test_record_provider_result_with_closure(self):
+        self.gateway.final_statuses = frozenset({"failed"})
+        payment = self.started()
+        self.assertEqual(self.locks(lambda: record_provider_result(payment, "failed", get_provider())),
+                         ["payment", "order"])
+        self.assertIsNotNone(Payment.objects.get(pk=payment.pk).provider_closed_at)
 
     def test_recheck_payment(self):
         payment = self.started()
@@ -205,6 +212,13 @@ class WaitingOnAPaymentTests(TransactionTestCase):
         payment = self.payment()
         self.assert_waits_for_the_payment_before_the_order(payment, lambda: mark_payment(payment, "paid"))
 
+    def test_record_provider_result(self):
+        payment = self.payment()
+        Payment.objects.filter(pk=payment.pk).update(checkout_url="https://provider.invalid/x")
+        self.assert_waits_for_the_payment_before_the_order(
+            payment, lambda: record_provider_result(payment, "failed", FakeProvider()))
+        self.assertIsNotNone(Payment.objects.get(pk=payment.pk).provider_closed_at)
+
     def test_cancel_order(self):
         self.assert_waits_for_the_payment_before_the_order(
             self.payment(), lambda: services.cancel_order(self.order.pk, "x", actor="operator", operator=True))
@@ -236,3 +250,59 @@ class WaitingOnAPaymentTests(TransactionTestCase):
         mark_payment(payment, "paid")
         services.cancel_order(self.order.pk, "x", actor="operator", operator=True)
         self.assert_waits_for_the_payment_before_the_order(payment, lambda: refund_whole_payment(payment, self.admin))
+
+
+@unittest.skipUnless(connection.vendor == "postgresql", "row locks need PostgreSQL (CI)")
+class KnownIssueForS2Tests(TransactionTestCase):
+    """KNOWN UNRESOLVED ISSUE, tracked for LPK-219 S2. Deterministic evidence of what happens today, NOT a contract and NOT
+    wanted behaviour, and nothing here prevents it. A path that closes open payments reads them before it gets the order, so
+    it misses a payment committed in between. S2 must replace these tests with the behaviour it requires."""
+
+    serialized_rollback = True
+    wait_until_another_connection_is_blocked = WaitingOnAPaymentTests.wait_until_another_connection_is_blocked
+
+    def setUp(self):
+        self.customer = make_customer(is_phone_verified=True, is_email_verified=True)
+        self.order = make_order(self.customer, items=(("A", D("100"), 1), ("B", D("50"), 1)), payment_method="card")
+
+    def payment_committed_while_it_waits(self, path):
+        errors = []
+
+        def run():
+            try:
+                path()
+            except Exception as error:
+                errors.append(repr(error))
+            finally:
+                connection.close()
+
+        thread = threading.Thread(target=run)
+        try:
+            with transaction.atomic():
+                Order.objects.select_for_update(no_key=True).get(pk=self.order.pk)
+                thread.start()
+                self.assertTrue(self.wait_until_another_connection_is_blocked(), "the path did not wait for the order")
+                payment = request_payment(self.order.pk, "card")
+        finally:
+            if thread.ident:
+                thread.join(30)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(errors, [])
+        return Payment.objects.get(pk=payment.pk)
+
+    def test_cancel_order_does_not_see_it(self):
+        payment = self.payment_committed_while_it_waits(
+            lambda: services.cancel_order(self.order.pk, "x", actor="operator", operator=True))
+        self.assertEqual(Order.objects.get(pk=self.order.pk).status, Order.STATUS_CANCELLED)
+        self.assertEqual(payment.status, "created")
+        self.assertTrue(start_payment(payment))
+        started = Payment.objects.get(pk=payment.pk)
+        self.assertEqual(started.status, "pending")
+        self.assertTrue(started.checkout_url)
+
+    def test_set_item_status_does_not_see_it(self):
+        item = self.order.items.get(part_number="A")
+        payment = self.payment_committed_while_it_waits(
+            lambda: services.set_item_status(item.pk, "cancelled", reason="x"))
+        self.assertEqual(payment.status, "created")
+        self.assertNotEqual(payment.amount, Order.objects.get(pk=self.order.pk).amount_due_now)

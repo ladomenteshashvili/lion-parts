@@ -36,6 +36,8 @@ class SimulatedGateway:
         self.start_error = False
         self.fetch_answers = {}
         self.fetch_calls = []
+        self.checkout_lifetime = None
+        self.final_statuses = frozenset()
 
     def session(self, payment):
         return self.sessions[payment.provider_order_id]
@@ -84,6 +86,8 @@ class SimulatedProvider(PaymentProvider):
 
     def __init__(self, gateway):
         self.gateway = gateway
+        self.checkout_lifetime = gateway.checkout_lifetime
+        self.final_statuses = gateway.final_statuses
 
     def start(self, payment):
         if self.gateway.start_error:

@@ -14,7 +14,7 @@ from orders.serializers import payment_data
 
 from .models import Payment
 from .providers import PLATFORM_STATUSES, get_provider
-from .services import mark_payment
+from .services import record_provider_result
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ def callback(request, provider):
     except Exception:  # never trust a callback the adapter couldn't verify
         logger.warning("Invalid %s payment callback", provider, exc_info=True)
         raise ApiError("invalid_callback", status=400)
-    mark_payment(payment, status, payload={"callback": True})
+    record_provider_result(payment, status, adapter, payload={"callback": True})
     return Response({"ok": True})
 
 
@@ -55,4 +55,4 @@ def fake_complete(request, payment_id):
         raise serializers.ValidationError({"status": [serializers.ErrorDetail("paid | failed | expired", "invalid")]})
     if payment.status != Payment.STATUS_PENDING:
         raise ApiError("nothing_to_pay", status=409)
-    return Response(payment_data(mark_payment(payment, status, payload={"fake": True})))
+    return Response(payment_data(record_provider_result(payment, status, get_provider(), payload={"fake": True})))

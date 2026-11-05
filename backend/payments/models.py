@@ -28,6 +28,8 @@ class Payment(models.Model):
     provider_order_id = models.CharField(max_length=60, unique=True, null=True, blank=True)  # {order_number}-{pk}
     provider_payment_id = models.CharField(max_length=120, blank=True)
     checkout_url = models.URLField(max_length=1000, blank=True)
+    checkout_expires_at = models.DateTimeField(null=True, blank=True)  # estimate; empty means not known, not "never"
+    provider_closed_at = models.DateTimeField(null=True, blank=True)  # when provider evidence was recorded; empty: none
     provider_payload = models.JSONField(default=dict, blank=True)
     paid_at = models.DateTimeField(null=True, blank=True)
     confirmed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
