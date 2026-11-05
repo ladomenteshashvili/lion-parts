@@ -65,7 +65,7 @@ SSL redirect, HSTS one year, `X-Frame-Options: DENY`, nosniff, `Referrer-Policy:
 
 ## 5. Post-review changes (LPK-172)
 
-Implemented on the post-review branch; in review, GitHub CI pending, not merged.
+Merged to `main` through PR #66.
 
 | Story | Area | What changed | Evidence |
 |---|---|---|---|
