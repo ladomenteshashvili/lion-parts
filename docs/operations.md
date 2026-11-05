@@ -420,9 +420,10 @@ previous tag, restart. Run `migrate` with the new code only after the backup has
 ## 10. Incidents
 
 - **Payment provider down:** card payments stay `created/pending`; `reconcile_payments` retries and marks
-  `unknown` after 30 minutes. A `pending` or `unknown` payment blocks every new payment on its order, invoice
-  included (`409 payment_in_progress`), so those customers cannot switch to invoice; other customers can pay by
-  invoice. The job keeps re-checking them, so they resolve once the provider answers again.
+  `unknown` after 30 minutes. A `pending` or `unknown` payment, or a card payment closed here while its provider page
+  may still take money, blocks every new payment on its order, invoice included (`409 payment_in_progress`), so those
+  customers cannot switch to invoice; other customers can pay by invoice. The jobs keep re-checking them, so they
+  resolve once the provider answers again.
 - **Unresolved card payment (manual escalation):** use this when the job or "Re-check with provider" cannot get a
   final answer, or reports a conflict.
   1. Run "Re-check with provider" in the payment admin (needs `payments.change_payment`). It works only on card
@@ -439,13 +440,17 @@ previous tag, restart. Run `migrate` with the new code only after the backup has
   5. **Provider change:** the job and the admin action ask only the configured provider, and the callback endpoint
      answers `404` for any other, so a previous provider's payments no longer resolve on their own. Before switching,
      filter the payment admin by `pending` and `unknown` and resolve them with the current provider. Any left over
-     stay blocked and are escalated (step 8), using the old provider's dashboard for evidence (step 2).
+     stay blocked and are escalated (step 9), using the old provider's dashboard for evidence (step 2).
   6. **Provider conflict:** the log line "provider says paid … marked unknown", with `errors` counted by the job, means
      the provider's answers conflict. The payment stays `unknown`, blocks new card and invoice payments, and the job keeps
      asking. `provider_payload` records `conflict_with` and `conflict_second_answer`. Follow steps 2 and 3.
   7. **More than one payment on an order (LPK-219):** escalate to the owner. If an order shows `refund_pending`, use
      "Record refund of the amount owed". Use "Cancel invoice" for an invoice the order no longer owes.
-  8. **No manual status changes.** An `unknown` payment is resolved only by provider confirmation or an explicitly
+  8. **A closed payment that still blocks (LPK-219):** a card payment `failed` or `expired` here keeps blocking new
+     payments until the provider confirms the session has closed. Cancelling an order or item does not lift it. Run
+     "Re-check with provider" after the session's expiry. If there is still no proof, tell the customer it is being
+     checked and escalate to the owner. Do not edit `provider_closed_at`.
+  9. **No manual status changes.** An `unknown` payment is resolved only by provider confirmation or an explicitly
      authorized, auditable escalation process. Nobody sets the status of a real card payment by hand, through the
      admin, a Django shell or the database, until a separately approved procedure is defined. Unresolved payments stay
      as they are and are escalated, never guessed. Any future resolution requires all of: verified provider evidence,

@@ -276,12 +276,16 @@ blocks: the earlier payment may still complete, and a second one could charge th
   customer the payment is being checked and read `GET /api/orders/<n>/payments/<id>/` (poll no harder than in A;
   it can take much longer, so check again on the customer's next visit). `paid` moves the order on as usual;
   `failed` or `expired` means the customer can pay again.
+- `failed` or `expired`: the payment ended on our side, but its provider page may still take money, so we are waiting
+  for the provider to confirm that it has closed. No client action is needed. Tell the customer the previous payment is
+  being checked, and try again later. If it turns out `paid`, it is counted as usual.
 - `created`: a payment being started. Retry shortly. A card payment stops blocking 30 minutes after creation.
 
-Only `failed` and `expired` payments allow a retry without further checks.
+Never decide from a stored `failed` or `expired` status that a retry will work: send the request and read the answer.
 
 A `201` can carry `status: "failed"` or `"expired"` with `checkout_url: null`: the page could not be opened, or the
-payment was closed meanwhile (for example the order was cancelled). Read `status` before redirecting.
+payment was closed meanwhile (for example the order was cancelled, or a newer payment exists). Read `status` before
+redirecting.
 
 **C. Price change decision**: notification `action_required` (target `decision`) → `GET /api/orders/<n>/` →
 item `action` `{"type": "price_change", "old": {"unit_price": "320.00"}, "new": {"unit_price": "348.00"},
@@ -351,3 +355,4 @@ and order messages, verification emails. `429` carries `retry_after` seconds.
 | 2026-11-05 | `POST /api/orders/<n>/payments/`: `409 payment_in_progress` is now also returned for an `unknown` payment (any provider, any age) and a `pending` card payment older than 30 minutes (previously these allowed a new payment). They must be resumed or verified, not paid again (§8 B). Same path, error code and `payment` body. | No (behaviour: handle `unknown` in the existing `409`) |
 | 2026-11-05 | A payment closed while its provider page was opening keeps its closed status and gets no `checkout_url`, so a `201` from `POST /api/orders/<n>/payments/` can carry `status: "expired"` and `checkout_url: null`. | No (same shape as the existing `failed` case) |
 | 2026-11-05 | An `unknown` payment can now resolve later to `paid`, `failed` or `expired` without any client action (reconciliation or an operator's re-check). A `failed` or `expired` payment can become `paid` if the provider confirms it, or `unknown` if the provider's answers conflict; `unknown` then blocks new payments with the existing `409`. No endpoint, field or error code changed. | No |
+| 2026-11-06 | `POST /api/orders/<n>/payments/`: `409 payment_in_progress` is now also returned for a `failed` or `expired` card payment whose provider page may still take money, until the provider confirms it has closed. Previously those always allowed a retry. A payment that never got a provider page still allows one. | Yes: client handling above |

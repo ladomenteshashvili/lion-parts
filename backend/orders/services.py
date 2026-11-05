@@ -3,8 +3,9 @@ money and status fields are never edited anywhere else."""
 
 from datetime import timedelta
 from decimal import Decimal
+from functools import wraps
 
-from django.db import transaction
+from django.db import DatabaseError, transaction
 from django.db.models import F, Sum
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -32,6 +33,39 @@ class OperatorError(Exception):
     def __init__(self, field, message):
         super().__init__(message)
         self.field, self.message = field, message
+
+
+class _OpenPaymentAppeared(Exception):
+    """A payment was committed after this transaction read the open payments and before it got the order."""
+
+
+def _retried_when_a_payment_appears(function):
+    """function in one transaction, again from the start if a payment appeared meanwhile. Locking it here would take a
+    payment after the order, against the lock order, so the new attempt takes it first. A new open payment needs the
+    order lock and no other open payment, so more than one retry means something unexpected: fail with nothing changed."""
+    @wraps(function)
+    def run(*args, **kwargs):
+        for _attempt in range(3):
+            try:
+                with transaction.atomic():
+                    return function(*args, **kwargs)
+            except _OpenPaymentAppeared:
+                continue
+        raise DatabaseError("the open payments of an order kept changing")
+    return run
+
+
+def _lock_open_payments_then_order(order_id):
+    """(open payments, order) row-locked in the lock order used everywhere. No payment can be missed: holding the order,
+    nothing new can be created, and a payment committed before that is seen here."""
+    from payments.models import Payment
+
+    open_payments = Payment.objects.filter(order_id=order_id, status__in=Payment.OPEN_STATUSES)
+    payments = list(open_payments.select_for_update(no_key=True))
+    order = Order.objects.select_for_update(no_key=True).get(pk=order_id)
+    if open_payments.exclude(pk__in=[p.pk for p in payments]).exists():
+        raise _OpenPaymentAppeared
+    return payments, order
 
 
 def assign_order_number(order):
@@ -264,7 +298,7 @@ def lock_item(customer, item_id):
     return _lock_for_operator(item_id, with_open_payments=True)
 
 
-@transaction.atomic
+@_retried_when_a_payment_appears
 def decide(customer, item_id, decision, actor_name=""):
     """POST /api/orders/items/<id>/decision/ (G§7.9). A decision not offered for the pending action (or no
     action at all, e.g. a repeated submit) -> 409 no_pending_action. -> the order."""
@@ -298,20 +332,17 @@ def decide(customer, item_id, decision, actor_name=""):
     return order
 
 
-@transaction.atomic
+@_retried_when_a_payment_appears
 def cancel_order(order_id, reason, *, actor, actor_name="", operator=False):
     """G§7.13. Customers: open order with nothing purchased (else 409 not_cancellable). Operators (owner
     decision D19): any open order, reason required. Open payments expire; money already collected stays
     recorded, so amount_paid > 0 shows as refund_pending (refunded manually, never automatically).
     Locks the open payments, then the order (the order mark_payment uses). -> the order."""
     from api.errors import ApiError
-    from payments.models import Payment
 
     if operator and not reason.strip():
         raise OperatorError("reason", _("A cancellation reason is required."))
-    open_payments = list(Payment.objects.select_for_update(no_key=True).filter(order_id=order_id,
-                                                                     status__in=Payment.OPEN_STATUSES))
-    order = Order.objects.select_for_update(no_key=True).get(pk=order_id)
+    open_payments, order = _lock_open_payments_then_order(order_id)
     allowed = order.status in Order.OPEN_STATUSES if operator else can_cancel(order)
     if not allowed:
         raise ApiError("not_cancellable", status=409)
@@ -404,12 +435,9 @@ PAID_STATUSES_ONLY = (OrderItem.STATUS_READY_FOR_PICKUP, OrderItem.STATUS_COMPLE
 def _lock_for_operator(item_id, with_open_payments=False):
     """(order, item[, open payments]) row-locked: open payments, then the order, then the item (the lock
     order mark_payment and cancel_order use)."""
-    from payments.models import Payment
-
     order_id = OrderItem.objects.values_list("order_id", flat=True).get(pk=item_id)
-    payments = list(Payment.objects.select_for_update(no_key=True).filter(order_id=order_id, status__in=Payment.OPEN_STATUSES)) \
-        if with_open_payments else []
-    order = Order.objects.select_for_update(no_key=True).get(pk=order_id)
+    payments, order = _lock_open_payments_then_order(order_id) if with_open_payments \
+        else ([], Order.objects.select_for_update(no_key=True).get(pk=order_id))
     item = OrderItem.objects.select_for_update(no_key=True).get(pk=item_id)
     return (order, item, payments) if with_open_payments else (order, item)
 
@@ -479,7 +507,7 @@ def request_item_action(item_id, action_type, message="", *, actor_name="", prop
     return item
 
 
-@transaction.atomic
+@_retried_when_a_payment_appears
 def set_item_status(item_id, status, *, actor_name="", reason="", bypass_balance_guard=False):
     """Operator status change (G§7.8). Balance guard: no ready_for_pickup/completed while balance_due > 0
     (only demo endpoints bypass it). `purchased` stamps purchased_at. Cancelling needs a reason and may

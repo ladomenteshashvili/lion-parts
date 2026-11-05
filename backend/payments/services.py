@@ -86,21 +86,39 @@ def create_payment(order, method, kind=Payment.KIND_INITIAL, amount=None):
     return payment
 
 
+def _start_refusal(payment, order):
+    """Why this payment must not get a provider page, or None. Under the order lock this is exact: new payments are only
+    created holding it, so either a newer one is visible here or the newer one will see this payment open."""
+    if order.status == Order.STATUS_CANCELLED:
+        return "order_cancelled"
+    if order.payments.filter(pk__gt=payment.pk).exists():
+        return "newer_payment"
+    return "amount_changed" if payment.amount > order.balance_due else None
+
+
 def start_payment(payment):
     """Open the provider's payment page. Never inside a DB transaction (no row locks held while calling
-    out), so the payment may have changed when the provider answers: only a still open payment takes the
-    answer. A PaymentInitError marks it failed. -> False when there is no page to open and nothing was paid."""
+    out), so the payment may have changed when the provider answers: only a still open payment that may still
+    get a page takes the answer. A provider page whose link was never stored reached nobody. A PaymentInitError marks
+    it failed. -> False when there is no page to open and nothing was paid."""
     from .providers import PaymentInitError, get_provider
 
     provider = get_provider()
-    try:
-        url = provider.start(payment)
-    except PaymentInitError:
-        url = None
+    url = None
+    fresh = Payment.objects.select_related("order").get(pk=payment.pk)
+    if fresh.status in Payment.OPEN_STATUSES and not _start_refusal(fresh, fresh.order):
+        try:
+            url = provider.start(payment)
+        except PaymentInitError:
+            pass
     with transaction.atomic():
         current = Payment.objects.select_for_update(no_key=True).get(pk=payment.pk)
+        order = Order.objects.select_for_update(no_key=True).get(pk=current.order_id)
         if current.status not in Payment.OPEN_STATUSES:
             return current.status == Payment.STATUS_PAID
+        if refusal := _start_refusal(current, order):
+            mark_payment(current, Payment.STATUS_EXPIRED, payload={"start_refused": refusal})
+            return False
         if url is None:
             mark_payment(current, Payment.STATUS_FAILED)
             return False
@@ -246,13 +264,14 @@ PAYMENT_IN_PROGRESS_MINUTES = 30
 
 def open_payment(order):
     """The payment that still blocks a new one: any pending or unknown payment whatever its age or provider
-    (the customer may still be paying it, or the money may already have moved: a second payment could charge
-    twice), a created invoice/manual payment, or a card payment created < 30 min ago (it is being started with
-    the provider right now)."""
+    (the customer may still be paying it, or the money may already have moved), a created invoice/manual payment, a card
+    payment created < 30 min ago (it is being started with the provider right now), or a payment closed here while its
+    provider page may still take money: a local status alone never lifts the block, only provider evidence does."""
     recent = timezone.now() - timedelta(minutes=PAYMENT_IN_PROGRESS_MINUTES)
     return order.payments.filter(
         Q(status__in=(Payment.STATUS_PENDING, Payment.STATUS_UNKNOWN))
         | Q(status=Payment.STATUS_CREATED) & (Q(provider__in=MANUAL_PROVIDERS) | Q(created_at__gt=recent))
+        | UNRESOLVED_SESSION
     ).order_by("-created_at").first()
 
 

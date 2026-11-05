@@ -1,7 +1,5 @@
-"""LPK-219 S1a: provider evidence is recorded and nothing reads it yet. Every decision about a new payment must stay
-exactly as it was, so these tests also check that the two columns change no outcome."""
+"""LPK-219 S1a: how provider evidence is recorded. payments/test_enforcement.py covers what it decides."""
 
-import inspect
 import unittest
 from datetime import timedelta
 from decimal import Decimal
@@ -9,13 +7,12 @@ from pathlib import Path
 from unittest import mock
 
 from django.conf import settings
-from django.db import connection, transaction
+from django.db import connection
 from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
 from accounts.testing import make_customer
-from api.errors import ApiError
 from api.tests.test_contract import use_demo_routes
 from orders.models import Order
 from orders.serializers import payment_data
@@ -392,36 +389,7 @@ class AtomicityTests(EvidenceTestCase):
         self.assert_rolled_back(payment, lambda: self.query(payment, "failed"))
 
 
-class NothingReadsTheEvidenceTests(EvidenceTestCase):
-    def outcome(self, order):
-        order = Order.objects.get(pk=order.pk)
-        blocking = open_payment(order)
-        with transaction.atomic():
-            try:
-                result = request_payment(order.pk, "card").status
-            except ApiError as error:
-                result = error.code
-            transaction.set_rollback(True)
-        return blocking.pk if blocking else None, result
-
-    def test_no_outcome_for_a_new_payment_depends_on_it(self):
-        past, future = timezone.now() - timedelta(days=1), timezone.now() + timedelta(days=1)
-        evidence = ({"provider_closed_at": past}, {"checkout_expires_at": past}, {"checkout_expires_at": future},
-                    {"provider_closed_at": past, "checkout_expires_at": past})
-        for status, _ in Payment.STATUSES:
-            for created_minutes_ago in (0, 31):
-                order = self.order()
-                payment = Payment.objects.create(
-                    order=order, kind="initial", provider="simulated", amount=order.total, currency="GEL",
-                    status=status, checkout_url="https://provider.invalid/x")
-                baseline.age(payment, created_minutes_ago)
-                without = self.outcome(order)
-                for values in evidence:
-                    with self.subTest(status=status, age=created_minutes_ago, values=values):
-                        Payment.objects.filter(pk=payment.pk).update(**values)
-                        self.assertEqual(self.outcome(order), without)
-                        Payment.objects.filter(pk=payment.pk).update(provider_closed_at=None, checkout_expires_at=None)
-
+class EvidenceScopeTests(EvidenceTestCase):
     def test_the_api_does_not_expose_it(self):
         payment = self.session()
         self.assertEqual(set(payment_data(payment)), {"id", "kind", "provider", "status", "amount", "currency",
@@ -444,8 +412,7 @@ class NothingReadsTheEvidenceTests(EvidenceTestCase):
         baseline.run_reconcile()
         self.assertEqual(self.gateway.fetch_calls, [])
 
-    def test_todays_stale_created_payment_is_unchanged(self):
-        """S2 decides what should happen here; this only shows S1a did not change it."""
+    def test_an_old_created_payment_with_no_newer_one_can_still_start(self):
         payment = request_payment(self.order().pk, "card")
         baseline.age(payment, 31)
         self.assertIsNone(open_payment(self.now(payment).order))
@@ -454,24 +421,6 @@ class NothingReadsTheEvidenceTests(EvidenceTestCase):
         self.assertTrue(start_payment(self.now(payment)))
         self.assert_state(payment, "pending", False)
         self.assertIsNotNone(self.now(payment).checkout_expires_at)
-
-    def test_only_the_expected_modules_mention_the_columns(self):
-        allowed = {Path("payments/models.py"), Path("payments/services.py"),
-                   Path("payments/management/commands/reconcile_closed_payments.py")}
-        for path in Path(settings.BASE_DIR).rglob("*.py"):
-            relative = path.relative_to(settings.BASE_DIR)
-            if ("venv" in relative.parts or "migrations" in relative.parts or "tests" in relative.parts
-                    or relative.name.startswith("test")):
-                continue
-            text = path.read_text(encoding="utf-8")
-            if "provider_closed_at" in text or "checkout_expires_at" in text:
-                self.assertIn(relative, allowed)
-
-    def test_the_decisions_do_not_mention_the_columns(self):
-        for function in (open_payment, request_payment):
-            source = inspect.getsource(function)
-            self.assertNotIn("provider_closed_at", source)
-            self.assertNotIn("checkout_expires_at", source)
 
 
 class TestOnlyProviderTests(TestCase):

@@ -79,7 +79,7 @@ class LockOrderTests(TestCase):
 
     def test_start_payment(self):
         payment = self.payment("created")
-        self.assertEqual(self.locks(lambda: start_payment(payment)), ["payment", "order"])
+        self.assertEqual(self.locks(lambda: start_payment(payment)), ["payment", "order", "payment", "order"])
 
     def test_callback(self):
         payment = self.started()
@@ -219,6 +219,10 @@ class WaitingOnAPaymentTests(TransactionTestCase):
             payment, lambda: record_provider_result(payment, "failed", FakeProvider()))
         self.assertIsNotNone(Payment.objects.get(pk=payment.pk).provider_closed_at)
 
+    def test_start_payment(self):
+        payment = self.payment("created")
+        self.assert_waits_for_the_payment_before_the_order(payment, lambda: start_payment(payment))
+
     def test_cancel_order(self):
         self.assert_waits_for_the_payment_before_the_order(
             self.payment(), lambda: services.cancel_order(self.order.pk, "x", actor="operator", operator=True))
@@ -253,10 +257,9 @@ class WaitingOnAPaymentTests(TransactionTestCase):
 
 
 @unittest.skipUnless(connection.vendor == "postgresql", "row locks need PostgreSQL (CI)")
-class KnownIssueForS2Tests(TransactionTestCase):
-    """KNOWN UNRESOLVED ISSUE, tracked for LPK-219 S2. Deterministic evidence of what happens today, NOT a contract and NOT
-    wanted behaviour, and nothing here prevents it. A path that closes open payments reads them before it gets the order, so
-    it misses a payment committed in between. S2 must replace these tests with the behaviour it requires."""
+class PaymentCommittedWhileWaitingTests(TransactionTestCase):
+    """A path that closes open payments reads them, then waits for the order. A payment committed in between must not be
+    missed: the path starts again and takes it first, so the lock order holds. Real locks, no timing luck."""
 
     serialized_rollback = True
     wait_until_another_connection_is_blocked = WaitingOnAPaymentTests.wait_until_another_connection_is_blocked
@@ -290,19 +293,29 @@ class KnownIssueForS2Tests(TransactionTestCase):
         self.assertEqual(errors, [])
         return Payment.objects.get(pk=payment.pk)
 
-    def test_cancel_order_does_not_see_it(self):
+    def test_cancel_order_closes_it_and_it_gets_no_page(self):
         payment = self.payment_committed_while_it_waits(
             lambda: services.cancel_order(self.order.pk, "x", actor="operator", operator=True))
         self.assertEqual(Order.objects.get(pk=self.order.pk).status, Order.STATUS_CANCELLED)
-        self.assertEqual(payment.status, "created")
-        self.assertTrue(start_payment(payment))
-        started = Payment.objects.get(pk=payment.pk)
-        self.assertEqual(started.status, "pending")
-        self.assertTrue(started.checkout_url)
+        self.assertEqual(payment.status, "expired")
+        self.assertFalse(start_payment(payment))
+        self.assertEqual(Payment.objects.get(pk=payment.pk).checkout_url, "")
 
-    def test_set_item_status_does_not_see_it(self):
+    def test_an_amount_reset_closes_it_and_it_gets_no_page(self):
         item = self.order.items.get(part_number="A")
         payment = self.payment_committed_while_it_waits(
             lambda: services.set_item_status(item.pk, "cancelled", reason="x"))
-        self.assertEqual(payment.status, "created")
-        self.assertNotEqual(payment.amount, Order.objects.get(pk=self.order.pk).amount_due_now)
+        self.assertEqual(payment.status, "expired")
+        self.assertFalse(start_payment(payment))
+        self.assertEqual(Payment.objects.get(pk=payment.pk).checkout_url, "")
+
+    def test_a_customers_last_item_decision_closes_it(self):
+        order = make_order(self.customer, payment_method="card")
+        Order.objects.filter(pk=order.pk).update(status="processing")
+        item = order.items.get()
+        OrderItem.objects.filter(pk=item.pk).update(item_status="checking")
+        services.request_item_action(item.pk, "other", "Please check")
+        self.order = order
+        payment = self.payment_committed_while_it_waits(lambda: services.decide(self.customer, item.pk, "cancel"))
+        self.assertEqual(Order.objects.get(pk=order.pk).status, Order.STATUS_CANCELLED)
+        self.assertEqual(payment.status, "expired")

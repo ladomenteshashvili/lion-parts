@@ -21,7 +21,7 @@ from orders.services import cancel_order, payment_status, set_item_status
 from orders.testing import make_order
 from payments.models import Payment
 from payments.providers import PROVIDERS, PaymentInitError, get_provider
-from payments.services import confirm_manual_payment, record_refund, request_payment, start_payment
+from payments.services import confirm_manual_payment, recheck_payment, record_refund, request_payment, start_payment
 from payments.testing import SimulatedProvider, use_simulated_provider
 
 D = Decimal
@@ -103,6 +103,7 @@ class LifecycleTestCase(TestCase):
 
     def setUp(self):
         self.gateway = use_simulated_provider(self)
+        self.gateway.final_statuses = frozenset(("failed", "expired"))  # enforcement has its own tests
         self.customer = make_customer(is_phone_verified=True, is_email_verified=True)
         self.client = APIClient()
         self.client.force_login(self.customer.user)
@@ -342,6 +343,9 @@ class SplitAmountResetBaselineTests(LifecycleTestCase):
         first = self.start()
         set_item_status(self.order.items.get(part_number="A").pk, "cancelled", reason="Out of stock")
         self.assertEqual((self.status(first), self.order_now().amount_due_now), ("expired", D("91.00")))
+        self.assertEqual(self.post_payment().status_code, 409)  # its provider page may still take money
+        self.gateway.answer_fetch_with(first, "expired")
+        self.assertEqual(recheck_payment(Payment.objects.get(pk=first.pk), get_provider()), "closed")
         retry = self.start()
         self.assertEqual((retry.kind, retry.amount), ("initial", D("91.00")))
 
@@ -363,6 +367,7 @@ class ParallelLifecycleBaselineTests(TransactionTestCase):
 
     def setUp(self):
         self.gateway = use_simulated_provider(self)
+        self.gateway.final_statuses = frozenset(("failed", "expired"))
         self.customer = make_customer(is_phone_verified=True, is_email_verified=True)
         self.admin = get_user_model().objects.create_superuser("root", "r@example.com", "x")
 
