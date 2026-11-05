@@ -204,6 +204,21 @@ class AnswerTests(ClosedTestCase):
         self.assert_state(payment, "unknown", False)
 
 
+    def test_conflicting_answers_that_end_closed_are_not_counted_as_paid(self):
+        payment = self.closed("expired")
+        answers = iter(("paid", "expired"))
+
+        def answer(_):
+            value = next(answers)
+            if value == "paid":
+                self.gateway.send_callback(payment, "failed")
+            return value
+
+        with mock.patch.object(SimulatedProvider, "fetch_status", side_effect=answer):
+            self.assertEqual(run(), counts(checked=1, unresolved=1))
+        self.assert_state(payment, "expired", False)
+
+
 class ScheduleTests(ClosedTestCase):
     def test_checks_back_off_to_one_a_day_and_never_stop(self):
         self.gateway.checkout_lifetime = None
@@ -248,6 +263,39 @@ class ScheduleTests(ClosedTestCase):
         self.gateway.answer_fetch_with(payment, "expired")
         self.assertIn("closed: 1", run())
         self.assert_state(payment, "expired", True)
+
+
+    def test_an_outage_stops_the_run_and_leaves_the_other_checks_unspent(self):
+        payments = [self.closed() for _ in range(4)]
+        with mock.patch.object(job, "STOP_AFTER_ERRORS_IN_A_ROW", 2), \
+                mock.patch.object(SimulatedProvider, "fetch_status", side_effect=RuntimeError), \
+                self.assertLogs("payments.management.commands.reconcile_closed_payments", "ERROR"):
+            self.assertIn("errors: 2", run())
+        self.assertEqual([self.now(p).closure_checks for p in payments], [1, 1, 0, 0])
+
+    def test_a_good_answer_resets_the_error_count(self):
+        payments = [self.closed() for _ in range(3)]
+        answers = iter((RuntimeError(), "pending", RuntimeError()))
+
+        def answer(_):
+            value = next(answers)
+            if isinstance(value, Exception):
+                raise value
+            return value
+
+        with mock.patch.object(job, "STOP_AFTER_ERRORS_IN_A_ROW", 2), \
+                mock.patch.object(SimulatedProvider, "fetch_status", side_effect=answer), \
+                self.assertLogs("payments.management.commands.reconcile_closed_payments", "ERROR"):
+            run()
+        self.assertEqual([self.now(p).closure_checks for p in payments], [1, 1, 1])
+
+    def test_a_slow_run_stops_and_leaves_the_rest_due(self):
+        first, second = self.closed(), self.closed()
+        self.gateway.answer_fetch_with(first, "pending")
+        with mock.patch.object(job, "RUN_SECONDS", 10), mock.patch.object(job.time, "monotonic", side_effect=[0, 0, 11]), \
+                self.assertLogs("payments.management.commands.reconcile_closed_payments", "ERROR"):
+            run()
+        self.assertEqual((self.now(first).closure_checks, self.now(second).closure_checks), (1, 0))
 
 
 class AlertTests(ClosedTestCase):

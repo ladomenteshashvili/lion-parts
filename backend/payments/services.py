@@ -77,7 +77,7 @@ def _flag_for_review(payment, previous, order):
     """In mark_payment's transaction, so the flag exists exactly when the paid result does, once per payment. The money is
     already counted; this is for a person to look at. Only reasons and the payment id are logged."""
     reasons = [reason for reason, applies in (
-        ("late_paid", previous in CLOSED_STATUSES),
+        ("late_paid", previous in CLOSED_STATUSES or "conflict_with" in payment.provider_payload),
         ("paid_after_closure", payment.provider_closed_at is not None),
         ("cancelled_order", order.status == Order.STATUS_CANCELLED),
         ("overpaid", order.balance_due < 0),

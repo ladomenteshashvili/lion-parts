@@ -149,6 +149,19 @@ class ReviewFlagTests(SafetyTestCase):
         self.assertEqual(self.flag(first)[0], ["late_paid", "paid_after_closure", "overpaid"])
         self.assertLess(self.order_of(first).balance_due, 0)
 
+    def test_paid_after_a_conflict_held_it_as_unknown_is_flagged_as_late(self):
+        payment = self.session()
+        mark_payment(payment, "failed")
+        mark_payment(payment, "unknown", provider_conflict=True, payload={"conflict_with": "failed"})
+        self.gateway.send_callback(payment, "paid")
+        self.assertEqual(self.flag(payment), (["late_paid"], True))
+
+    def test_an_ordinary_unknown_that_turns_out_paid_is_not_flagged(self):
+        payment = self.session()
+        mark_payment(payment, "unknown")
+        self.gateway.send_callback(payment, "paid")
+        self.assertEqual(self.flag(payment), ([], False))
+
     def test_it_is_recorded_once_whatever_is_repeated(self):
         payment = self.session()
         mark_payment(payment, "expired")

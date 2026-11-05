@@ -5,6 +5,7 @@ of work. Checks back off to one a day and continue until there is evidence, so n
 and error types only: provider errors can contain URLs or credentials. Idempotent."""
 
 import logging
+import time
 
 from django.core.management.base import BaseCommand
 from django.db.models import F, Q
@@ -18,6 +19,8 @@ from payments.services import (MANUAL_PROVIDERS, NO_MONEY_PROVIDERS, UNRESOLVED_
 logger = logging.getLogger(__name__)
 BATCH_SIZE = 100
 ALERT_AFTER_CHECKS = 8  # about 70 hours
+STOP_AFTER_ERRORS_IN_A_ROW = 5  # likely an outage: don't spend the remaining payments' checks on it
+RUN_SECONDS = 600  # slow provider answers must not pile runs up, one starting every 15 minutes
 
 
 class Command(BaseCommand):
@@ -29,7 +32,11 @@ class Command(BaseCommand):
         unresolved = Payment.objects.filter(UNRESOLVED_SESSION, provider=provider.name)
         due = unresolved.filter(Q(closure_next_check_at__isnull=True) | Q(closure_next_check_at__lte=now)).order_by(
             F("closure_next_check_at").asc(nulls_first=True), "id")[:BATCH_SIZE]
+        started, errors_in_a_row = time.monotonic(), 0
         for payment in due:
+            if errors_in_a_row >= STOP_AFTER_ERRORS_IN_A_ROW or time.monotonic() - started > RUN_SECONDS:
+                logger.error("Stopped this run of closed payment checks early; the rest stay due")
+                break
             if not claim_closure_check(payment, now):
                 continue
             counts["checked"] += 1
@@ -38,10 +45,13 @@ class Command(BaseCommand):
             except Exception as error:
                 logger.error("Closed payment %s: provider query failed: %s", payment.pk, type(error).__name__)
                 counts["errors"] += 1
+                errors_in_a_row += 1
                 continue
+            errors_in_a_row = 0
             if outcome == "updated":
-                counts["paid"] += 1
-                logger.error("Closed payment %s: the provider reports it paid", payment.pk)
+                if Payment.objects.filter(pk=payment.pk, status=Payment.STATUS_PAID).exists():
+                    counts["paid"] += 1
+                    logger.error("Closed payment %s: the provider reports it paid", payment.pk)
             elif outcome == "closed":
                 counts["closed"] += 1
             elif outcome == "pending":

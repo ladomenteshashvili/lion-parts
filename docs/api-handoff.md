@@ -276,7 +276,7 @@ blocks: the earlier payment may still complete, and a second one could charge th
 - `unknown` (any age): the result is being verified, and `checkout_url` is `null`. Tell the
   customer the payment is being checked and read `GET /api/orders/<n>/payments/<id>/` (poll no harder than in A;
   it can take much longer, so check again on the customer's next visit). `paid` moves the order on as usual;
-  `failed` or `expired` means the customer can pay again.
+  after `failed` or `expired`, send the payment request again and read the answer.
 - `failed` or `expired`: the payment ended on our side, but its provider page may still take money, so we are waiting
   for the provider to confirm that it has closed. No client action is needed. Tell the customer the previous payment is
   being checked, and try again later. If it turns out `paid`, it is counted as usual.

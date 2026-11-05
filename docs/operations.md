@@ -378,7 +378,8 @@ CRON_TZ=Asia/Tbilisi
 - `reconcile_closed_payments`: asks the configured provider about card payments that are `failed` or `expired` here,
   had a provider page, and have no closure evidence yet. `paid` is counted as usual. A closing answer keeps the local
   status and notifies nobody. At most 100 payments per run; each one backs off from 15 minutes to once a day and is
-  checked until there is evidence, so it recovers by itself after a provider outage. Prints
+  checked until there is evidence, so it recovers by itself after a provider outage. A run stops early after 5 provider
+  errors in a row or 10 minutes, leaving the rest due. Prints
   `checked / closed / paid / open / errors / unresolved / other provider / needs review`. This job must be scheduled: nothing else
   looks for this evidence.
 - `purge_expired_billing`: anonymizes the billing snapshot of deleted accounts' orders after 5 years.
@@ -408,6 +409,9 @@ CRON_TZ=Asia/Tbilisi
 
 ## 9. Release and rollback
 
+0. **Before the first release containing the 2026-11-06 contract changes** (`docs/api-handoff.md` §12): the frontend team
+   confirms it handles them, and `reconcile_closed_payments` is scheduled and monitored (§6, §7). Do not release them
+   without both.
 1. Announce, tag the release (`git tag vX.Y.Z`).
 2. **Backup** database and media (§8).
 3. `git checkout vX.Y.Z`, `pip install -r requirements.txt`, `compilemessages`, `collectstatic`,

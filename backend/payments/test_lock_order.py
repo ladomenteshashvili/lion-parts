@@ -8,10 +8,11 @@ import time
 import unittest
 from decimal import Decimal
 from io import StringIO
+from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
-from django.db import OperationalError, connection, transaction
+from django.db import DatabaseError, OperationalError, connection, transaction
 from django.test import TestCase, TransactionTestCase
 from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
@@ -292,6 +293,13 @@ class PaymentCommittedWhileWaitingTests(TransactionTestCase):
         self.assertFalse(thread.is_alive())
         self.assertEqual(errors, [])
         return Payment.objects.get(pk=payment.pk)
+
+    def test_a_restart_that_never_settles_fails_with_nothing_changed(self):
+        with mock.patch.object(services, "_lock_open_payments_then_order",
+                               side_effect=services._OpenPaymentAppeared) as lock, self.assertRaises(DatabaseError):
+            services.cancel_order(self.order.pk, "x", actor="operator", operator=True)
+        self.assertEqual(lock.call_count, 3)
+        self.assertEqual(Order.objects.get(pk=self.order.pk).status, Order.STATUS_PAYMENT_PENDING)
 
     def test_cancel_order_closes_it_and_it_gets_no_page(self):
         payment = self.payment_committed_while_it_waits(
