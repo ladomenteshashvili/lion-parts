@@ -15,6 +15,8 @@ class PaymentInitError(Exception):
 
 class PaymentProvider:
     name = ""
+    checkout_lifetime = None  # timedelta; declared only once the provider has confirmed when its lifetime starts
+    final_statuses = frozenset()  # results the provider has confirmed in writing to be final; never assumed
 
     def start(self, payment):
         """-> checkout_url. Raises PaymentInitError. Called only outside DB transactions."""
@@ -36,6 +38,7 @@ class FakeProvider(PaymentProvider):
     """No money moves. The demo endpoint POST /api/payments/fake/<id>/complete/ plays the callback."""
 
     name = "fake"
+    final_statuses = frozenset({"failed", "expired"})  # simulated: no money moves and nothing follows these results
 
     def start(self, payment):
         base = settings.FRONTEND_BASE_URL.rstrip("/")
