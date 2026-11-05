@@ -32,6 +32,11 @@ class Payment(models.Model):
     provider_closed_at = models.DateTimeField(null=True, blank=True)  # when provider evidence was recorded; empty: none
     closure_checks = models.PositiveIntegerField(default=0)  # provider queries spent looking for that evidence
     closure_next_check_at = models.DateTimeField(null=True, blank=True)  # empty: due now
+    review_reasons = models.JSONField(default=list, blank=True)  # why a person should look at this paid result
+    review_required_at = models.DateTimeField(null=True, blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name="+")
     provider_payload = models.JSONField(default=dict, blank=True)
     paid_at = models.DateTimeField(null=True, blank=True)
     confirmed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)

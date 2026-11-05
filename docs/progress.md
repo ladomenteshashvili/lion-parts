@@ -115,7 +115,7 @@ Local validation with that change: SQLite (config.e2e_settings) 853 ran, 834 pas
 
 ### Prerequisite before real card payments
 
-- **LPK-219 (Epic LPK-178):** payment lifecycle review. Required before real card payments are enabled (release blocker B5). Done so far: test baseline; recording provider evidence on payments (no behaviour change yet).
+- **LPK-219 (Epic LPK-178):** payment lifecycle review. Required before real card payments are enabled (release blocker B5). Done so far: test baseline; recording provider evidence on payments; reconciling closed payments; blocking new payments until a session is proven closed; hiding obsolete checkout links and flagging paid results for review. Still needs a real provider adapter and owner sign-off.
 
 ### Tracked separately, not implemented
 

@@ -379,7 +379,7 @@ CRON_TZ=Asia/Tbilisi
   had a provider page, and have no closure evidence yet. `paid` is counted as usual. A closing answer keeps the local
   status and notifies nobody. At most 100 payments per run; each one backs off from 15 minutes to once a day and is
   checked until there is evidence, so it recovers by itself after a provider outage. Prints
-  `checked / closed / paid / open / errors / unresolved / other provider`. This job must be scheduled: nothing else
+  `checked / closed / paid / open / errors / unresolved / other provider / needs review`. This job must be scheduled: nothing else
   looks for this evidence.
 - `purge_expired_billing`: anonymizes the billing snapshot of deleted accounts' orders after 5 years.
 - `clearsessions`: Django built-in.
@@ -394,7 +394,7 @@ CRON_TZ=Asia/Tbilisi
 | Exchange rate | `fetch_nbg_rates` exit code 1 | NBG down: see §10 |
 | Database connections and cache | the read-only queries in §4 | follow the staging checklist in §4 |
 | Payments | count of `unknown` payments; `reconcile_payments` `errors > 0`; log line "provider says paid" | follow the manual escalation in §10 |
-| Closed payments | `reconcile_closed_payments` has run in the last hour; its `errors > 0`, `other provider > 0`; log lines "no provider evidence after" and "reports it paid" | follow the manual escalation in §10 |
+| Closed payments | `reconcile_closed_payments` has run in the last hour; its `errors > 0`, `other provider > 0`, `needs review > 0`; log lines "no provider evidence after", "reports it paid" and "needs review" | follow the manual escalation in §10 |
 | Notifications | `failed` rows in the delivery log (admin filter); `skipped` in production means a channel is off | fix the provider, then "resend" |
 | Disk | database, `MEDIA_ROOT`, logs | rotate / grow |
 
@@ -440,7 +440,7 @@ previous tag, restart. Run `migrate` with the new code only after the backup has
   5. **Provider change:** the job and the admin action ask only the configured provider, and the callback endpoint
      answers `404` for any other, so a previous provider's payments no longer resolve on their own. Before switching,
      filter the payment admin by `pending` and `unknown` and resolve them with the current provider. Any left over
-     stay blocked and are escalated (step 9), using the old provider's dashboard for evidence (step 2).
+     stay blocked and are escalated (step 10), using the old provider's dashboard for evidence (step 2).
   6. **Provider conflict:** the log line "provider says paid … marked unknown", with `errors` counted by the job, means
      the provider's answers conflict. The payment stays `unknown`, blocks new card and invoice payments, and the job keeps
      asking. `provider_payload` records `conflict_with` and `conflict_second_answer`. Follow steps 2 and 3.
@@ -450,7 +450,11 @@ previous tag, restart. Run `migrate` with the new code only after the backup has
      payments until the provider confirms the session has closed. Cancelling an order or item does not lift it. Run
      "Re-check with provider" after the session's expiry. If there is still no proof, tell the customer it is being
      checked and escalate to the owner. Do not edit `provider_closed_at`.
-  9. **No manual status changes.** An `unknown` payment is resolved only by provider confirmation or an explicitly
+  9. **Paid results waiting for review (LPK-219):** a payment that became `paid` after closing here, on a cancelled
+     order, or for more than the order owed is flagged, once, with its reasons (payment admin, filter "Review"). The money
+     is already counted. Check it, use "Record refund of the amount owed" if the order shows `refund_pending`, then "Mark
+     as reviewed". The admin filter "Provider session" lists payments not yet proven closed.
+  10. **No manual status changes.** An `unknown` payment is resolved only by provider confirmation or an explicitly
      authorized, auditable escalation process. Nobody sets the status of a real card payment by hand, through the
      admin, a Django shell or the database, until a separately approved procedure is defined. Unresolved payments stay
      as they are and are escalated, never guessed. Any future resolution requires all of: verified provider evidence,

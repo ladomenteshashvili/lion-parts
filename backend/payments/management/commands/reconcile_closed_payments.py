@@ -59,6 +59,9 @@ class Command(BaseCommand):
         ).exclude(provider__in=(provider.name, *MANUAL_PROVIDERS, *NO_MONEY_PROVIDERS)).count()
         if other:  # nothing can ask the provider they belong to
             logger.error("%d unresolved card payments belong to another provider", other)
+        review = Payment.objects.filter(review_required_at__isnull=False, reviewed_at__isnull=True).count()
+        if review:
+            logger.error("%d paid results are waiting for review in the payment admin", review)
         self.stdout.write(("checked: {checked}, closed: {closed}, paid: {paid}, open: {open}, errors: {errors}, "
-                           "unresolved: {unresolved}, other provider: {other}").format(
-            **counts, unresolved=unresolved.count(), other=other))
+                           "unresolved: {unresolved}, other provider: {other}, needs review: {review}").format(
+            **counts, unresolved=unresolved.count(), other=other, review=review))

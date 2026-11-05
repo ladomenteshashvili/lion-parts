@@ -25,10 +25,20 @@ def order_queryset(detail=False):
     return Order.objects.select_related("pickup_point").prefetch_related("items", "courier_fee_proposals", *related)
 
 
+def _checkout_link(payment):
+    """The provider page, only while paying it is still what the order needs. Hiding it does not close the page: a customer
+    who already has it can still pay there, and that result is counted and flagged for review."""
+    order = payment.order
+    if (payment.status != "pending" or order.status == Order.STATUS_CANCELLED or order.balance_due <= 0
+            or payment.amount > order.balance_due or (payment.kind == "initial" and order.amount_paid > 0)):
+        return None
+    return payment.checkout_url or None
+
+
 def payment_data(payment):
     return {"id": payment.pk, "kind": payment.kind, "provider": payment.provider, "status": payment.status,
             "amount": _money(payment.amount), "currency": payment.currency,
-            "checkout_url": payment.checkout_url or None, "paid_at": payment.paid_at,
+            "checkout_url": _checkout_link(payment), "paid_at": payment.paid_at,
             "created_at": payment.created_at}
 
 

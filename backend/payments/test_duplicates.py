@@ -188,13 +188,13 @@ class SecondPaymentTests(TestCase):
     def order_now(self):
         return Order.objects.get(pk=self.order.pk)
 
-    def test_a_retry_is_left_as_it_was_when_the_first_turns_out_paid(self):
+    def test_a_retry_stays_pending_but_loses_its_link_when_the_first_turns_out_paid(self):
         retry = self.retry()
         self.assertEqual(retry.status, "pending")
         mark_payment(self.first, "paid", payload={"callback": True})
         body = self.client.get(f"/api/orders/{self.order.order_number}/payments/{retry.pk}/").json()
         self.assertEqual(body["status"], "pending")
-        self.assertTrue(body["checkout_url"])
+        self.assertIsNone(body["checkout_url"])
         self.assertEqual((self.order_now().status, self.order_now().balance_due), ("processing", D("0.00")))
 
     def test_no_third_payment_can_start_once_the_order_is_settled(self):

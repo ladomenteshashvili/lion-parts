@@ -34,6 +34,7 @@ def mark_payment(payment, status, payload=None, confirmed_by=None, provider_conf
     if status not in dict(Payment.STATUSES):
         raise ValueError(f"unknown payment status {status!r}")
     payment = Payment.objects.select_for_update(no_key=True).get(pk=payment.pk)
+    previous = payment.status
     unknown_from = (Payment.STATUS_PENDING, Payment.STATUS_FAILED, Payment.STATUS_EXPIRED) if provider_conflict \
         else (Payment.STATUS_PENDING,)
     if (payment.status == status or payment.status in FINAL_STATUSES
@@ -62,12 +63,36 @@ def mark_payment(payment, status, payload=None, confirmed_by=None, provider_conf
             create_item_event(item, "status_changed", text_code="payment_confirmed", visible=True,
                               params={"amount": f"{payment.amount:.2f}", "currency": payment.currency})
     sync_order_status(order)
+    if status == Payment.STATUS_PAID:
+        _flag_for_review(payment, previous, order)
     if status in (Payment.STATUS_PAID, Payment.STATUS_FAILED):
         from orders.notifications import notify_after_commit
 
         notify_after_commit(order.customer, "payment_update", order=order,
                             params={"payment_id": payment.pk, "status": status})
     return payment
+
+
+def _flag_for_review(payment, previous, order):
+    """In mark_payment's transaction, so the flag exists exactly when the paid result does, once per payment. The money is
+    already counted; this is for a person to look at. Only reasons and the payment id are logged."""
+    reasons = [reason for reason, applies in (
+        ("late_paid", previous in CLOSED_STATUSES),
+        ("paid_after_closure", payment.provider_closed_at is not None),
+        ("cancelled_order", order.status == Order.STATUS_CANCELLED),
+        ("overpaid", order.balance_due < 0),
+    ) if applies]
+    if reasons:
+        payment.review_reasons, payment.review_required_at = reasons, timezone.now()
+        payment.save(update_fields=["review_reasons", "review_required_at", "updated_at"])
+        logger.error("Payment %s needs review: %s", payment.pk, ", ".join(reasons))
+
+
+def mark_reviewed(payment, user):
+    """An operator has looked at a flagged payment. Changes no money or status. -> False if there was nothing to review."""
+    now = timezone.now()
+    return bool(Payment.objects.filter(pk=payment.pk, review_required_at__isnull=False, reviewed_at__isnull=True).update(
+        reviewed_at=now, reviewed_by=user, updated_at=now))
 
 
 def create_payment(order, method, kind=Payment.KIND_INITIAL, amount=None):

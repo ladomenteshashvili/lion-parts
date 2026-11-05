@@ -30,7 +30,8 @@ def run():
 
 
 def counts(**kwargs):
-    values = {"checked": 0, "closed": 0, "paid": 0, "open": 0, "errors": 0, "unresolved": 0, "other provider": 0, **kwargs}
+    values = {"checked": 0, "closed": 0, "paid": 0, "open": 0, "errors": 0, "unresolved": 0, "other provider": 0,
+              "needs review": 0, **kwargs}
     return ", ".join(f"{name}: {value}" for name, value in values.items())
 
 
@@ -139,7 +140,7 @@ class AnswerTests(ClosedTestCase):
         cancel_order(payment.order_id, "x", actor="operator", operator=True)
         self.gateway.answer_fetch_with(payment, "paid")
         with self.assertLogs("payments.management.commands.reconcile_closed_payments", "ERROR"):
-            self.assertEqual(run(), counts(checked=1, paid=1))
+            self.assertEqual(run(), counts(checked=1, paid=1, **{"needs review": 1}))
         order = Order.objects.get(pk=payment.order_id)
         self.assertEqual((order.status, order.amount_paid), (Order.STATUS_CANCELLED, payment.amount))
         self.assertEqual(order.balance_due, -payment.amount)
