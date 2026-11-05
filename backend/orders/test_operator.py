@@ -18,7 +18,7 @@ from orders import services
 from orders.services import (OperatorError, cancel_order, decide, request_item_action, set_item_status)
 from orders.testing import make_order
 from payments.models import Payment, Refund
-from payments.services import create_payment, mark_payment, record_refund, refund_whole_payment
+from payments.services import create_payment, mark_payment, open_payment, record_refund, refund_whole_payment
 from pricing.models import ExchangeRate
 
 D = Decimal
@@ -338,6 +338,24 @@ class UnpaidItemCancelTests(TestCase):
         order = make_order(make_customer(), items=(("A", D("300"), 1), ("B", D("100"), 1)))
         set_item_status(order.items.get(part_number="A").pk, "cancelled", reason="x")
         self.assertEqual(Order.objects.get(pk=order.pk).amount_due_now, D("260.00"))
+
+    def test_an_unknown_payment_survives_the_amount_reset_and_still_blocks(self):
+        order = make_order(make_customer(), items=(("A", D("300"), 1), ("B", D("100"), 1)))
+        unknown = Payment.objects.create(order=order, kind="initial", provider="fake", amount=D("1040.00"),
+                                         currency="GEL", status="unknown")
+        set_item_status(order.items.get(part_number="A").pk, "cancelled", reason="x")
+        order.refresh_from_db()
+        unknown.refresh_from_db()
+        self.assertEqual((order.amount_due_now, unknown.status, unknown.amount), (D("260.00"), "unknown", D("1040.00")))
+        self.assertEqual(open_payment(order), unknown)
+
+    def test_an_unknown_payment_survives_an_operator_cancellation(self):
+        order = make_order(make_customer())
+        unknown = Payment.objects.create(order=order, kind="initial", provider="fake", amount=order.total,
+                                         currency="GEL", status="unknown")
+        cancel_order(order.pk, "Customer request", actor="operator", actor_name="op", operator=True)
+        unknown.refresh_from_db()
+        self.assertEqual((Order.objects.get(pk=order.pk).status, unknown.status), ("cancelled", "unknown"))
 
 
 class LastItemCancellationTests(TestCase):

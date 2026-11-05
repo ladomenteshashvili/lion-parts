@@ -96,3 +96,31 @@ backlog; planned with that milestone (master plan G1). Evidence = commit(s) + th
 | M4 | `feature/m4-order-lifecycle` | done (9/9 stories) + audit fixes `d8b9d7d` (item cancel before the first payment resets the amount due), `4ef9596` (CSV formula escaping, visible-reason labels, checked invoice language) | Ponytail audit 2026-11-03: 1 must-fix + 3 smaller, all fixed; re-review clean. Owner decisions D19 (operator cancellation), D20 (manual refunds), D21 (courier fee proposals) |
 | M5 | `feature/m5-notifications-support` | done (9/9 stories) + audit fixes `8ddb0b4` (per-customer support limit), `b34149b` (template tags limited to if/else), `ec54fe4` (parallel notify test) | Ponytail audit 2026-11-03: 2 should-fix + 1 missing test, all fixed; re-review clean. Owner decisions D23 (public link), D24 (SMS/email content) |
 | M6 | `feature/m6-final-hardening` | done (6/6 stories; acceptance items needing people/environments are owner actions) | Final audit 2026-11-03: findings fixed in-story (log leak of a reset link at DEBUG, email html lang, ticket list 401→403, courier wording, ru plural); re-review clean. Release blockers B1–B4 (`security-review.md` §4) |
+
+## Post-review fixes
+
+Consolidated into one commit on the post-review branch. In review; GitHub CI pending; nothing merged.
+
+| Fix | Jira (epic / story) | Title | Status | Evidence |
+|---|---|---|---|---|
+| FIX-01 | LPK-172 / LPK-179 | Prevent duplicate payments while a card payment is pending or unknown | in review | payments/test_duplicates.py, test_endpoints.py, test_mark_payment.py, test_reconcile.py; orders/test_cancel.py, test_operator.py |
+| FIX-01b | LPK-172 / LPK-180 | Reconcile unknown card payments and provide a safe operator re-check | in review | payments/test_reconcile.py, test_admin.py, test_duplicates.py. Manual escalation: docs/operations.md §10. Only FakeProvider exists, so no real provider was queried |
+| FIX-02 | LPK-172 / LPK-181 | SMTP timeout and failure handling | in review | api/tests/test_mail.py, config/tests.py |
+| FIX-03 | LPK-172 / LPK-182 | Protect the Django Admin login against brute-force attacks | in review | api/tests/test_admin_login.py. The admin must not be publicly exposed without the nginx allow-list and rate limiting (B6). Admin 2FA: LPK-188/LPK-189 |
+| FIX-04 | LPK-172 / LPK-183 | Gunicorn gthread and PostgreSQL persistent connections | in review | config/tests.py, api/tests/test_thread_safety.py. Starting configuration for isolated staging tests only; no `gthread` with real AMT until LPK-220 (B7). No service configuration changed; staging load tests not run |
+
+Local validation before the commit: SQLite (config.e2e_settings) 846 ran, 827 passed, 0 failed, 19 skipped (PostgreSQL-only); disposable PostgreSQL 18 with plain config.settings, 846 ran, 846 passed, 0 skipped, also in reversed and shuffled test order. GitHub CI: not run yet; CI uses PostgreSQL 16.
+
+### Prerequisite before real card payments
+
+- **LPK-219 (Epic LPK-178):** payment lifecycle review. Required before real card payments are enabled (release blocker B5).
+
+### Tracked separately, not implemented
+
+- **LPK-220:** supplier lookup limits and external calls within database transactions (release blocker B7).
+- **LPK-221:** authentication and OTP throttling under concurrency.
+- **LPK-222:** OTP resend cooldown under concurrency.
+
+### Follow-up recommendations (not approved, not built)
+
+- Controlled demo-only resolution of `unknown` fake payments, so abandoned test payments need no fresh order. It changes the demo endpoint contract, so it needs separate approval and contract documentation.

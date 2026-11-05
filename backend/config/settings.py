@@ -86,6 +86,10 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
+db_conn_max_age = config("DB_CONN_MAX_AGE", default=60, cast=int)
+if db_conn_max_age < 0:  # 0 is valid: it closes the connection after every request
+    raise ImproperlyConfigured("DB_CONN_MAX_AGE must be zero or a positive whole number of seconds.")
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
@@ -94,11 +98,15 @@ DATABASES = {
         "PASSWORD": config("DB_PASSWORD"),
         "HOST": config("DB_HOST", default="localhost"),
         "PORT": config("DB_PORT", default="5432"),
+        "CONN_MAX_AGE": db_conn_max_age,
+        "CONN_HEALTH_CHECKS": True,
     }
 }
 
 # Shared by gunicorn workers (throttles). Run `python manage.py createcachetable`.
-CACHES = {"default": {"BACKEND": "django.core.cache.backends.db.DatabaseCache", "LOCATION": "cache_table"}}
+# MAX_ENTRIES: room for the live rate-limit counters in this shared cache (LPK-182).
+CACHES = {"default": {"BACKEND": "django.core.cache.backends.db.DatabaseCache", "LOCATION": "cache_table",
+                      "OPTIONS": {"MAX_ENTRIES": 100000}}}
 
 
 # Password validation
@@ -195,12 +203,16 @@ MEDIA_ROOT = config("MEDIA_ROOT", default="") or str(BASE_DIR / "media")
 email_backend = config("EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend")
 email_options = {}
 if email_backend == "django.core.mail.backends.smtp.EmailBackend":
+    email_timeout = config("EMAIL_TIMEOUT", default=10, cast=int)
+    if email_timeout <= 0:  # smtplib refuses these when sending, so every email would fail
+        raise ImproperlyConfigured("EMAIL_TIMEOUT must be a positive whole number of seconds.")
     email_options = {
         "host": config("EMAIL_HOST", default=""),
         "port": config("EMAIL_PORT", default=587, cast=int),
         "username": config("EMAIL_HOST_USER", default=""),
         "password": config("EMAIL_HOST_PASSWORD", default=""),
         "use_tls": config("EMAIL_USE_TLS", default=True, cast=bool),
+        "timeout": email_timeout,
     }
 MAILERS = {"default": {"BACKEND": email_backend, "OPTIONS": email_options}}
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="Lion Parts <no-reply@lionparts.ge>")

@@ -36,6 +36,6 @@ def send_templated_email(to, template, context, language):
         message.attach_alternative(html, "text/html")
         message.send()
         return True
-    except Exception:  # SMTP errors, template errors: log without the context (it holds tokens)
-        logger.exception("Sending the %s email failed", template)
+    except Exception as error:  # the error type only: SMTP errors can carry the recipient, the context holds tokens
+        logger.error("Sending the %s email failed: %s", template, type(error).__name__)
         return False

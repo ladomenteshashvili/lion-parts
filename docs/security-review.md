@@ -59,3 +59,37 @@ SSL redirect, HSTS one year, `X-Frame-Options: DENY`, nosniff, `Referrer-Policy:
 | B2 | **No in-place migration from the legacy databases.** The v1 migrations are fresh (`docs/migration-history.md`); `lion_parts` / `lion_parts_v2` cannot be migrated in place. | An owner-approved data migration plan (export/transform/import or a clean start) executed on a fresh database. |
 | B3 | **Native-speaker sign-off** for ka/ru (LP-BE-1306 acceptance). | Review by native speakers. |
 | B4 | **Operations items** in `docs/operations.md` (access-log masking, `NUM_PROXIES`, cron jobs, backups, HSTS policy) and **disabling any old copy of `scripts/deploy-staging.sh` on the legacy server** (the repository copy is disabled since M6; old checkouts on a server are not). | Done by an authorized operator; not verified here. |
+| B5 | **Payment lifecycle review (Jira LPK-219, Epic LPK-178).** Provider-side session handling is unverified. | Resolve LPK-219 before real card payments are enabled. |
+| B6 | **Django Admin exposure (LPK-182).** | The Django Admin must not be publicly exposed without an approved nginx IP/VPN allow-list and additional nginx rate limiting (`docs/operations.md` §5). Admin 2FA is a separate pending task (LPK-188/LPK-189). |
+| B7 | **`gthread` with real AMT (Jira LPK-220).** | No `gthread` with real AMT until LPK-220 is fixed and tested. |
+
+## 5. Post-review changes (LPK-172)
+
+Implemented on the post-review branch; in review, GitHub CI pending, not merged.
+
+| Story | Area | What changed | Evidence |
+|---|---|---|---|
+| FIX-01 (LPK-179) | Duplicate payment protection | A payment that may still complete blocks a new one (`409 payment_in_progress`), under the existing order row lock. Status transitions are guarded so a late provider answer cannot reopen a closed payment. | `payments/test_duplicates.py`, `payments/test_endpoints.py`, `payments/test_mark_payment.py` |
+| FIX-01b (LPK-180) | Payment reconciliation | `reconcile_payments` and the admin action "Re-check with provider" (`payments.change_payment`) share one service. The provider is called outside any transaction, results apply only through `mark_payment`, unresolved results stay blocked, the audit trail is kept, and provider errors are logged by id and type only. | `payments/test_reconcile.py`, `payments/test_admin.py` |
+| FIX-02 (LPK-181) | Email | SMTP timeout `EMAIL_TIMEOUT` (default 10 s; 0 or a negative value stops startup). `send_templated_email` returns False on failure and logs the template and error type only. | `api/tests/test_mail.py`, `config/tests.py` |
+| FIX-03 (LPK-182) | Django Admin login | Failed logins are limited to 10 per IP and 5 per username in 15 minutes, answering `429` without checking the credentials. Only a keyed hash of the username is stored or logged. | `api/tests/test_admin_login.py` |
+| FIX-04 (LPK-183) | Database and process model | `DB_CONN_MAX_AGE` (default 60) and connection health checks. `gthread` guidance for isolated staging tests. A review of shared state found no defects to fix in this change; staging load tests remain to be run. | `config/tests.py`, `api/tests/test_thread_safety.py` |
+
+**Deployment requirements:**
+
+- The Django Admin must sit behind an approved nginx IP/VPN allow-list and nginx rate limiting (B6, `docs/operations.md` §5).
+- `NUM_PROXIES` must match the proxies in front of gunicorn (`docs/operations.md` §5).
+- An `unknown` payment is resolved only by provider confirmation or an explicitly authorized, auditable escalation process. No manual status changes through a shell, the admin or direct database edits (`docs/operations.md` §10).
+- Only `FakeProvider` exists (B1), so this has not run against a real provider.
+
+**Tracked separately:**
+
+| Jira | Scope | Blocker |
+|---|---|---|
+| LPK-219 (Epic LPK-178) | Payment lifecycle review | B5: required before real card payments |
+| LPK-220 | Supplier lookup limits and external calls within database transactions | B7: required before `gthread` with real AMT |
+| LPK-221 | Authentication and OTP throttling under concurrency | |
+| LPK-222 | OTP resend cooldown under concurrency | |
+| LPK-188, LPK-189 | Admin 2FA, pending owner approval | |
+
+Detailed review notes are held privately by the project owner.

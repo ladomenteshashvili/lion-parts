@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 18:00+0000\n"
+"POT-Creation-Date: 2026-11-05 12:20+0000\n"
 "Language: ka\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -129,6 +129,10 @@ msgstr "პაროლი შეიცვალა."
 msgid "The default-language value is required."
 msgstr "ძირითად ენაზე მნიშვნელობა სავალდებულოა."
 
+#: api/admin_login.py:26
+msgid "Too many failed login attempts. Please try again later."
+msgstr "ძალიან ბევრი წარუმატებელი შესვლის მცდელობა. გთხოვთ, სცადოთ მოგვიანებით."
+
 #: api/drf_messages.py:8
 msgid "This field is required."
 msgstr "ველი სავალდებულოა."
@@ -243,7 +247,7 @@ msgstr "ბმული აღარ მოქმედებს."
 msgid "Invalid callback."
 msgstr "არასწორი callback."
 
-#: api/errors.py:15
+#: api/errors.py:15 api/tests/test_language_qa.py:83
 msgid "Please sign in."
 msgstr "გთხოვთ, შეხვიდეთ ანგარიშში."
 
@@ -416,19 +420,28 @@ msgstr "გთხოვთ, დაადასტუროთ ელფოსტ
 msgid "The link is valid for 48 hours. If you didn't create a Lion Parts account, ignore this email."
 msgstr "ბმული მოქმედებს 48 საათის განმავლობაში. თუ Lion Parts-ის ანგარიში არ შეგიქმნიათ, უგულებელყავით ეს წერილი."
 
+#: api/tests/test_language_qa.py:143 orders/templates/orders/invoice.html:68
+#: orders/texts.py:59
+msgid "Delivery fee"
+msgstr "მიტანის ღირებულება"
+
+#: api/tests/test_language_qa.py:164 orders/admin.py:229 orders/admin.py:236
+msgid "Cancel order"
+msgstr "შეკვეთის გაუქმება"
+
 #: cart/serializers.py:18 cart/services.py:47
 msgid "The quantity must be between 1 and 99."
 msgstr "რაოდენობა უნდა იყოს 1-დან 99-მდე."
 
-#: config/settings.py:125
+#: config/settings.py:127
 msgid "Georgian"
 msgstr "ქართული"
 
-#: config/settings.py:125
+#: config/settings.py:127
 msgid "English"
 msgstr "ინგლისური"
 
-#: config/settings.py:125
+#: config/settings.py:127
 msgid "Russian"
 msgstr "რუსული"
 
@@ -529,7 +542,7 @@ msgstr "ინვოისის ბეჭდვა"
 msgid "Refunds"
 msgstr "დაბრუნებები"
 
-#: orders/admin.py:189 payments/admin.py:38
+#: orders/admin.py:189 payments/admin.py:59
 msgid "Payment received"
 msgstr "თანხა მიღებულია"
 
@@ -566,10 +579,6 @@ msgstr "კურიერის საფასურის შეთავა�
 #, python-format
 msgid "proposed %(amount)s %(currency)s"
 msgstr "შემოთავაზებულია %(amount)s %(currency)s"
-
-#: orders/admin.py:229 orders/admin.py:236
-msgid "Cancel order"
-msgstr "შეკვეთის გაუქმება"
 
 #: orders/admin.py:235 orders/templates/orders/invoice.html:57
 msgid "cancelled"
@@ -622,7 +631,7 @@ msgid_plural "%(n)d tickets closed."
 msgstr[0] "%(n)d მიმართვა დაიხურა."
 msgstr[1] "%(n)d მიმართვა დაიხურა."
 
-#: orders/admin.py:408 payments/admin.py:31
+#: orders/admin.py:408 payments/admin.py:52
 msgid "Status"
 msgstr "სტატუსი"
 
@@ -646,6 +655,7 @@ msgid "#%(id)s: not sent, the channel is switched off here."
 msgstr "#%(id)s: არ გაიგზავნა, ეს არხი აქ გამორთულია."
 
 #: orders/admin.py:443
+#, python-format
 msgid "#%(id)s: resending failed."
 msgstr "#%(id)s: ხელახლა გაგზავნა ვერ მოხერხდა."
 
@@ -669,7 +679,7 @@ msgstr "აირჩიეთ ქალაქი სიიდან."
 msgid "Choose a district of this city."
 msgstr "აირჩიეთ ამ ქალაქის რაიონი."
 
-#: orders/notifications.py:162 orders/test_notify.py:128
+#: orders/notifications.py:177 orders/test_notify.py:167
 msgid "Lion Parts support replied to your request:"
 msgstr "Lion Parts-ის მხარდაჭერამ გიპასუხათ:"
 
@@ -822,10 +832,6 @@ msgstr "ჯამი"
 #: orders/templates/orders/invoice.html:66
 msgid "Items"
 msgstr "ნაწილები"
-
-#: orders/templates/orders/invoice.html:68 orders/texts.py:59
-msgid "Delivery fee"
-msgstr "მიტანის ღირებულება"
 
 #: orders/templates/orders/invoice.html:69
 msgid "Total"
@@ -1083,32 +1089,81 @@ msgstr "შეიყვანეთ მომწოდებლის ფას�
 msgid "Choose one of: all, ready, checking, other."
 msgstr "აირჩიეთ ერთ-ერთი: all, ready, checking, other."
 
-#: payments/admin.py:42
+#: payments/admin.py:17
+#, python-format
+msgid "%(payment)s: only pending or unknown card payments can be re-checked."
+msgstr "%(payment)s: გადამოწმება შესაძლებელია მხოლოდ მოლოდინში მყოფი ან უცნობი სტატუსის მქონე ბარათით გადახდისთვის."
+
+#: payments/admin.py:18
+#, python-format
+msgid "%(payment)s: this payment belongs to another provider; follow the manual escalation process."
+msgstr "%(payment)s: ეს გადახდა სხვა პროვაიდერს ეკუთვნის; მიჰყევით ხელით ესკალაციის პროცედურას."
+
+#: payments/admin.py:21
+#, python-format
+msgid "%(payment)s: the provider confirmed the payment."
+msgstr "%(payment)s: პროვაიდერმა გადახდა დაადასტურა."
+
+#: payments/admin.py:22
+#, python-format
+msgid "%(payment)s: the provider reports that the payment failed."
+msgstr "%(payment)s: პროვაიდერის ინფორმაციით, გადახდა ვერ შესრულდა."
+
+#: payments/admin.py:23
+#, python-format
+msgid "%(payment)s: the provider reports that the payment expired."
+msgstr "%(payment)s: პროვაიდერის ინფორმაციით, გადახდის ვადა ამოიწურა."
+
+#: payments/admin.py:26
+#, python-format
+msgid "%(payment)s: the provider has no final result yet; nothing changed."
+msgstr "%(payment)s: პროვაიდერს ჯერ საბოლოო შედეგი არ აქვს; არაფერი შეცვლილა."
+
+#: payments/admin.py:27
+#, python-format
+msgid "%(payment)s: the payment changed during the check; nothing was overwritten."
+msgstr "%(payment)s: შემოწმებისას გადახდა შეიცვალა; არაფერი გადაწერილა."
+
+#: payments/admin.py:28
+#, python-format
+msgid "%(payment)s: the provider's answers conflict; the payment is now unknown and blocks new payments until the provider confirms it."
+msgstr "%(payment)s: პროვაიდერის პასუხები ერთმანეთს ეწინააღმდეგება; გადახდა ახლა უცნობ სტატუსშია და ახალ გადახდებს ბლოკავს, სანამ პროვაიდერი არ დაადასტურებს."
+
+#: payments/admin.py:30
+#, python-format
+msgid "%(payment)s: the provider could not confirm the status; nothing changed. Try again later or follow the manual escalation process."
+msgstr "%(payment)s: პროვაიდერმა სტატუსი ვერ დაადასტურა; არაფერი შეცვლილა. სცადეთ მოგვიანებით ან მიჰყევით ხელით ესკალაციის პროცედურას."
+
+#: payments/admin.py:63
 msgid "Cancel invoice"
 msgstr "ინვოისის გაუქმება"
 
-#: payments/admin.py:48
+#: payments/admin.py:69
 #, python-format
 msgid "%(n)d invoice cancelled."
 msgid_plural "%(n)d invoices cancelled."
 msgstr[0] "%(n)d ინვოისი გაუქმდა."
 msgstr[1] "%(n)d ინვოისი გაუქმდა."
 
-#: payments/admin.py:51
+#: payments/admin.py:72
+msgid "Re-check with provider"
+msgstr "პროვაიდერთან გადამოწმება"
+
+#: payments/admin.py:98
 msgid "Mark refunded"
 msgstr "მონიშვნა: თანხა დაბრუნებულია"
 
-#: payments/admin.py:58
+#: payments/admin.py:105
 #, python-format
 msgid "%(payment)s: only a paid payment can be refunded."
 msgstr "%(payment)s: დაბრუნება შესაძლებელია მხოლოდ გადახდილი გადახდისთვის."
 
-#: payments/admin.py:61
+#: payments/admin.py:108
 #, python-format
 msgid "%(payment)s: not refunded, the order owes back less than this payment; record the amount owed on the order instead."
 msgstr "%(payment)s: არ დაბრუნდა — შეკვეთაზე დასაბრუნებელი თანხა ამ გადახდაზე ნაკლებია; აღრიცხეთ დასაბრუნებელი თანხა შეკვეთაზე."
 
-#: payments/admin.py:65
+#: payments/admin.py:112
 #, python-format
 msgid "%(payment)s: marked refunded."
 msgstr "%(payment)s: მონიშნულია დაბრუნებულად."

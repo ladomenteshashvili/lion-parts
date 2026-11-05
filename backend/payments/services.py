@@ -1,5 +1,7 @@
 """Payment state (G§7.10). mark_payment is the only code that changes Payment.status."""
 
+import logging
+
 from django.db import transaction
 from django.utils import timezone
 
@@ -8,24 +10,32 @@ from orders.services import create_item_event, recalculate_order, sync_order_sta
 
 from .models import Payment
 
+logger = logging.getLogger(__name__)
 FINAL_STATUSES = {Payment.STATUS_REFUNDED}
 
 
 @transaction.atomic
-def mark_payment(payment, status, payload=None, confirmed_by=None):
+def mark_payment(payment, status, payload=None, confirmed_by=None, provider_conflict=False):
     """Idempotent and lock-protected: the same status twice changes nothing; `paid` is never
-    downgraded (only refunded); `refunded` is final and only follows `paid`. The first paid initial
-    payment moves the order to processing and its items to payment_confirmed."""
+    downgraded (only refunded); `refunded` is final and only follows `paid`; `pending` only follows `created`
+    and `unknown` only follows `pending`, so a late answer can't reopen a closed payment or hide its result.
+    provider_conflict is for recheck_payment alone: failed/expired -> unknown when the provider said paid and could
+    not confirm it (owner decision, LPK-180). The first paid initial payment moves the order to processing and its
+    items to payment_confirmed."""
     if status not in dict(Payment.STATUSES):
         raise ValueError(f"unknown payment status {status!r}")
     payment = Payment.objects.select_for_update(no_key=True).get(pk=payment.pk)
+    unknown_from = (Payment.STATUS_PENDING, Payment.STATUS_FAILED, Payment.STATUS_EXPIRED) if provider_conflict \
+        else (Payment.STATUS_PENDING,)
     if (payment.status == status or payment.status in FINAL_STATUSES
             or (payment.status == Payment.STATUS_PAID and status != Payment.STATUS_REFUNDED)
-            or (status == Payment.STATUS_REFUNDED and payment.status != Payment.STATUS_PAID)):
+            or (status == Payment.STATUS_REFUNDED and payment.status != Payment.STATUS_PAID)
+            or (status == Payment.STATUS_PENDING and payment.status != Payment.STATUS_CREATED)
+            or (status == Payment.STATUS_UNKNOWN and payment.status not in unknown_from)):
         return payment
     payment.status = status
-    if payload is not None:
-        payment.provider_payload = payload
+    if payload is not None:  # merged: who re-checked or closed it stays on record through later changes
+        payment.provider_payload = {**payment.provider_payload, **payload}
     if status == Payment.STATUS_PAID:
         payment.paid_at = timezone.now()
         payment.confirmed_by = confirmed_by
@@ -69,17 +79,88 @@ def create_payment(order, method, kind=Payment.KIND_INITIAL, amount=None):
 
 def start_payment(payment):
     """Open the provider's payment page. Never inside a DB transaction (no row locks held while calling
-    out). A PaymentInitError marks the payment failed. -> True when a checkout_url was obtained."""
+    out), so the payment may have changed when the provider answers: only a still open payment takes the
+    answer. A PaymentInitError marks it failed. -> False when there is no page to open and nothing was paid."""
     from .providers import PaymentInitError, get_provider
 
     try:
         url = get_provider().start(payment)
     except PaymentInitError:
-        mark_payment(payment, Payment.STATUS_FAILED)
-        return False
-    Payment.objects.filter(pk=payment.pk).update(checkout_url=url, updated_at=timezone.now())
-    mark_payment(payment, Payment.STATUS_PENDING)
+        url = None
+    with transaction.atomic():
+        current = Payment.objects.select_for_update(no_key=True).get(pk=payment.pk)
+        if current.status not in Payment.OPEN_STATUSES:
+            return current.status == Payment.STATUS_PAID
+        if url is None:
+            mark_payment(current, Payment.STATUS_FAILED)
+            return False
+        Payment.objects.filter(pk=current.pk).update(checkout_url=url, updated_at=timezone.now())
+        mark_payment(current, Payment.STATUS_PENDING)
     return True
+
+
+def _apply_if_unchanged(payment_pk, seen, status, audit):
+    """mark_payment under the row lock, only if the payment is still `seen`. -> None when applied, else the payment
+    as it is now."""
+    with transaction.atomic():
+        current = Payment.objects.select_for_update(no_key=True).get(pk=payment_pk)
+        if current.status != seen:
+            return current
+        mark_payment(current, status, payload={"reconciled": status, **audit})
+    return None
+
+
+def recheck_payment(payment, provider, checked_by=None):
+    """Ask the provider about a pending/unknown card payment and apply its final answer. The provider is called
+    outside any transaction (no row locks held). The answer counts only if the payment has not changed since it
+    was read, so stale provider data never overwrites a newer result. Exception: "paid" against a payment closed
+    meanwhile is never just dropped, because a closed payment lets the customer pay again. The provider is asked
+    once more, after the closing result was committed: a final answer is applied, anything else moves the payment
+    to `unknown` so that it blocks new payments until the provider confirms (owner decision, LPK-180). A result
+    arriving during that repeat query is kept if it is paid or refunded, or if it closes the payment and the provider
+    also answered failed/expired; otherwise the payment is held as `unknown` too. Raises what the first call raises,
+    or ValueError on an invalid first answer; the payment then stays as it is.
+    -> updated / pending / superseded / conflict (now unknown)."""
+    seen = payment.status
+    status = provider.fetch_status(payment)
+    if status == Payment.STATUS_PENDING:
+        return "pending"
+    if status not in (Payment.STATUS_PAID, Payment.STATUS_FAILED, Payment.STATUS_EXPIRED):
+        raise ValueError("invalid provider status")  # the value itself is provider data: it is not logged
+    audit = {"rechecked_by": checked_by.pk} if checked_by else {}
+    current = _apply_if_unchanged(payment.pk, seen, status, audit)
+    if current is None:
+        return "updated"
+    closed = (Payment.STATUS_FAILED, Payment.STATUS_EXPIRED)
+    if status != Payment.STATUS_PAID or current.status not in closed:
+        return "superseded"
+
+    try:
+        confirmed = provider.fetch_status(current)
+    except Exception as error:
+        logger.warning("Payment %s: repeat provider query failed: %s", current.pk, type(error).__name__)
+        confirmed, second_answer = None, "error"
+    else:  # the raw value is provider data: only its kind goes on record
+        second_answer = confirmed if confirmed in (Payment.STATUS_PAID, Payment.STATUS_PENDING, *closed) else "invalid"
+
+    audit = {**audit, "conflict_second_answer": second_answer}
+    if confirmed in (Payment.STATUS_PAID, *closed):
+        now = _apply_if_unchanged(current.pk, current.status, confirmed, {**audit, "conflict_with": current.status})
+        if now is None:
+            logger.warning("Payment %s: provider said paid, then %s, over %s", current.pk, confirmed, current.status)
+            return "updated" if confirmed != current.status else "superseded"
+        if confirmed in closed or now.status not in closed:
+            return "superseded"  # a newer closing result the provider agrees with, or a settled one: it stands
+    # unresolved evidence that money moved: hold it until the provider answers (owner decisions, LPK-180)
+    with transaction.atomic():
+        now = Payment.objects.select_for_update(no_key=True).get(pk=current.pk)
+        if now.status not in closed:
+            return "superseded"
+        mark_payment(now, Payment.STATUS_UNKNOWN, provider_conflict=True,
+                     payload={"reconciled": Payment.STATUS_UNKNOWN, **audit, "conflict_with": now.status})
+    logger.error("Payment %s: provider says paid but it was %s and %s on repeat; marked unknown", now.pk, now.status,
+                 second_answer)
+    return "conflict"
 
 
 PAYMENT_IN_PROGRESS_MINUTES = 30
@@ -87,16 +168,19 @@ MANUAL_PROVIDERS = ("invoice", "manual")
 
 
 def open_payment(order):
-    """The payment that still blocks a new one: any pending invoice/manual payment (it never expires by
-    itself: the customer may still be paying it), or a card payment created/pending for < 30 min (a created
-    one is being started with the provider right now)."""
+    """The payment that still blocks a new one: any pending or unknown payment whatever its age or provider
+    (the customer may still be paying it, or the money may already have moved: a second payment could charge
+    twice), a created invoice/manual payment, or a card payment created < 30 min ago (it is being started with
+    the provider right now)."""
     from datetime import timedelta
 
     from django.db.models import Q
 
     recent = timezone.now() - timedelta(minutes=PAYMENT_IN_PROGRESS_MINUTES)
-    return order.payments.filter(Q(provider__in=MANUAL_PROVIDERS) | Q(created_at__gt=recent),
-                                 status__in=Payment.OPEN_STATUSES).order_by("-created_at").first()
+    return order.payments.filter(
+        Q(status__in=(Payment.STATUS_PENDING, Payment.STATUS_UNKNOWN))
+        | Q(status=Payment.STATUS_CREATED) & (Q(provider__in=MANUAL_PROVIDERS) | Q(created_at__gt=recent))
+    ).order_by("-created_at").first()
 
 
 def request_payment(order_id, method):

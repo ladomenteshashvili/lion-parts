@@ -19,8 +19,11 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 
+from api.admin_login import admin_login
+
 
 urlpatterns = [
+    path(f"{settings.ADMIN_URL_PATH}login/", admin_login),  # before the include: same path, with attempt limits
     path(settings.ADMIN_URL_PATH, admin.site.urls),
     path("api/", include("api.urls")),
     path("api/", include("accounts.urls")),

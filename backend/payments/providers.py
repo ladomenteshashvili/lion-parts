@@ -25,7 +25,10 @@ class PaymentProvider:
         raise NotImplementedError
 
     def fetch_status(self, payment):
-        """-> one of PLATFORM_STATUSES (for reconciliation)."""
+        """-> pending / paid / failed / expired, from an authenticated query of the provider's current state, never a
+        cache (reconciliation and the admin re-check; a repeat call settles a conflict with a callback). `paid` only
+        after verifying amount and currency. Called only outside DB transactions; raise on anything unverifiable,
+        never guess. Must not put credentials in exception messages."""
         raise NotImplementedError
 
 
@@ -42,7 +45,8 @@ class FakeProvider(PaymentProvider):
         raise ValueError("the fake provider has no provider callback; use the demo complete endpoint")
 
     def fetch_status(self, payment):
-        return payment.status
+        # the demo complete endpoint is the only source of results: `unknown` has no answer yet
+        return "pending" if payment.status == "unknown" else payment.status
 
 
 PROVIDERS = {"fake": FakeProvider}

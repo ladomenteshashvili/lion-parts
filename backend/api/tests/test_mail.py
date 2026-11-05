@@ -1,6 +1,7 @@
 """LP-BE-207: templated, translated emails (G§5.8, G§7.11)."""
 
 import smtplib
+import socket
 from unittest import mock
 
 from django.core import mail
@@ -60,3 +61,62 @@ class SendTemplatedEmailTests(SimpleTestCase):
                 with self.subTest(template=template, language=lang):
                     self.assertNotEqual(rendered[lang][0], rendered["en"][0])
                     self.assertNotEqual(rendered[lang][1], rendered["en"][1])
+
+
+@override_settings(MAILERS={"default": {"BACKEND": "django.core.mail.backends.smtp.EmailBackend", "OPTIONS": {
+    "host": "smtp.invalid", "port": 587, "username": "", "password": "", "use_tls": False, "timeout": 7}}})
+class SmtpTimeoutTests(SimpleTestCase):
+    """LPK-181, through the real SMTP backend. smtplib and the DNS lookup are mocked: nothing touches the network."""
+
+    TOKEN = "SECRET-TOKEN"
+    RECIPIENT = "private-recipient@example.com"
+
+    def setUp(self):
+        patches = (mock.patch("django.core.mail.backends.smtp.smtplib.SMTP"),
+                   mock.patch("django.core.mail.backends.smtp.DNS_NAME"))
+        self.smtp, dns = (patch.start() for patch in patches)
+        dns.get_fqdn.return_value = "test.invalid"
+        for patch in patches:
+            self.addCleanup(patch.stop)
+
+    def send(self):
+        return send_templated_email(self.RECIPIENT, "password_reset",
+                                    {**CONTEXT, "link": f"https://x.invalid/?token={self.TOKEN}"}, "en")
+
+    def assert_fails_quietly(self):
+        with self.assertLogs("api.mail", "ERROR") as logs:
+            self.assertIs(self.send(), False)  # would raise here if the exception escaped
+        record = logs.records[0]
+        self.assertIsNone(record.exc_info)
+        for private in (self.RECIPIENT, self.TOKEN, "x.invalid"):
+            self.assertNotIn(private, logs.output[0])
+        return record.getMessage()
+
+    def test_the_configured_timeout_reaches_the_smtp_connection(self):
+        self.assertIs(self.send(), True)
+        self.assertEqual(self.smtp.call_args.kwargs["timeout"], 7)
+
+    def test_a_timeout_while_connecting_returns_false(self):
+        for error in (TimeoutError("timed out"), socket.timeout("timed out")):
+            with self.subTest(error=type(error).__name__):
+                self.smtp.side_effect = error
+                self.assertEqual(self.assert_fails_quietly(), "Sending the password_reset email failed: TimeoutError")
+
+    def test_a_timeout_while_sending_returns_false(self):
+        self.smtp.return_value.sendmail.side_effect = socket.timeout("timed out")
+        self.assertEqual(self.assert_fails_quietly(), "Sending the password_reset email failed: TimeoutError")
+
+    def test_smtp_errors_never_put_the_recipient_or_token_in_the_log(self):
+        errors = (smtplib.SMTPRecipientsRefused({self.RECIPIENT: (550, b"no")}),
+                  TimeoutError(f"{self.RECIPIENT} {self.TOKEN}"), OSError(f"https://x.invalid/?token={self.TOKEN}"))
+        for error in errors:
+            with self.subTest(error=type(error).__name__):
+                self.smtp.return_value.sendmail.side_effect = error
+                self.assert_fails_quietly()
+
+    def test_a_successful_send_is_unchanged(self):
+        self.assertIs(self.send(), True)
+        args = self.smtp.return_value.sendmail.call_args.args
+        self.assertEqual(self.smtp.return_value.sendmail.call_count, 1)
+        self.assertEqual(args[1], [self.RECIPIENT])
+        self.assertIn(self.TOKEN, args[2].decode())
