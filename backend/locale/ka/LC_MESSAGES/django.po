@@ -1091,8 +1091,16 @@ msgstr "აირჩიეთ ერთ-ერთი: all, ready, checking, othe
 
 #: payments/admin.py:17
 #, python-format
-msgid "%(payment)s: only pending or unknown card payments can be re-checked."
-msgstr "%(payment)s: გადამოწმება შესაძლებელია მხოლოდ მოლოდინში მყოფი ან უცნობი სტატუსის მქონე ბარათით გადახდისთვის."
+msgid "%(payment)s: only card payments without a final provider result can be re-checked."
+msgstr "%(payment)s: გადამოწმება შესაძლებელია მხოლოდ იმ ბარათით გადახდაზე, რომელსაც პროვაიდერის საბოლოო პასუხი არ აქვს."
+
+msgid "%(payment)s: the provider confirmed that the payment session is closed."
+msgstr "%(payment)s: პროვაიდერმა დაადასტურა, რომ გადახდის სესია დახურულია."
+
+msgid ""
+"%(payment)s: the provider shows the session as closed, but this is not yet "
+"enough proof; it will be checked again."
+msgstr "%(payment)s: პროვაიდერი სესიას დახურულად აჩვენებს, მაგრამ ეს ჯერ საკმარისი მტკიცებულება არ არის; ის კვლავ შემოწმდება."
 
 #: payments/admin.py:18
 #, python-format

@@ -30,6 +30,8 @@ class Payment(models.Model):
     checkout_url = models.URLField(max_length=1000, blank=True)
     checkout_expires_at = models.DateTimeField(null=True, blank=True)  # estimate; empty means not known, not "never"
     provider_closed_at = models.DateTimeField(null=True, blank=True)  # when provider evidence was recorded; empty: none
+    closure_checks = models.PositiveIntegerField(default=0)  # provider queries spent looking for that evidence
+    closure_next_check_at = models.DateTimeField(null=True, blank=True)  # empty: due now
     provider_payload = models.JSONField(default=dict, blank=True)
     paid_at = models.DateTimeField(null=True, blank=True)
     confirmed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)

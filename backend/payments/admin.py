@@ -11,10 +11,10 @@ from orders.admin import OperatorActionsMixin, ReadOnlyAdminMixin, confirm_recei
 
 from .models import Payment, Refund
 from .providers import get_provider
-from .services import MANUAL_PROVIDERS, mark_payment, recheck_payment, refund_whole_payment
+from .services import MANUAL_PROVIDERS, UNRESOLVED_SESSION, mark_payment, recheck_payment, refund_whole_payment
 
 logger = logging.getLogger(__name__)
-RECHECK_NOT_ELIGIBLE = _("%(payment)s: only pending or unknown card payments can be re-checked.")
+RECHECK_NOT_ELIGIBLE = _("%(payment)s: only card payments without a final provider result can be re-checked.")
 RECHECK_OTHER_PROVIDER = _("%(payment)s: this payment belongs to another provider; follow the manual escalation "
                            "process.")
 RECHECK_UPDATED = {
@@ -27,6 +27,9 @@ RECHECK_OTHER = {
     "superseded": (_("%(payment)s: the payment changed during the check; nothing was overwritten."), messages.WARNING),
     "conflict": (_("%(payment)s: the provider's answers conflict; the payment is now unknown and blocks new payments "
                    "until the provider confirms it."), messages.ERROR),
+    "closed": (_("%(payment)s: the provider confirmed that the payment session is closed."), messages.SUCCESS),
+    "unproven": (_("%(payment)s: the provider shows the session as closed, but this is not yet enough proof; it will be "
+                   "checked again."), messages.INFO),
     "error": (_("%(payment)s: the provider could not confirm the status; nothing changed. Try again later or follow "
                 "the manual escalation process."), messages.ERROR),
 }
@@ -71,12 +74,14 @@ class PaymentAdmin(OperatorActionsMixin, ReadOnlyAdminMixin, admin.ModelAdmin):
 
     @admin.action(description=_("Re-check with provider"), permissions=["operate"])
     def recheck_with_provider(self, request, queryset):
-        """Only card payments still pending or unknown, and only with their own provider. Results come from the
-        provider through mark_payment, never from the operator. Admin actions run outside any transaction."""
+        """Only card payments still pending or unknown, or closed here without proof from the provider, and only with
+        their own provider. Results come from the provider through mark_payment, never from the operator. Admin actions
+        run outside any transaction."""
         provider = get_provider()
         for payment in queryset:
-            if payment.provider in MANUAL_PROVIDERS or payment.status not in (Payment.STATUS_PENDING,
-                                                                              Payment.STATUS_UNKNOWN):
+            if payment.provider in MANUAL_PROVIDERS or (
+                    payment.status not in (Payment.STATUS_PENDING, Payment.STATUS_UNKNOWN)
+                    and not Payment.objects.filter(UNRESOLVED_SESSION, pk=payment.pk).exists()):
                 text, level = RECHECK_NOT_ELIGIBLE, messages.WARNING
             elif payment.provider != provider.name:
                 text, level = RECHECK_OTHER_PROVIDER, messages.WARNING

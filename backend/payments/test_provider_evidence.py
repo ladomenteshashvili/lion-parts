@@ -456,7 +456,8 @@ class NothingReadsTheEvidenceTests(EvidenceTestCase):
         self.assertIsNotNone(self.now(payment).checkout_expires_at)
 
     def test_only_the_expected_modules_mention_the_columns(self):
-        allowed = {Path("payments/models.py"), Path("payments/services.py")}
+        allowed = {Path("payments/models.py"), Path("payments/services.py"),
+                   Path("payments/management/commands/reconcile_closed_payments.py")}
         for path in Path(settings.BASE_DIR).rglob("*.py"):
             relative = path.relative_to(settings.BASE_DIR)
             if ("venv" in relative.parts or "migrations" in relative.parts or "tests" in relative.parts

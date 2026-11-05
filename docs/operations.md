@@ -199,11 +199,11 @@ max_connections must exceed needed, with a margin.
 | Item | Example, one instance |
 |---|---|
 | gunicorn, 1 × 3 × 8 | 24 |
-| Cron (`reconcile_payments`, `fetch_nbg_rates`, `purge_expired_billing`, `clearsessions`) | up to 4 |
+| Cron (`reconcile_payments`, `reconcile_closed_payments`, `fetch_nbg_rates`, `purge_expired_billing`, `clearsessions`) | up to 5 |
 | Maintenance | 3 |
 | Monitoring | 1 |
 | Reserved for superusers (PostgreSQL default) | 3 |
-| **Total, before other services** | **35** |
+| **Total, before other services** | **36** |
 
 - **Additional instances multiply it:** two instances need 48 application connections.
 - **A restart that overlaps old and new workers** can briefly double the application part. Allow for it, or stop the old
@@ -363,6 +363,7 @@ All commands are idempotent; run them as the service user with the same `.env`.
 CRON_TZ=Asia/Tbilisi
 15 0,9,13,17 * * *  cd /srv/lion-parts/backend && venv/bin/python manage.py fetch_nbg_rates
 */5 * * * *         cd /srv/lion-parts/backend && venv/bin/python manage.py reconcile_payments
+7,22,37,52 * * * *  cd /srv/lion-parts/backend && venv/bin/python manage.py reconcile_closed_payments
 30 3 1 * *          cd /srv/lion-parts/backend && venv/bin/python manage.py purge_expired_billing
 45 3 * * *          cd /srv/lion-parts/backend && venv/bin/python manage.py clearsessions
 ```
@@ -374,6 +375,12 @@ CRON_TZ=Asia/Tbilisi
   `unknown` (highlighted in the payment admin); age alone never closes an `unknown` payment. Prints
   `updated / unknown / errors`, where `unknown` counts only payments that newly became unknown. Any `errors` count
   means a provider failure, an invalid answer, or a payment that needs checking (§10).
+- `reconcile_closed_payments`: asks the configured provider about card payments that are `failed` or `expired` here,
+  had a provider page, and have no closure evidence yet. `paid` is counted as usual. A closing answer keeps the local
+  status and notifies nobody. At most 100 payments per run; each one backs off from 15 minutes to once a day and is
+  checked until there is evidence, so it recovers by itself after a provider outage. Prints
+  `checked / closed / paid / open / errors / unresolved / other provider`. This job must be scheduled: nothing else
+  looks for this evidence.
 - `purge_expired_billing`: anonymizes the billing snapshot of deleted accounts' orders after 5 years.
 - `clearsessions`: Django built-in.
 
@@ -387,6 +394,7 @@ CRON_TZ=Asia/Tbilisi
 | Exchange rate | `fetch_nbg_rates` exit code 1 | NBG down: see §10 |
 | Database connections and cache | the read-only queries in §4 | follow the staging checklist in §4 |
 | Payments | count of `unknown` payments; `reconcile_payments` `errors > 0`; log line "provider says paid" | follow the manual escalation in §10 |
+| Closed payments | `reconcile_closed_payments` has run in the last hour; its `errors > 0`, `other provider > 0`; log lines "no provider evidence after" and "reports it paid" | follow the manual escalation in §10 |
 | Notifications | `failed` rows in the delivery log (admin filter); `skipped` in production means a channel is off | fix the provider, then "resend" |
 | Disk | database, `MEDIA_ROOT`, logs | rotate / grow |
 
@@ -417,8 +425,9 @@ previous tag, restart. Run `migrate` with the new code only after the backup has
   invoice. The job keeps re-checking them, so they resolve once the provider answers again.
 - **Unresolved card payment (manual escalation):** use this when the job or "Re-check with provider" cannot get a
   final answer, or reports a conflict.
-  1. Run "Re-check with provider" in the payment admin (needs `payments.change_payment`). It works only on `pending`
-     or `unknown` card payments of the configured provider. It never lets an operator choose the result.
+  1. Run "Re-check with provider" in the payment admin (needs `payments.change_payment`). It works only on card
+     payments of the configured provider that are `pending` or `unknown`, or closed here without closure evidence. It
+     never lets an operator choose the result.
   2. Look the payment up in the provider's merchant dashboard by `provider_order_id`. Ask the provider's support if
      the dashboard has no answer. Keep the evidence: provider reference, status, amount, currency, date, who checked.
   3. Ask the provider to resend its signed callback. The callback checks the signature, amount and currency, so this

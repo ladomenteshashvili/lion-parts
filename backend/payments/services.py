@@ -4,6 +4,7 @@ import logging
 from datetime import timedelta
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from orders.models import Order, OrderItem
@@ -14,6 +15,12 @@ from .models import Payment
 logger = logging.getLogger(__name__)
 FINAL_STATUSES = {Payment.STATUS_REFUNDED}
 PROVIDER_CLOSE_MARGIN = timedelta(minutes=15)
+CLOSED_STATUSES = (Payment.STATUS_FAILED, Payment.STATUS_EXPIRED)
+MANUAL_PROVIDERS = ("invoice", "manual")
+NO_MONEY_PROVIDERS = ("fake",)  # its page cannot take money, so it has no session to prove closed
+UNRESOLVED_SESSION = (Q(status__in=CLOSED_STATUSES, provider_closed_at__isnull=True) & ~Q(checkout_url="")
+                      & ~Q(provider__in=(*MANUAL_PROVIDERS, *NO_MONEY_PROVIDERS)))  # a provider page was opened; no proof
+CLOSURE_CHECK_DELAYS = tuple(timedelta(minutes=m) for m in (15, 60, 180, 360, 720, 1440))  # the last repeats until proof
 
 
 @transaction.atomic
@@ -112,12 +119,12 @@ def _close_if_proven(updated, status, provider, queried_at=None):
     the payment's row lock. Evidence is a closing result the provider has confirmed final for that status, or a query of
     its current state started after the session's window. A callback can't use the window: its delivery can be retried
     long after the event. No decision reads this evidence yet. -> the payment."""
-    closing = status in (Payment.STATUS_FAILED, Payment.STATUS_EXPIRED)
+    closing = status in CLOSED_STATUSES
     if closing and updated.status in (Payment.STATUS_PAID, Payment.STATUS_REFUNDED):
         logger.warning("Payment %s: provider sent %s after %s", updated.pk, status, updated.status)
     if status == Payment.STATUS_PAID and updated.provider_closed_at:
         logger.error("Payment %s: paid after its session was recorded as closed", updated.pk)
-    if (not closing or updated.status != status or updated.provider_closed_at or not updated.checkout_url
+    if (not closing or updated.status not in CLOSED_STATUSES or updated.provider_closed_at or not updated.checkout_url
             or updated.provider != provider.name):
         return updated
     final = status in provider.final_statuses
@@ -137,6 +144,28 @@ def record_provider_result(payment, status, provider, payload=None):
     """A verified result pushed by the provider: its status and any closure evidence commit together. -> the payment."""
     current = Payment.objects.select_for_update(no_key=True).get(pk=payment.pk)
     return _close_if_proven(mark_payment(current, status, payload=payload), status, provider)
+
+
+def claim_closure_check(payment, now):
+    """Spend one provider query on an unresolved session and schedule the next, before asking: a crash can't cause a
+    tight retry loop, and of two overlapping runs only one asks. Checks back off to one a day and never stop, so an outage
+    resolves itself once the provider answers. The check after the session's window comes on time. -> False if lost."""
+    checks = payment.closure_checks
+    next_check = now + CLOSURE_CHECK_DELAYS[min(checks, len(CLOSURE_CHECK_DELAYS) - 1)]
+    if payment.checkout_expires_at and now < payment.checkout_expires_at + PROVIDER_CLOSE_MARGIN < next_check:
+        next_check = payment.checkout_expires_at + PROVIDER_CLOSE_MARGIN
+    return bool(Payment.objects.filter(UNRESOLVED_SESSION, pk=payment.pk, closure_checks=checks).update(
+        closure_checks=checks + 1, closure_next_check_at=next_check, updated_at=now))
+
+
+def _record_closing_answer(payment_pk, seen, status, provider, queried_at):
+    """A payment already closed here, and the provider also reports it closed: the status stays and nobody is notified.
+    Only the evidence can change. -> closed / unproven / superseded."""
+    with transaction.atomic():
+        current = Payment.objects.select_for_update(no_key=True).get(pk=payment_pk)
+        if current.status != seen:
+            return "superseded"
+        return "closed" if _close_if_proven(current, status, provider, queried_at).provider_closed_at else "unproven"
 
 
 def _apply_if_unchanged(payment_pk, seen, status, audit, provider=None, queried_at=None):
@@ -161,8 +190,9 @@ def recheck_payment(payment, provider, checked_by=None):
     to `unknown` so that it blocks new payments until the provider confirms (owner decision, LPK-180). A result
     arriving during that repeat query is kept if it is paid or refunded, or if it closes the payment and the provider
     also answered failed/expired; otherwise the payment is held as `unknown` too. Raises what the first call raises,
-    or ValueError on an invalid first answer; the payment then stays as it is.
-    -> updated / pending / superseded / conflict (now unknown)."""
+    or ValueError on an invalid first answer; the payment then stays as it is. A payment already failed/expired that
+    the provider reports closed keeps its status and only gains any evidence that proves.
+    -> updated / pending / superseded / conflict (now unknown) / closed / unproven."""
     seen = payment.status
     queried_at = timezone.now()  # before the call: the answer can't describe anything later than this
     status = provider.fetch_status(payment)
@@ -170,11 +200,13 @@ def recheck_payment(payment, provider, checked_by=None):
         return "pending"
     if status not in (Payment.STATUS_PAID, Payment.STATUS_FAILED, Payment.STATUS_EXPIRED):
         raise ValueError("invalid provider status")  # the value itself is provider data: it is not logged
+    if seen in CLOSED_STATUSES and status in CLOSED_STATUSES:
+        return _record_closing_answer(payment.pk, seen, status, provider, queried_at)
     audit = {"rechecked_by": checked_by.pk} if checked_by else {}
     current = _apply_if_unchanged(payment.pk, seen, status, audit, provider, queried_at)
     if current is None:
         return "updated"
-    closed = (Payment.STATUS_FAILED, Payment.STATUS_EXPIRED)
+    closed = CLOSED_STATUSES
     if status != Payment.STATUS_PAID or current.status not in closed:
         return "superseded"
 
@@ -210,7 +242,6 @@ def recheck_payment(payment, provider, checked_by=None):
 
 
 PAYMENT_IN_PROGRESS_MINUTES = 30
-MANUAL_PROVIDERS = ("invoice", "manual")
 
 
 def open_payment(order):
@@ -218,8 +249,6 @@ def open_payment(order):
     (the customer may still be paying it, or the money may already have moved: a second payment could charge
     twice), a created invoice/manual payment, or a card payment created < 30 min ago (it is being started with
     the provider right now)."""
-    from django.db.models import Q
-
     recent = timezone.now() - timedelta(minutes=PAYMENT_IN_PROGRESS_MINUTES)
     return order.payments.filter(
         Q(status__in=(Payment.STATUS_PENDING, Payment.STATUS_UNKNOWN))
