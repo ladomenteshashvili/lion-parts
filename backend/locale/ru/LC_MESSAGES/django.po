@@ -1094,8 +1094,16 @@ msgstr "Выберите одно из: all, ready, checking, other."
 
 #: payments/admin.py:17
 #, python-format
-msgid "%(payment)s: only pending or unknown card payments can be re-checked."
-msgstr "%(payment)s: перепроверить можно только карточный платёж в статусе «в ожидании» или «неизвестно»."
+msgid "%(payment)s: only card payments without a final provider result can be re-checked."
+msgstr "%(payment)s: перепроверить можно только карточный платёж без окончательного ответа провайдера."
+
+msgid "%(payment)s: the provider confirmed that the payment session is closed."
+msgstr "%(payment)s: провайдер подтвердил, что платёжная сессия закрыта."
+
+msgid ""
+"%(payment)s: the provider shows the session as closed, but this is not yet "
+"enough proof; it will be checked again."
+msgstr "%(payment)s: провайдер показывает сессию закрытой, но этого пока недостаточно как доказательства; она будет проверена снова."
 
 #: payments/admin.py:18
 #, python-format
@@ -1251,3 +1259,39 @@ msgstr "Процент не может превышать 100."
 #: pricing/models.py:144
 msgid "The end must be after the start."
 msgstr "Окончание должно быть позже начала."
+
+msgid "paid after it was closed here"
+msgstr "оплачен после закрытия у нас"
+
+msgid "paid after the provider showed it closed"
+msgstr "оплачен после того, как провайдер показал его закрытым"
+
+msgid "paid on a cancelled order"
+msgstr "оплачен по отменённому заказу"
+
+msgid "more than the order owed"
+msgstr "больше суммы задолженности по заказу"
+
+msgid "Review"
+msgstr "Проверка"
+
+msgid "Waiting for review"
+msgstr "Ожидает проверки"
+
+msgid "Reviewed"
+msgstr "Проверено"
+
+msgid "Provider session"
+msgstr "Сессия провайдера"
+
+msgid "Not proven closed"
+msgstr "Закрытие не подтверждено"
+
+msgid "Mark as reviewed"
+msgstr "Отметить как проверенное"
+
+msgid "%(payment)s: marked as reviewed."
+msgstr "%(payment)s: отмечено как проверенное."
+
+msgid "%(payment)s: nothing to review."
+msgstr "%(payment)s: проверять нечего."

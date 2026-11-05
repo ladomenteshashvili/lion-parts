@@ -199,11 +199,11 @@ max_connections must exceed needed, with a margin.
 | Item | Example, one instance |
 |---|---|
 | gunicorn, 1 × 3 × 8 | 24 |
-| Cron (`reconcile_payments`, `fetch_nbg_rates`, `purge_expired_billing`, `clearsessions`) | up to 4 |
+| Cron (`reconcile_payments`, `reconcile_closed_payments`, `fetch_nbg_rates`, `purge_expired_billing`, `clearsessions`) | up to 5 |
 | Maintenance | 3 |
 | Monitoring | 1 |
 | Reserved for superusers (PostgreSQL default) | 3 |
-| **Total, before other services** | **35** |
+| **Total, before other services** | **36** |
 
 - **Additional instances multiply it:** two instances need 48 application connections.
 - **A restart that overlaps old and new workers** can briefly double the application part. Allow for it, or stop the old
@@ -363,6 +363,7 @@ All commands are idempotent; run them as the service user with the same `.env`.
 CRON_TZ=Asia/Tbilisi
 15 0,9,13,17 * * *  cd /srv/lion-parts/backend && venv/bin/python manage.py fetch_nbg_rates
 */5 * * * *         cd /srv/lion-parts/backend && venv/bin/python manage.py reconcile_payments
+7,22,37,52 * * * *  cd /srv/lion-parts/backend && venv/bin/python manage.py reconcile_closed_payments
 30 3 1 * *          cd /srv/lion-parts/backend && venv/bin/python manage.py purge_expired_billing
 45 3 * * *          cd /srv/lion-parts/backend && venv/bin/python manage.py clearsessions
 ```
@@ -374,6 +375,13 @@ CRON_TZ=Asia/Tbilisi
   `unknown` (highlighted in the payment admin); age alone never closes an `unknown` payment. Prints
   `updated / unknown / errors`, where `unknown` counts only payments that newly became unknown. Any `errors` count
   means a provider failure, an invalid answer, or a payment that needs checking (§10).
+- `reconcile_closed_payments`: asks the configured provider about card payments that are `failed` or `expired` here,
+  had a provider page, and have no closure evidence yet. `paid` is counted as usual. A closing answer keeps the local
+  status and notifies nobody. At most 100 payments per run; each one backs off from 15 minutes to once a day and is
+  checked until there is evidence, so it recovers by itself after a provider outage. A run stops early after 5 provider
+  errors in a row or 10 minutes, leaving the rest due. Prints
+  `checked / closed / paid / open / errors / unresolved / other provider / needs review`. This job must be scheduled: nothing else
+  looks for this evidence.
 - `purge_expired_billing`: anonymizes the billing snapshot of deleted accounts' orders after 5 years.
 - `clearsessions`: Django built-in.
 
@@ -387,6 +395,7 @@ CRON_TZ=Asia/Tbilisi
 | Exchange rate | `fetch_nbg_rates` exit code 1 | NBG down: see §10 |
 | Database connections and cache | the read-only queries in §4 | follow the staging checklist in §4 |
 | Payments | count of `unknown` payments; `reconcile_payments` `errors > 0`; log line "provider says paid" | follow the manual escalation in §10 |
+| Closed payments | `reconcile_closed_payments` has run in the last hour; its `errors > 0`, `other provider > 0`, `needs review > 0`; log lines "no provider evidence after", "reports it paid" and "needs review" | follow the manual escalation in §10 |
 | Notifications | `failed` rows in the delivery log (admin filter); `skipped` in production means a channel is off | fix the provider, then "resend" |
 | Disk | database, `MEDIA_ROOT`, logs | rotate / grow |
 
@@ -400,6 +409,9 @@ CRON_TZ=Asia/Tbilisi
 
 ## 9. Release and rollback
 
+0. **Before the first release containing the 2026-11-06 contract changes** (`docs/api-handoff.md` §12): the frontend team
+   confirms it handles them, and `reconcile_closed_payments` is scheduled and monitored (§6, §7). Do not release them
+   without both.
 1. Announce, tag the release (`git tag vX.Y.Z`).
 2. **Backup** database and media (§8).
 3. `git checkout vX.Y.Z`, `pip install -r requirements.txt`, `compilemessages`, `collectstatic`,
@@ -412,13 +424,15 @@ previous tag, restart. Run `migrate` with the new code only after the backup has
 ## 10. Incidents
 
 - **Payment provider down:** card payments stay `created/pending`; `reconcile_payments` retries and marks
-  `unknown` after 30 minutes. A `pending` or `unknown` payment blocks every new payment on its order, invoice
-  included (`409 payment_in_progress`), so those customers cannot switch to invoice; other customers can pay by
-  invoice. The job keeps re-checking them, so they resolve once the provider answers again.
+  `unknown` after 30 minutes. A `pending` or `unknown` payment, or a card payment closed here while its provider page
+  may still take money, blocks every new payment on its order, invoice included (`409 payment_in_progress`), so those
+  customers cannot switch to invoice; other customers can pay by invoice. The jobs keep re-checking them, so they
+  resolve once the provider answers again.
 - **Unresolved card payment (manual escalation):** use this when the job or "Re-check with provider" cannot get a
   final answer, or reports a conflict.
-  1. Run "Re-check with provider" in the payment admin (needs `payments.change_payment`). It works only on `pending`
-     or `unknown` card payments of the configured provider. It never lets an operator choose the result.
+  1. Run "Re-check with provider" in the payment admin (needs `payments.change_payment`). It works only on card
+     payments of the configured provider that are `pending` or `unknown`, or closed here without closure evidence. It
+     never lets an operator choose the result.
   2. Look the payment up in the provider's merchant dashboard by `provider_order_id`. Ask the provider's support if
      the dashboard has no answer. Keep the evidence: provider reference, status, amount, currency, date, who checked.
   3. Ask the provider to resend its signed callback. The callback checks the signature, amount and currency, so this
@@ -430,13 +444,21 @@ previous tag, restart. Run `migrate` with the new code only after the backup has
   5. **Provider change:** the job and the admin action ask only the configured provider, and the callback endpoint
      answers `404` for any other, so a previous provider's payments no longer resolve on their own. Before switching,
      filter the payment admin by `pending` and `unknown` and resolve them with the current provider. Any left over
-     stay blocked and are escalated (step 8), using the old provider's dashboard for evidence (step 2).
+     stay blocked and are escalated (step 10), using the old provider's dashboard for evidence (step 2).
   6. **Provider conflict:** the log line "provider says paid … marked unknown", with `errors` counted by the job, means
      the provider's answers conflict. The payment stays `unknown`, blocks new card and invoice payments, and the job keeps
      asking. `provider_payload` records `conflict_with` and `conflict_second_answer`. Follow steps 2 and 3.
   7. **More than one payment on an order (LPK-219):** escalate to the owner. If an order shows `refund_pending`, use
      "Record refund of the amount owed". Use "Cancel invoice" for an invoice the order no longer owes.
-  8. **No manual status changes.** An `unknown` payment is resolved only by provider confirmation or an explicitly
+  8. **A closed payment that still blocks (LPK-219):** a card payment `failed` or `expired` here keeps blocking new
+     payments until the provider confirms the session has closed. Cancelling an order or item does not lift it. Run
+     "Re-check with provider" after the session's expiry. If there is still no proof, tell the customer it is being
+     checked and escalate to the owner. Do not edit `provider_closed_at`.
+  9. **Paid results waiting for review (LPK-219):** a payment that became `paid` after closing here, on a cancelled
+     order, or for more than the order owed is flagged, once, with its reasons (payment admin, filter "Review"). The money
+     is already counted. Check it, use "Record refund of the amount owed" if the order shows `refund_pending`, then "Mark
+     as reviewed". The admin filter "Provider session" lists payments not yet proven closed.
+  10. **No manual status changes.** An `unknown` payment is resolved only by provider confirmation or an explicitly
      authorized, auditable escalation process. Nobody sets the status of a real card payment by hand, through the
      admin, a Django shell or the database, until a separately approved procedure is defined. Unresolved payments stay
      as they are and are escalated, never guessed. Any future resolution requires all of: verified provider evidence,

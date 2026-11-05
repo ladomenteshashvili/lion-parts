@@ -1091,8 +1091,16 @@ msgstr "აირჩიეთ ერთ-ერთი: all, ready, checking, othe
 
 #: payments/admin.py:17
 #, python-format
-msgid "%(payment)s: only pending or unknown card payments can be re-checked."
-msgstr "%(payment)s: გადამოწმება შესაძლებელია მხოლოდ მოლოდინში მყოფი ან უცნობი სტატუსის მქონე ბარათით გადახდისთვის."
+msgid "%(payment)s: only card payments without a final provider result can be re-checked."
+msgstr "%(payment)s: გადამოწმება შესაძლებელია მხოლოდ იმ ბარათით გადახდაზე, რომელსაც პროვაიდერის საბოლოო პასუხი არ აქვს."
+
+msgid "%(payment)s: the provider confirmed that the payment session is closed."
+msgstr "%(payment)s: პროვაიდერმა დაადასტურა, რომ გადახდის სესია დახურულია."
+
+msgid ""
+"%(payment)s: the provider shows the session as closed, but this is not yet "
+"enough proof; it will be checked again."
+msgstr "%(payment)s: პროვაიდერი სესიას დახურულად აჩვენებს, მაგრამ ეს ჯერ საკმარისი მტკიცებულება არ არის; ის კვლავ შემოწმდება."
 
 #: payments/admin.py:18
 #, python-format
@@ -1247,3 +1255,39 @@ msgstr "პროცენტი არ შეიძლება აღემა
 #: pricing/models.py:144
 msgid "The end must be after the start."
 msgstr "დასრულება უნდა იყოს დაწყების შემდეგ."
+
+msgid "paid after it was closed here"
+msgstr "გადახდილია მას შემდეგ, რაც აქ დაიხურა"
+
+msgid "paid after the provider showed it closed"
+msgstr "გადახდილია მას შემდეგ, რაც პროვაიდერმა დახურულად აჩვენა"
+
+msgid "paid on a cancelled order"
+msgstr "გადახდილია გაუქმებულ შეკვეთაზე"
+
+msgid "more than the order owed"
+msgstr "შეკვეთის დავალიანებაზე მეტი"
+
+msgid "Review"
+msgstr "შემოწმება"
+
+msgid "Waiting for review"
+msgstr "ელოდება შემოწმებას"
+
+msgid "Reviewed"
+msgstr "შემოწმებულია"
+
+msgid "Provider session"
+msgstr "პროვაიდერის სესია"
+
+msgid "Not proven closed"
+msgstr "დახურვა არ არის დადასტურებული"
+
+msgid "Mark as reviewed"
+msgstr "შემოწმებულად მონიშვნა"
+
+msgid "%(payment)s: marked as reviewed."
+msgstr "%(payment)s: მოინიშნა შემოწმებულად."
+
+msgid "%(payment)s: nothing to review."
+msgstr "%(payment)s: შესამოწმებელი არაფერია."

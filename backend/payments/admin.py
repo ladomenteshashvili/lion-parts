@@ -11,10 +11,11 @@ from orders.admin import OperatorActionsMixin, ReadOnlyAdminMixin, confirm_recei
 
 from .models import Payment, Refund
 from .providers import get_provider
-from .services import MANUAL_PROVIDERS, mark_payment, recheck_payment, refund_whole_payment
+from .services import (MANUAL_PROVIDERS, UNRESOLVED_SESSION, mark_payment, mark_reviewed, recheck_payment,
+                       refund_whole_payment)
 
 logger = logging.getLogger(__name__)
-RECHECK_NOT_ELIGIBLE = _("%(payment)s: only pending or unknown card payments can be re-checked.")
+RECHECK_NOT_ELIGIBLE = _("%(payment)s: only card payments without a final provider result can be re-checked.")
 RECHECK_OTHER_PROVIDER = _("%(payment)s: this payment belongs to another provider; follow the manual escalation "
                            "process.")
 RECHECK_UPDATED = {
@@ -27,9 +28,46 @@ RECHECK_OTHER = {
     "superseded": (_("%(payment)s: the payment changed during the check; nothing was overwritten."), messages.WARNING),
     "conflict": (_("%(payment)s: the provider's answers conflict; the payment is now unknown and blocks new payments "
                    "until the provider confirms it."), messages.ERROR),
+    "closed": (_("%(payment)s: the provider confirmed that the payment session is closed."), messages.SUCCESS),
+    "unproven": (_("%(payment)s: the provider shows the session as closed, but this is not yet enough proof; it will be "
+                   "checked again."), messages.INFO),
     "error": (_("%(payment)s: the provider could not confirm the status; nothing changed. Try again later or follow "
                 "the manual escalation process."), messages.ERROR),
 }
+
+
+REVIEW_REASONS = {
+    "late_paid": _("paid after it was closed here"),
+    "paid_after_closure": _("paid after the provider showed it closed"),
+    "cancelled_order": _("paid on a cancelled order"),
+    "overpaid": _("more than the order owed"),
+}
+
+
+class ReviewFilter(admin.SimpleListFilter):
+    title = _("Review")
+    parameter_name = "review"
+
+    def lookups(self, request, model_admin):
+        return [("waiting", _("Waiting for review")), ("reviewed", _("Reviewed"))]
+
+    def queryset(self, request, queryset):
+        if self.value() == "waiting":
+            return queryset.filter(review_required_at__isnull=False, reviewed_at__isnull=True)
+        if self.value() == "reviewed":
+            return queryset.filter(reviewed_at__isnull=False)
+        return queryset
+
+
+class ProviderSessionFilter(admin.SimpleListFilter):
+    title = _("Provider session")
+    parameter_name = "session"
+
+    def lookups(self, request, model_admin):
+        return [("unproven", _("Not proven closed"))]
+
+    def queryset(self, request, queryset):
+        return queryset.filter(UNRESOLVED_SESSION) if self.value() == "unproven" else queryset
 
 
 class RefundInline(ReadOnlyAdminMixin, admin.TabularInline):
@@ -41,13 +79,13 @@ class RefundInline(ReadOnlyAdminMixin, admin.TabularInline):
 
 @admin.register(Payment)
 class PaymentAdmin(OperatorActionsMixin, ReadOnlyAdminMixin, admin.ModelAdmin):
-    list_display = ("id", "order", "kind", "provider", "amount", "currency", "status_display", "paid_at",
+    list_display = ("id", "order", "kind", "provider", "amount", "currency", "status_display", "review_display", "paid_at",
                     "confirmed_by", "created_at")
-    list_filter = ("status", "provider", "kind", "currency")
+    list_filter = ("status", ReviewFilter, ProviderSessionFilter, "provider", "kind", "currency")
     search_fields = ("order__order_number", "provider_order_id", "provider_payment_id")
     list_select_related = ("order", "confirmed_by")
     inlines = [RefundInline]
-    actions = ["payment_received", "cancel_invoice", "mark_refunded", "recheck_with_provider"]
+    actions = ["payment_received", "cancel_invoice", "mark_refunded", "recheck_with_provider", "mark_as_reviewed"]
 
     @admin.display(description=_("Status"), ordering="status")
     def status_display(self, obj):
@@ -55,6 +93,23 @@ class PaymentAdmin(OperatorActionsMixin, ReadOnlyAdminMixin, admin.ModelAdmin):
         if obj.status == Payment.STATUS_UNKNOWN:
             return format_html('<strong style="color:#ba2121">{}</strong>', obj.status)
         return obj.status
+
+    @admin.display(description=_("Review"))
+    def review_display(self, obj):
+        if not obj.review_required_at or obj.reviewed_at:
+            return ""
+        return format_html('<strong style="color:#ba2121">{}</strong>',
+                           ", ".join(str(REVIEW_REASONS.get(reason, reason)) for reason in obj.review_reasons))
+
+    @admin.action(description=_("Mark as reviewed"), permissions=["operate"])
+    def mark_as_reviewed(self, request, queryset):
+        """Records who looked at a flagged payment. Money and status don't change."""
+        for payment in queryset:
+            if mark_reviewed(payment, request.user):
+                logger.info("Payment %s marked reviewed by user %s", payment.pk, request.user.pk)
+                self.message_user(request, _("%(payment)s: marked as reviewed.") % {"payment": payment}, messages.SUCCESS)
+            else:
+                self.message_user(request, _("%(payment)s: nothing to review.") % {"payment": payment}, messages.WARNING)
 
     @admin.action(description=_("Payment received"), permissions=["operate"])
     def payment_received(self, request, queryset):
@@ -71,12 +126,14 @@ class PaymentAdmin(OperatorActionsMixin, ReadOnlyAdminMixin, admin.ModelAdmin):
 
     @admin.action(description=_("Re-check with provider"), permissions=["operate"])
     def recheck_with_provider(self, request, queryset):
-        """Only card payments still pending or unknown, and only with their own provider. Results come from the
-        provider through mark_payment, never from the operator. Admin actions run outside any transaction."""
+        """Only card payments still pending or unknown, or closed here without proof from the provider, and only with
+        their own provider. Results come from the provider through mark_payment, never from the operator. Admin actions
+        run outside any transaction."""
         provider = get_provider()
         for payment in queryset:
-            if payment.provider in MANUAL_PROVIDERS or payment.status not in (Payment.STATUS_PENDING,
-                                                                              Payment.STATUS_UNKNOWN):
+            if payment.provider in MANUAL_PROVIDERS or (
+                    payment.status not in (Payment.STATUS_PENDING, Payment.STATUS_UNKNOWN)
+                    and not Payment.objects.filter(UNRESOLVED_SESSION, pk=payment.pk).exists()):
                 text, level = RECHECK_NOT_ELIGIBLE, messages.WARNING
             elif payment.provider != provider.name:
                 text, level = RECHECK_OTHER_PROVIDER, messages.WARNING
