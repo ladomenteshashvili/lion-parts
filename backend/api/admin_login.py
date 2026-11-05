@@ -51,8 +51,9 @@ def _slots(kind, value, limit):
 
 def _reserve(slots):
     """-> the slot taken, or None when all are in use."""
-    cache.get_many(slots)  # deletes expired rows, so parallel adds below collide on the primary key
-    return next((slot for slot in slots if cache.add(slot, 1, WINDOW_SECONDS)), None)
+    taken = cache.get_many(slots)  # also deletes expired rows
+    # Skipping taken slots avoids pointless failed inserts. A stale read is safe: cache.add still decides each slot.
+    return next((slot for slot in slots if slot not in taken and cache.add(slot, 1, WINDOW_SECONDS)), None)
 
 
 def _blocked(request):

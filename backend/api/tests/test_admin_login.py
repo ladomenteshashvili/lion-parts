@@ -12,7 +12,7 @@ from django.contrib import admin
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.core.cache import caches
-from django.db import connection
+from django.db import DatabaseError, connection
 from django.test import Client, RequestFactory, TestCase, TransactionTestCase, override_settings
 from django.urls import clear_url_caches, resolve, reverse
 from django.utils import timezone
@@ -398,6 +398,73 @@ class InFlightTests(Base):
         calls, statuses = self.overlap(IP_LIMIT, lambda n: self.post(f"user{n}").status_code)
         self.assertEqual(calls, IP_LIMIT)
         self.assertIn(429, statuses)
+
+
+class ReservationTests(Base):
+    """cache.get_many spares taken slots a failed insert; cache.add stays the only thing that grants a slot."""
+
+    def spy(self):
+        return mock.patch("api.admin_login.cache", wraps=caches["default"])
+
+    def adds(self, spy, kind):
+        return [call.args[0] for call in spy.add.call_args_list if f":{kind}:" in call.args[0]]
+
+    def test_a_full_username_bucket_attempts_no_insert_however_often_it_is_tried(self):
+        self.fail_times(USERNAME_LIMIT)
+        with self.spy() as spy:
+            for _ in range(20):
+                self.assert_blocked(self.post())
+        self.assertEqual(self.adds(spy, "username"), [])
+
+    def test_a_full_ip_bucket_attempts_no_insert_at_all(self):
+        for attempt in range(IP_LIMIT):
+            self.post(f"user{attempt}")
+        with self.spy() as spy:
+            for attempt in range(20):
+                self.assert_blocked(self.post(f"other{attempt}"))
+        spy.add.assert_not_called()
+
+    def test_only_the_first_free_slot_is_tried(self):
+        self.fail_times(3)
+        with self.spy() as spy:
+            self.assertEqual(self.post().status_code, 200)
+        for kind in ("username", "ip"):
+            with self.subTest(kind=kind):
+                self.assertEqual([key.rsplit(":", 1)[1] for key in self.adds(spy, kind)], ["3"])
+
+    def test_cache_add_still_decides_when_the_read_is_stale(self):
+        self.fail_times(USERNAME_LIMIT)
+        with self.spy() as spy, mock.patch(AUTHENTICATE, side_effect=authenticate) as check:
+            spy.get_many = mock.Mock(return_value={})  # as if another request filled them after this read
+            self.assert_blocked(self.post(ip=OTHER_IP))
+        self.assertEqual(len(self.adds(spy, "username")), USERNAME_LIMIT)
+        check.assert_not_called()
+
+    def test_losing_a_slot_to_a_parallel_request_moves_on_to_the_next(self):
+        real = caches["default"].add
+
+        def add(key, *args, **kwargs):
+            return False if ":username:" in key and key.endswith(":0") else real(key, *args, **kwargs)
+
+        with self.spy() as spy:
+            spy.add.side_effect = add
+            self.assertEqual(self.post().status_code, 200)
+        self.assertEqual([key.rsplit(":", 1)[1] for key in self.adds(spy, "username")], ["0", "1"])
+
+    def test_a_cache_that_refuses_writes_blocks_the_login(self):
+        with self.spy() as spy, mock.patch(AUTHENTICATE, side_effect=authenticate) as check:
+            spy.add.side_effect = lambda *args, **kwargs: False
+            self.assert_blocked(self.post(password=PASSWORD))
+        check.assert_not_called()
+
+    def test_a_cache_that_cannot_be_read_does_not_check_the_credentials(self):
+        client = Client(raise_request_exception=False)
+        with self.spy() as spy, mock.patch(AUTHENTICATE, side_effect=authenticate) as check:
+            spy.get_many.side_effect = DatabaseError("cache table unavailable")
+            response = self.post(password=PASSWORD, client=client)
+        self.assertEqual(response.status_code, 500)
+        check.assert_not_called()
+        self.assertNotIn("_auth_user_id", client.session)
 
 
 class CacheCapacityTests(Base):

@@ -109,7 +109,9 @@ Consolidated into one commit on the post-review branch. In review; GitHub CI pen
 | FIX-03 | LPK-172 / LPK-182 | Protect the Django Admin login against brute-force attacks | in review | api/tests/test_admin_login.py. The admin must not be publicly exposed without the nginx allow-list and rate limiting (B6). Admin 2FA: LPK-188/LPK-189 |
 | FIX-04 | LPK-172 / LPK-183 | Gunicorn gthread and PostgreSQL persistent connections | in review | config/tests.py, api/tests/test_thread_safety.py. Starting configuration for isolated staging tests only; no `gthread` with real AMT until LPK-220 (B7). No service configuration changed; staging load tests not run |
 
-Local validation before the commit: SQLite (config.e2e_settings) 846 ran, 827 passed, 0 failed, 19 skipped (PostgreSQL-only); disposable PostgreSQL 18 with plain config.settings, 846 ran, 846 passed, 0 skipped, also in reversed and shuffled test order. GitHub CI: not run yet; CI uses PostgreSQL 16.
+Admin login cache slot optimization completed (LPK-182): slots already known to be occupied are skipped before reserving, and `cache.add` still decides each slot.
+
+Local validation with that change: SQLite (config.e2e_settings) 853 ran, 834 passed, 0 failed, 19 skipped (PostgreSQL-only); disposable PostgreSQL 18 with plain config.settings, 853 ran, 853 passed, 0 skipped. Reversed and shuffled test order last ran before it, at 846 tests, and passed. GitHub CI (PostgreSQL 16) passed on the first commit of this PR and has not yet run on this change.
 
 ### Prerequisite before real card payments
 
