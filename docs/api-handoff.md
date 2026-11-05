@@ -81,7 +81,7 @@ conflict, 429 rate limited (`retry_after` seconds), 502 upstream failure.
 | 409 | `cart_empty` / `cart_invalid` | Checkout blocked. | `reasons` `[{item_id, code}]` |
 | 409 | `no_pending_action` | Nothing to decide/accept any more (double submit). | |
 | 409 | `not_cancellable` | Something was already purchased. | |
-| 409 | `nothing_to_pay` / `payment_in_progress` | | `payment` (resume its `checkout_url`) |
+| 409 | `nothing_to_pay` / `payment_in_progress` | | `payment` (the blocking payment; resume or verify it, §8 B) |
 | 409 | `account_has_open_orders` | Delete the account after the orders are completed. | |
 | 429 | `throttled` | Too many attempts. | `retry_after` |
 | 502 | `supplier_unavailable` / `rate_unavailable` / `sms_failed` | Try again in a few minutes. | |
@@ -232,7 +232,12 @@ anything owned by another customer is `404`.
 - **Item decisions:** `action.type` ∈ `price_change, eta_change, alternative_required, fitment_issue, weight_change,
   other`; `decisions` is `["accept", "cancel"]`, or `["acknowledge"]` for a weight change after purchase.
 - **Payment.status:** `created` → `pending` → `paid` | `failed` | `expired`; `paid` → `refunded`; `unknown` when
-  the provider never answered (the operator resolves it).
+  the provider gave no final answer in time, then `paid` | `failed` | `expired` once the provider answers (a callback,
+  the 5-minute reconciliation, or an operator's re-check). It can last indefinitely: age never closes it. `unknown` never returns
+  to `pending`, and `failed` or `expired` never return to `pending`. `failed` or `expired` can still become `paid` if
+  the provider confirms the money moved, or `unknown` if its answers conflict, so re-read the order before showing a
+  retry. `pending` and
+  `unknown` block new payments on the order whatever their age (§8 B); `failed` and `expired` do not.
 - **Ticket.status:** `new` → `answered` → `closed`.
 - **Prices:** offers, cart lines and quotes are valid until `price_valid_until` (10 Georgian business days);
   afterwards `offer_expired` / line `expired` / quote link `404` until the operator re-approves.
@@ -264,7 +269,19 @@ On demo staging `checkout_url` is `/payment-result?…&fake=1`; finish with
 **B. Invoice and split payment (70/30 tariff)**: checkout with `payment_method: "invoice"` → `payment.status
 "pending"`, `checkout_url: null`; show `order.invoice_url` (add `?lang=`). The operator confirms the transfer.
 After the first payment, `balance_due` > 0 → `POST /api/orders/<n>/payments/ {"method": "card"|"invoice"}`.
-`409 payment_in_progress` returns the open `payment` (resume its `checkout_url`).
+`409 payment_in_progress` returns the blocking `payment`, for either `method`. Never offer to pay again while it
+blocks: the earlier payment may still complete, and a second one could charge the customer twice.
+- `pending` (any age): resume it. Card: open its `checkout_url`. Invoice (`checkout_url: null`): show `order.invoice_url`.
+- `unknown` (any age): the result is being verified. Do not open its `checkout_url` even if it is present. Tell the
+  customer the payment is being checked and read `GET /api/orders/<n>/payments/<id>/` (poll no harder than in A;
+  it can take much longer, so check again on the customer's next visit). `paid` moves the order on as usual;
+  `failed` or `expired` means the customer can pay again.
+- `created`: a payment being started. Retry shortly. A card payment stops blocking 30 minutes after creation.
+
+Only `failed` and `expired` payments allow a retry without further checks.
+
+A `201` can carry `status: "failed"` or `"expired"` with `checkout_url: null`: the page could not be opened, or the
+payment was closed meanwhile (for example the order was cancelled). Read `status` before redirecting.
 
 **C. Price change decision**: notification `action_required` (target `decision`) → `GET /api/orders/<n>/` →
 item `action` `{"type": "price_change", "old": {"unit_price": "320.00"}, "new": {"unit_price": "348.00"},
@@ -331,3 +348,6 @@ and order messages, verification emails. `429` carries `retry_after` seconds.
 | 2026-11-03 | USD orders: the courier fee is converted at the NBG rate when proposed (frozen per proposal) (D21). | No |
 | 2026-11-03 | `GET /api/support/tickets/` answers a staff session `403` (was `401`), like every customer endpoint. | No |
 | 2026-11-03 | Support tickets and order messages: per-customer rate limit (`429 throttled`). | No |
+| 2026-11-05 | `POST /api/orders/<n>/payments/`: `409 payment_in_progress` is now also returned for an `unknown` payment (any provider, any age) and a `pending` card payment older than 30 minutes (previously these allowed a new payment). They must be resumed or verified, not paid again (§8 B). Same path, error code and `payment` body. | No (behaviour: handle `unknown` in the existing `409`) |
+| 2026-11-05 | A payment closed while its provider page was opening keeps its closed status and gets no `checkout_url`, so a `201` from `POST /api/orders/<n>/payments/` can carry `status: "expired"` and `checkout_url: null`. | No (same shape as the existing `failed` case) |
+| 2026-11-05 | An `unknown` payment can now resolve later to `paid`, `failed` or `expired` without any client action (reconciliation or an operator's re-check). A `failed` or `expired` payment can become `paid` if the provider confirms it, or `unknown` if the provider's answers conflict; `unknown` then blocks new payments with the existing `409`. No endpoint, field or error code changed. | No |

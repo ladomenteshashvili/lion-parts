@@ -51,6 +51,19 @@ class CancelTests(TestCase):
                          ("refund_pending", "520.00", "-520.00"))
         self.assertEqual(Payment.objects.get(order=self.order).status, "paid")  # never refunded automatically
 
+    def test_an_unknown_payment_survives_the_cancellation_and_a_late_paid_result_is_owed_back(self):
+        total = self.order.total
+        unknown = Payment.objects.create(order=self.order, kind="initial", provider="fake", amount=total,
+                                         currency="GEL", status="unknown")
+        invoice = create_payment(self.order, "invoice")
+        self.assertEqual(self.cancel().json()["status"], "cancelled")
+        unknown.refresh_from_db()
+        invoice.refresh_from_db()
+        self.assertEqual((unknown.status, unknown.amount, invoice.status), ("unknown", total, "expired"))
+        mark_payment(unknown, "paid")  # the verified provider answer arrives after the cancellation
+        order = Order.objects.get(pk=self.order.pk)
+        self.assertEqual((order.status, order.amount_paid, order.balance_due), ("cancelled", total, -total))
+
     def test_any_purchased_item_is_409(self):
         Order.objects.filter(pk=self.order.pk).update(status="processing")
         OrderItem.objects.filter(order=self.order, part_number="A").update(item_status="purchased")

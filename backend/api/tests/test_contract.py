@@ -2,13 +2,16 @@
 G§8). One realistic journey keeps the state consistent: register, search, quote, cart, checkout, pay, order,
 decide, courier fee, support, notifications, profile. Removing or renaming any field fails a test here."""
 
+import importlib
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
+from django.urls import Resolver404, clear_url_caches, resolve
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+import config.urls
 from accounts.models import CustomerTariff
 from accounts.test_register import PHYSICAL
 from accounts.testing import make_customer
@@ -25,6 +28,25 @@ D = Decimal
 
 def keys(obj):
     return set(obj)
+
+
+def reload_urls():
+    clear_url_caches()
+    importlib.reload(config.urls)
+
+
+def use_demo_routes(test):
+    """Demo routes are mounted when config.urls is imported, so the setting alone does not add them. The cleanup runs
+    after the override ends, so the URLs go back to what the real settings say whatever ran before this test."""
+    override = override_settings(ENABLE_DEMO_ENDPOINTS=True)
+    override.enable()
+    reload_urls()
+
+    def restore():
+        override.disable()
+        reload_urls()
+
+    test.addCleanup(restore)
 
 
 @override_settings(PARTS_PROVIDER="demo", FRONTEND_BASE_URL="https://lionparts.ge")
@@ -191,6 +213,7 @@ class OrderContractTests(ContractTestCase):
         self.assertTrue({"type", "title", "at"} <= keys(detail["timeline"][0]))
 
     def test_payments_decision_courier_fee_cancel_support(self):
+        use_demo_routes(self)
         checkout = self.ordered()
         number, payment_id = checkout["order"]["order_number"], checkout["payment"]["id"]
         self.assert_keys(self.client.get(f"/api/orders/{number}/payments/{payment_id}/").json(), C.PAYMENT)
@@ -241,3 +264,26 @@ class NotificationAndSupportContractTests(ContractTestCase):
         me = staff.get("/api/auth/me/").json()
         self.assertEqual((me["authenticated"], me["customer"]), (False, None))
         self.assertEqual(staff.get("/api/orders/").status_code, 403)
+
+
+class DemoRouteIsolationTests(SimpleTestCase):
+    """A test that needs the demo routes mounts them itself and leaves the URLs as the settings say."""
+
+    def demo_route_exists(self):
+        try:
+            resolve("/api/payments/fake/1/complete/")
+        except Resolver404:
+            return False
+        return True
+
+    def test_the_routes_are_mounted_and_removed_again(self):
+        try:
+            with override_settings(ENABLE_DEMO_ENDPOINTS=False):
+                reload_urls()
+                self.assertFalse(self.demo_route_exists())
+                use_demo_routes(self)
+                self.assertTrue(self.demo_route_exists())
+                self.doCleanups()  # runs the restore now, while the settings still say the routes are off
+                self.assertFalse(self.demo_route_exists())
+        finally:
+            reload_urls()  # back to the real settings

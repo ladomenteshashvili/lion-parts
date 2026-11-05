@@ -7,7 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from django.test import SimpleTestCase, override_settings
+from django.core.management import call_command
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import clear_url_caches
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -83,6 +84,101 @@ class SecureDefaultsTests(SimpleTestCase):
         with self.settings(SECURE_SSL_REDIRECT=True):
             response = self.client.get("/api/health/", headers={"x-forwarded-proto": "https"})
         self.assertEqual(response.status_code, 200)
+
+
+class DatabaseConnectionTests(SimpleTestCase):
+    """LPK-183: connection reuse settings, read as Django's connection handler sees them. Nothing connects."""
+
+    PROBE = (
+        "import django; django.setup(); from django.db import connections;"
+        "d = connections['default'].settings_dict;"
+        "print(d['CONN_MAX_AGE'], d['CONN_HEALTH_CHECKS'], d['NAME'], d['USER'], d['HOST'], d['PORT'])"
+    )
+
+    def probe(self, **env):
+        result = run_python(self.PROBE, env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout.split()
+
+    def test_the_default_is_60_seconds_with_health_checks(self):
+        self.assertEqual(self.probe(DB_CONN_MAX_AGE=None)[:2], ["60", "True"])
+
+    def test_zero_and_positive_overrides_are_accepted(self):
+        for value in ("0", "1", "300"):
+            with self.subTest(value=value):
+                self.assertEqual(self.probe(DB_CONN_MAX_AGE=value)[:2], [value, "True"])
+
+    def test_a_negative_value_refuses_to_start(self):
+        for value in ("-1", "-60"):
+            with self.subTest(value=value):
+                result = run_python(self.PROBE, {"DB_CONN_MAX_AGE": value})
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertIn("ImproperlyConfigured: DB_CONN_MAX_AGE must be zero or a positive", result.stderr)
+
+    def test_the_other_database_settings_are_unchanged(self):
+        out = self.probe(DB_NAME="n1", DB_USER="u1", DB_HOST="h1", DB_PORT="1234", DB_CONN_MAX_AGE="5")
+        self.assertEqual(out, ["5", "True", "n1", "u1", "h1", "1234"])
+
+    def test_the_example_env_documents_it(self):
+        self.assertEqual(env_example_values()["DB_CONN_MAX_AGE"], "60")
+
+
+class NoMissingMigrationsTests(TestCase):
+    def test_the_models_need_no_new_migrations(self):
+        call_command("makemigrations", check=True, dry_run=True, verbosity=0)  # exits non-zero if any are missing
+
+
+class EmailTimeoutTests(SimpleTestCase):
+    """LPK-181: EMAIL_TIMEOUT maps onto MAILERS, never onto the legacy setting Django 6.1 forbids next to it."""
+
+    SMTP = "django.core.mail.backends.smtp.EmailBackend"
+    PROBE = (
+        "import django, config.settings as s; django.setup();"
+        "from django.core.mail import mailers;"
+        "print(s.MAILERS['default']['OPTIONS'].get('timeout'), getattr(mailers['default'], 'timeout', 'none'),"
+        " 'EMAIL_TIMEOUT' in vars(s))"
+    )
+
+    def probe(self, **env):
+        result = run_python(self.PROBE, env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout.split()
+
+    def test_the_default_is_10_seconds(self):
+        self.assertEqual(self.probe(EMAIL_BACKEND=self.SMTP, EMAIL_TIMEOUT=None), ["10", "10", "False"])
+
+    def test_the_environment_overrides_it(self):
+        self.assertEqual(self.probe(EMAIL_BACKEND=self.SMTP, EMAIL_TIMEOUT="7"), ["7", "7", "False"])
+
+    def test_positive_values_are_accepted(self):
+        for value in ("1", "30", "600"):
+            with self.subTest(value=value):
+                self.assertEqual(self.probe(EMAIL_BACKEND=self.SMTP, EMAIL_TIMEOUT=value), [value, value, "False"])
+
+    def test_zero_or_a_negative_value_refuses_to_start(self):
+        for value in ("0", "-1", "-30"):
+            with self.subTest(value=value):
+                result = run_python(self.PROBE, {"EMAIL_BACKEND": self.SMTP, "EMAIL_TIMEOUT": value})
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertIn("ImproperlyConfigured: EMAIL_TIMEOUT must be a positive", result.stderr)
+
+    def test_other_backends_get_no_smtp_options(self):
+        self.assertEqual(self.probe(EMAIL_BACKEND="django.core.mail.backends.console.EmailBackend"),
+                         ["None", "none", "False"])
+
+    def test_other_backends_ignore_the_value(self):
+        for value in ("0", "-1"):
+            with self.subTest(value=value):
+                self.assertEqual(self.probe(EMAIL_BACKEND="django.core.mail.backends.console.EmailBackend",
+                                            EMAIL_TIMEOUT=value), ["None", "none", "False"])
+
+    def test_check_passes_with_the_smtp_timeout(self):
+        result = run_python("import django; from django.core.management import call_command;"
+                            "django.setup(); call_command('check')", {"EMAIL_BACKEND": self.SMTP})
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_the_example_env_documents_it(self):
+        self.assertEqual(env_example_values()["EMAIL_TIMEOUT"], "10")
 
 
 class BlankEnvValueTests(SimpleTestCase):

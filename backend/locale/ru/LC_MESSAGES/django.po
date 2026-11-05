@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lion-parts-backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 18:00+0000\n"
+"POT-Creation-Date: 2026-11-05 12:20+0000\n"
 "Language: ru\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -129,6 +129,10 @@ msgstr "Пароль изменён."
 msgid "The default-language value is required."
 msgstr "Значение на основном языке обязательно."
 
+#: api/admin_login.py:26
+msgid "Too many failed login attempts. Please try again later."
+msgstr "Слишком много неудачных попыток входа. Повторите попытку позже."
+
 #: api/drf_messages.py:8
 msgid "This field is required."
 msgstr "Обязательное поле."
@@ -243,7 +247,7 @@ msgstr "Ссылка больше не действительна."
 msgid "Invalid callback."
 msgstr "Некорректный callback."
 
-#: api/errors.py:15
+#: api/errors.py:15 api/tests/test_language_qa.py:83
 msgid "Please sign in."
 msgstr "Пожалуйста, войдите в аккаунт."
 
@@ -416,19 +420,28 @@ msgstr "Подтвердите адрес электронной почты, о�
 msgid "The link is valid for 48 hours. If you didn't create a Lion Parts account, ignore this email."
 msgstr "Ссылка действительна 48 часов. Если вы не создавали аккаунт Lion Parts, проигнорируйте это письмо."
 
+#: api/tests/test_language_qa.py:143 orders/templates/orders/invoice.html:68
+#: orders/texts.py:59
+msgid "Delivery fee"
+msgstr "Стоимость доставки"
+
+#: api/tests/test_language_qa.py:164 orders/admin.py:229 orders/admin.py:236
+msgid "Cancel order"
+msgstr "Отменить заказ"
+
 #: cart/serializers.py:18 cart/services.py:47
 msgid "The quantity must be between 1 and 99."
 msgstr "Количество должно быть от 1 до 99."
 
-#: config/settings.py:125
+#: config/settings.py:127
 msgid "Georgian"
 msgstr "Грузинский"
 
-#: config/settings.py:125
+#: config/settings.py:127
 msgid "English"
 msgstr "Английский"
 
-#: config/settings.py:125
+#: config/settings.py:127
 msgid "Russian"
 msgstr "Русский"
 
@@ -529,7 +542,7 @@ msgstr "Печать счёта"
 msgid "Refunds"
 msgstr "Возвраты"
 
-#: orders/admin.py:189 payments/admin.py:38
+#: orders/admin.py:189 payments/admin.py:59
 msgid "Payment received"
 msgstr "Оплата получена"
 
@@ -567,10 +580,6 @@ msgstr "Предложить стоимость курьерской доста�
 #, python-format
 msgid "proposed %(amount)s %(currency)s"
 msgstr "предложено %(amount)s %(currency)s"
-
-#: orders/admin.py:229 orders/admin.py:236
-msgid "Cancel order"
-msgstr "Отменить заказ"
 
 #: orders/admin.py:235 orders/templates/orders/invoice.html:57
 msgid "cancelled"
@@ -624,7 +633,7 @@ msgstr[0] "%(n)d обращение закрыто."
 msgstr[1] "%(n)d обращения закрыты."
 msgstr[2] "%(n)d обращений закрыто."
 
-#: orders/admin.py:408 payments/admin.py:31
+#: orders/admin.py:408 payments/admin.py:52
 msgid "Status"
 msgstr "Статус"
 
@@ -648,6 +657,7 @@ msgid "#%(id)s: not sent, the channel is switched off here."
 msgstr "#%(id)s: не отправлено, этот канал здесь отключён."
 
 #: orders/admin.py:443
+#, python-format
 msgid "#%(id)s: resending failed."
 msgstr "#%(id)s: повторная отправка не удалась."
 
@@ -671,7 +681,7 @@ msgstr "Выберите город из списка."
 msgid "Choose a district of this city."
 msgstr "Выберите район этого города."
 
-#: orders/notifications.py:162 orders/test_notify.py:128
+#: orders/notifications.py:177 orders/test_notify.py:167
 msgid "Lion Parts support replied to your request:"
 msgstr "Служба поддержки Lion Parts ответила на ваш запрос:"
 
@@ -824,10 +834,6 @@ msgstr "Сумма"
 #: orders/templates/orders/invoice.html:66
 msgid "Items"
 msgstr "Детали"
-
-#: orders/templates/orders/invoice.html:68 orders/texts.py:59
-msgid "Delivery fee"
-msgstr "Стоимость доставки"
 
 #: orders/templates/orders/invoice.html:69
 msgid "Total"
@@ -1086,11 +1092,56 @@ msgstr "Введите цену поставщика."
 msgid "Choose one of: all, ready, checking, other."
 msgstr "Выберите одно из: all, ready, checking, other."
 
-#: payments/admin.py:42
+#: payments/admin.py:17
+#, python-format
+msgid "%(payment)s: only pending or unknown card payments can be re-checked."
+msgstr "%(payment)s: перепроверить можно только карточный платёж в статусе «в ожидании» или «неизвестно»."
+
+#: payments/admin.py:18
+#, python-format
+msgid "%(payment)s: this payment belongs to another provider; follow the manual escalation process."
+msgstr "%(payment)s: этот платёж относится к другому провайдеру; следуйте процедуре ручной эскалации."
+
+#: payments/admin.py:21
+#, python-format
+msgid "%(payment)s: the provider confirmed the payment."
+msgstr "%(payment)s: провайдер подтвердил оплату."
+
+#: payments/admin.py:22
+#, python-format
+msgid "%(payment)s: the provider reports that the payment failed."
+msgstr "%(payment)s: по данным провайдера, оплата не прошла."
+
+#: payments/admin.py:23
+#, python-format
+msgid "%(payment)s: the provider reports that the payment expired."
+msgstr "%(payment)s: по данным провайдера, срок оплаты истёк."
+
+#: payments/admin.py:26
+#, python-format
+msgid "%(payment)s: the provider has no final result yet; nothing changed."
+msgstr "%(payment)s: у провайдера пока нет окончательного результата; ничего не изменилось."
+
+#: payments/admin.py:27
+#, python-format
+msgid "%(payment)s: the payment changed during the check; nothing was overwritten."
+msgstr "%(payment)s: во время проверки платёж изменился; ничего не перезаписано."
+
+#: payments/admin.py:28
+#, python-format
+msgid "%(payment)s: the provider's answers conflict; the payment is now unknown and blocks new payments until the provider confirms it."
+msgstr "%(payment)s: ответы провайдера противоречат друг другу; платёж теперь в статусе «неизвестно» и блокирует новые платежи до подтверждения провайдером."
+
+#: payments/admin.py:30
+#, python-format
+msgid "%(payment)s: the provider could not confirm the status; nothing changed. Try again later or follow the manual escalation process."
+msgstr "%(payment)s: провайдер не смог подтвердить статус; ничего не изменилось. Повторите позже или следуйте процедуре ручной эскалации."
+
+#: payments/admin.py:63
 msgid "Cancel invoice"
 msgstr "Отменить счёт"
 
-#: payments/admin.py:48
+#: payments/admin.py:69
 #, python-format
 msgid "%(n)d invoice cancelled."
 msgid_plural "%(n)d invoices cancelled."
@@ -1098,21 +1149,25 @@ msgstr[0] "%(n)d счёт отменён."
 msgstr[1] "%(n)d счёта отменены."
 msgstr[2] "%(n)d счетов отменены."
 
-#: payments/admin.py:51
+#: payments/admin.py:72
+msgid "Re-check with provider"
+msgstr "Перепроверить у провайдера"
+
+#: payments/admin.py:98
 msgid "Mark refunded"
 msgstr "Отметить как возвращённый"
 
-#: payments/admin.py:58
+#: payments/admin.py:105
 #, python-format
 msgid "%(payment)s: only a paid payment can be refunded."
 msgstr "%(payment)s: вернуть можно только оплаченный платёж."
 
-#: payments/admin.py:61
+#: payments/admin.py:108
 #, python-format
 msgid "%(payment)s: not refunded, the order owes back less than this payment; record the amount owed on the order instead."
 msgstr "%(payment)s: возврат не выполнен — по заказу причитается меньше этого платежа; запишите причитающуюся сумму в заказе."
 
-#: payments/admin.py:65
+#: payments/admin.py:112
 #, python-format
 msgid "%(payment)s: marked refunded."
 msgstr "%(payment)s: отмечен как возвращённый."
