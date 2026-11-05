@@ -99,19 +99,19 @@ backlog; planned with that milestone (master plan G1). Evidence = commit(s) + th
 
 ## Post-review fixes
 
-Consolidated into one commit on the post-review branch. In review; GitHub CI pending; nothing merged.
+Merged to `main` through PR #66 (squash commit `084ed495`).
 
 | Fix | Jira (epic / story) | Title | Status | Evidence |
 |---|---|---|---|---|
-| FIX-01 | LPK-172 / LPK-179 | Prevent duplicate payments while a card payment is pending or unknown | in review | payments/test_duplicates.py, test_endpoints.py, test_mark_payment.py, test_reconcile.py; orders/test_cancel.py, test_operator.py |
-| FIX-01b | LPK-172 / LPK-180 | Reconcile unknown card payments and provide a safe operator re-check | in review | payments/test_reconcile.py, test_admin.py, test_duplicates.py. Manual escalation: docs/operations.md §10. Only FakeProvider exists, so no real provider was queried |
-| FIX-02 | LPK-172 / LPK-181 | SMTP timeout and failure handling | in review | api/tests/test_mail.py, config/tests.py |
-| FIX-03 | LPK-172 / LPK-182 | Protect the Django Admin login against brute-force attacks | in review | api/tests/test_admin_login.py. The admin must not be publicly exposed without the nginx allow-list and rate limiting (B6). Admin 2FA: LPK-188/LPK-189 |
-| FIX-04 | LPK-172 / LPK-183 | Gunicorn gthread and PostgreSQL persistent connections | in review | config/tests.py, api/tests/test_thread_safety.py. Starting configuration for isolated staging tests only; no `gthread` with real AMT until LPK-220 (B7). No service configuration changed; staging load tests not run |
+| FIX-01 | LPK-172 / LPK-179 | Prevent duplicate payments while a card payment is pending or unknown | done | payments/test_duplicates.py, test_endpoints.py, test_mark_payment.py, test_reconcile.py; orders/test_cancel.py, test_operator.py |
+| FIX-01b | LPK-172 / LPK-180 | Reconcile unknown card payments and provide a safe operator re-check | done | payments/test_reconcile.py, test_admin.py, test_duplicates.py. Manual escalation: docs/operations.md §10. Only FakeProvider exists, so no real provider was queried |
+| FIX-02 | LPK-172 / LPK-181 | SMTP timeout and failure handling | done | api/tests/test_mail.py, config/tests.py |
+| FIX-03 | LPK-172 / LPK-182 | Protect the Django Admin login against brute-force attacks | done | api/tests/test_admin_login.py. The admin must not be publicly exposed without the nginx allow-list and rate limiting (B6). Admin 2FA: LPK-188/LPK-189 |
+| FIX-04 | LPK-172 / LPK-183 | Gunicorn gthread and PostgreSQL persistent connections | done | config/tests.py, api/tests/test_thread_safety.py. Starting configuration for isolated staging tests only; no `gthread` with real AMT until LPK-220 (B7). No service configuration changed; staging load tests not run |
 
 Admin login cache slot optimization completed (LPK-182): slots already known to be occupied are skipped before reserving, and `cache.add` still decides each slot.
 
-Local validation with that change: SQLite (config.e2e_settings) 853 ran, 834 passed, 0 failed, 19 skipped (PostgreSQL-only); disposable PostgreSQL 18 with plain config.settings, 853 ran, 853 passed, 0 skipped. Reversed and shuffled test order last ran before it, at 846 tests, and passed. GitHub CI (PostgreSQL 16) passed on the first commit of this PR and has not yet run on this change.
+Local validation with that change: SQLite (config.e2e_settings) 853 ran, 834 passed, 0 failed, 19 skipped (PostgreSQL-only); disposable PostgreSQL 18 with plain config.settings, 853 ran, 853 passed, 0 skipped. Reversed and shuffled test order last ran before it, at 846 tests, and passed. GitHub CI (PostgreSQL 16) passed on the merged change.
 
 ### Prerequisite before real card payments
 
