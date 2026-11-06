@@ -97,7 +97,7 @@ class AuthenticationTests(ScenarioTestCase):
             "/api/auth/login/", {"email": "x@example.com", "password": "y"}, expect=400) for language in ("ka", "en", "ru")}
         self.assertEqual({answer["code"] for answer in answers.values()}, {"invalid_credentials"})
         self.assertEqual(len({answer["detail"] for answer in answers.values()}), 3)
-        self.assertRegex(answers["ka"]["detail"], "[Ⴀ-ჿ]")
+        self.assertRegex(answers["ka"]["detail"], "[\u10a0-\u10ff]")
         self.assertRegex(answers["ru"]["detail"], "[Ѐ-ӿ]")
 
 
@@ -267,7 +267,7 @@ class NotificationAndAdminTests(ScenarioTestCase):
 
     @override_settings(EMAIL_REPLY_TO="Support <support@example.com>", DEFAULT_FROM_EMAIL="Lion Parts <no-reply@example.com>")
     def test_d4_emails_carry_from_reply_to_and_a_footer_in_the_customers_language(self):
-        expected = {"ka": "[Ⴀ-ჿ]", "en": "service message", "ru": "[Ѐ-ӿ]"}
+        expected = {"ka": "[\u10a0-\u10ff]", "en": "service message", "ru": "[Ѐ-ӿ]"}
         for language, pattern in expected.items():
             _api, identity = journeys.register(self.ctx, language)
             message = next(m for m in reversed(mail.outbox) if identity["email"] in m.to)
