@@ -128,6 +128,24 @@ class NoMissingMigrationsTests(TestCase):
         call_command("makemigrations", check=True, dry_run=True, verbosity=0)  # exits non-zero if any are missing
 
 
+class EmailReplyToTests(SimpleTestCase):
+    """LPK-184: optional, and a bad value stops startup instead of silently damaging every email."""
+
+    PROBE = "import config.settings as s; print(repr(s.EMAIL_REPLY_TO))"
+
+    def test_valid_values_and_the_blank_default_start(self):
+        for env, printed in ((None, "''"), ("support@example.com", "'support@example.com'"),
+                             ("Lion Parts <support@example.com>", "'Lion Parts <support@example.com>'")):
+            with self.subTest(env=env):
+                result = run_python(self.PROBE, {"EMAIL_REPLY_TO": env})
+                self.assertEqual((result.returncode, result.stdout.strip()), (0, printed), result.stderr)
+
+    def test_an_invalid_value_refuses_to_start(self):
+        result = run_python(self.PROBE, {"EMAIL_REPLY_TO": "not-an-address"})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("EMAIL_REPLY_TO must be one valid email address", result.stderr)
+
+
 class EmailTimeoutTests(SimpleTestCase):
     """LPK-181: EMAIL_TIMEOUT maps onto MAILERS, never onto the legacy setting Django 6.1 forbids next to it."""
 

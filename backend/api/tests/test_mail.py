@@ -4,6 +4,7 @@ import smtplib
 import socket
 from unittest import mock
 
+from django.conf import settings
 from django.core import mail
 from django.test import SimpleTestCase, override_settings
 from django.utils import translation
@@ -61,6 +62,27 @@ class SendTemplatedEmailTests(SimpleTestCase):
                 with self.subTest(template=template, language=lang):
                     self.assertNotEqual(rendered[lang][0], rendered["en"][0])
                     self.assertNotEqual(rendered[lang][1], rendered["en"][1])
+
+
+class ReplyToTests(SimpleTestCase):
+    """LPK-184: the header is added only when configured, on templated emails."""
+
+    def send(self):
+        mail.outbox = []
+        self.assertTrue(send_templated_email("n@example.com", "password_reset", {**CONTEXT, "link": "L"}, "en"))
+        return mail.outbox[0]
+
+    @override_settings(EMAIL_REPLY_TO="")
+    def test_not_configured_means_no_header(self):
+        message = self.send()
+        self.assertEqual(message.reply_to, [])
+        self.assertNotIn("Reply-To", message.message())
+
+    @override_settings(EMAIL_REPLY_TO="Lion Parts Support <support@example.com>")
+    def test_configured_sets_the_header_and_keeps_the_sender(self):
+        message = self.send()
+        self.assertEqual(message.message()["Reply-To"], "Lion Parts Support <support@example.com>")
+        self.assertEqual(message.from_email, settings.DEFAULT_FROM_EMAIL)
 
 
 @override_settings(MAILERS={"default": {"BACKEND": "django.core.mail.backends.smtp.EmailBackend", "OPTIONS": {

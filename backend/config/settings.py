@@ -12,9 +12,11 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 Every variable read here is listed in backend/.env.example (G§12).
 """
 
+from email.utils import parseaddr
 from pathlib import Path
 from decouple import config, Csv
-from django.core.exceptions import ImproperlyConfigured
+from django.core.exceptions import ImproperlyConfigured, ValidationError
+from django.core.validators import validate_email
 from django.utils.translation import gettext_lazy as _
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -216,6 +218,13 @@ if email_backend == "django.core.mail.backends.smtp.EmailBackend":
     }
 MAILERS = {"default": {"BACKEND": email_backend, "OPTIONS": email_options}}
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="Lion Parts <no-reply@lionparts.ge>")
+# Optional mailbox for customer replies (LPK-184). Blank: no Reply-To header.
+EMAIL_REPLY_TO = config("EMAIL_REPLY_TO", default="")
+if EMAIL_REPLY_TO:  # a bad value would otherwise surface only as failed or undeliverable customer email
+    try:
+        validate_email(parseaddr(EMAIL_REPLY_TO)[1])
+    except ValidationError:
+        raise ImproperlyConfigured("EMAIL_REPLY_TO must be one valid email address.") from None
 
 
 # Platform switches (G§5.2, G§12)

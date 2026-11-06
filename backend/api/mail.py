@@ -24,6 +24,11 @@ def frontend_link(path, language, **params):
     return f"{settings.FRONTEND_BASE_URL.rstrip('/')}{path}?{urlencode({**params, 'lang': language})}"
 
 
+def reply_to():
+    """For EmailMessage(reply_to=...): the configured mailbox, or None for no header (LPK-184)."""
+    return [settings.EMAIL_REPLY_TO] if settings.EMAIL_REPLY_TO else None
+
+
 def send_templated_email(to, template, context, language):
     """Render templates/emails/<template>.txt/.html in `language` and send. Never raises: a failed
     delivery must not break the action that triggered it; returns False and logs instead."""
@@ -32,7 +37,7 @@ def send_templated_email(to, template, context, language):
             subject = str(SUBJECTS[template])
             text = render_to_string(f"emails/{template}.txt", context)
             html = render_to_string(f"emails/{template}.html", context)
-        message = EmailMultiAlternatives(subject, text, settings.DEFAULT_FROM_EMAIL, [to])
+        message = EmailMultiAlternatives(subject, text, settings.DEFAULT_FROM_EMAIL, [to], reply_to=reply_to())
         message.attach_alternative(html, "text/html")
         message.send()
         return True

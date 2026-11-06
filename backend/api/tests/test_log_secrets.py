@@ -92,7 +92,7 @@ class LogSecretsTests(TestCase):
     def test_email_texts_with_links_are_not_logged(self):
         customer = make_customer(preferred_language="en")
         NotificationChannelSetting.objects.filter(event_type="status_update").update(channel="email")
-        with mock.patch("django.core.mail.send_mail", side_effect=OSError("smtp down")):
+        with mock.patch("django.core.mail.EmailMessage.send", side_effect=OSError("smtp down")):
             n = notify(customer, "status_update", order=make_order(customer))
         self.assertEqual(n.deliveries.get().status, "failed")
         self.assert_not_logged(n.token, "https://lionparts.ge/n/")

@@ -251,8 +251,10 @@ NON_DELIVERING_EMAIL_BACKENDS = ("django.core.mail.backends.console.EmailBackend
 
 def deliver_email(notification, address, subject, body):
     """sent: the backend accepted the message; skipped: a backend that delivers nothing (console, dummy; refused in
-    production); failed: an error, or no message accepted (send_mail returned 0)."""
-    from django.core.mail import send_mail
+    production); failed: an error, or no message accepted (send() returned 0)."""
+    from django.core.mail import EmailMessage
+
+    from api.mail import reply_to
 
     from .models import NotificationDelivery
 
@@ -261,7 +263,7 @@ def deliver_email(notification, address, subject, body):
         return _delivery(notification, "email", address, NotificationDelivery.STATUS_SKIPPED,
                          error=f"email backend delivers nothing ({backend.rsplit('.', 2)[-2]})")
     try:
-        accepted = send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [address])
+        accepted = EmailMessage(subject, body, settings.DEFAULT_FROM_EMAIL, [address], reply_to=reply_to()).send()
     except Exception as error:
         logger.warning("Email for notification %s failed: %s", notification.pk, type(error).__name__)
         return _delivery(notification, "email", address, NotificationDelivery.STATUS_FAILED, error=str(error))

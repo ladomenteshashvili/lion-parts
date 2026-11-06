@@ -248,7 +248,7 @@ class DeliveryStatusTests(TestCase):
         from orders.notifications import deliver_email
 
         self.assertEqual(deliver_email(self.n, "a@b.ge", "S", "B").status, "sent")  # locmem: really in the outbox
-        with mock.patch("django.core.mail.send_mail", return_value=0), \
+        with mock.patch("django.core.mail.EmailMessage.send", return_value=0), \
                 self.assertLogs("orders.notifications", "WARNING"):
             self.assertEqual(deliver_email(self.n, "a@b.ge", "S", "B").status, "failed")
         for backend in ("console", "dummy"):
@@ -257,3 +257,13 @@ class DeliveryStatusTests(TestCase):
                         "BACKEND": f"django.core.mail.backends.{backend}.EmailBackend"}}):
                 delivery = deliver_email(self.n, "a@b.ge", "S", "B")
             self.assertEqual((delivery.status, backend in delivery.error), ("skipped", True))
+
+    def test_email_reply_to_follows_the_setting(self):
+        """LPK-184."""
+        from orders.notifications import deliver_email
+
+        for configured, expected in (("", []), ("support@example.com", ["support@example.com"])):
+            with self.subTest(configured=configured), override_settings(EMAIL_REPLY_TO=configured):
+                mail.outbox = []
+                self.assertEqual(deliver_email(self.n, "a@b.ge", "S", "B").status, "sent")
+                self.assertEqual(mail.outbox[0].reply_to, expected)
