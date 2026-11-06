@@ -57,14 +57,15 @@ def _sync_line(line, currency, rate):
     return True
 
 
-def sync_prices(cart):
+def sync_prices(cart, fetch=True):
     """Bring the cart to an allowed currency and the current rate (FX never changes the USD prices).
     Raises RateUnavailable for GEL without a current rate: an outdated GEL amount is never shown.
+    fetch=False under a row lock: see get_usd_rate.
     -> the rate used (read once, so callers can freeze exactly that rate)."""
     if cart.currency not in allowed_currencies():  # e.g. multi-currency was switched off
         cart.currency = default_currency()
         cart.save(update_fields=["currency", "updated_at"])
-    rate = display_rate(cart.currency)
+    rate = display_rate(cart.currency, fetch)
     for line in cart.items.all():
         if _sync_line(line, cart.currency, rate):
             line.save(update_fields=[*CONVERTED_FIELDS, "updated_at"])
@@ -72,10 +73,8 @@ def sync_prices(cart):
 
 
 def load_rate_before_lock(cart):
-    """An outdated rate is fetched from NBG here, before the caller locks the cart, so reads under the lock find it stored
-    and make no network call (LPK-220). Raises RateUnavailable.
-    shortcut: the rate can still expire in the instant before the lock, so one fetch may run under it; that is rare and
-    limited by the NBG timeout. Make the locked read refuse to fetch if it ever shows up in the logs."""
+    """An outdated rate is fetched from NBG here, before the caller locks the cart (LPK-220). Reads under the lock pass
+    fetch=False, so a rate expiring in the instant between the two answers rate_unavailable. Raises RateUnavailable."""
     if "GEL" in (cart.currency, default_currency()):
         get_usd_rate()
 
@@ -154,7 +153,7 @@ def add_item(request, data):
     load_rate_before_lock(unlocked)
     with transaction.atomic():
         cart = Cart.objects.select_for_update().get(pk=unlocked.pk)
-        sync_prices(cart)  # allowed currency + current rate (RateUnavailable before anything changes)
+        sync_prices(cart, fetch=False)  # allowed currency + current rate (RateUnavailable before anything changes)
         existing = cart.items.filter(source=fields["source"], offer_id=fields["offer_id"]).first()
         if existing:
             if existing.quantity + data["quantity"] > MAX_QUANTITY:
@@ -162,7 +161,7 @@ def add_item(request, data):
             existing.quantity += data["quantity"]
             existing.save(update_fields=["quantity", "updated_at"])
             return cart
-        rate = display_rate(cart.currency)
+        rate = display_rate(cart.currency, fetch=False)
         line = CartItem(cart=cart, quantity=data["quantity"], **fields)
         line.apply_snapshot(snap)
         line.apply_converted(convert(snap, cart.currency, rate))
@@ -306,7 +305,7 @@ def refresh_line(request, line):
         current = cart.items.filter(pk=line.pk).first() if cart else None
         if current is None:
             raise ApiError("not_found", status=404)
-        rate = display_rate(cart.currency)
+        rate = display_rate(cart.currency, fetch=False)
         if log is None:
             _refresh_from_quote(current, rate)
         elif current.search_log_id == line.search_log_id:

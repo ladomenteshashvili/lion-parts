@@ -133,7 +133,7 @@ def create_order(customer, data):
             raise ApiError("cart_empty", status=409)
         # allowed currency + current NBG rate on every line (502 without a rate); the one rate read here is
         # the rate frozen on the order, even if fetch_nbg_rates stores a new one meanwhile (D16)
-        rate = sync_prices(cart)
+        rate = sync_prices(cart, fetch=False)
         now = timezone.now()
         lines = list(cart.items.all())
         reasons = [{"item_id": line.pk, "code": status} for line in lines

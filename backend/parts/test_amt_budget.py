@@ -103,3 +103,71 @@ class LookupBudgetTests(SimpleTestCase):
             get_price_by_oem("X")
         text = f"{caught.exception} {' '.join(logs.output)}"
         self.assertNotIn("secret", text)
+
+
+@override_settings(AMT_API_LOGIN="u", AMT_API_PASSWORD="p", PARTS_PROVIDER="amt", AMT_TIMEOUT_SECONDS=15,
+                   AMT_LOOKUP_BUDGET_SECONDS=30)
+class SupplierAnswerTests(SimpleTestCase):
+    """Every bad answer ends as supplier_unavailable (502), never as a crash or as "no parts"."""
+
+    def fetch(self, *answers):
+        with mock.patch("parts.amt_provider.requests.post", side_effect=lambda *a, **k: next(replies)) as post:
+            replies = iter([*answers, *[answers[-1]] * 40])
+            try:
+                return fetch_rows("X"), post.call_count
+            except PartsProviderError as error:
+                self.assertEqual((error.code, error.status_code), ("supplier_unavailable", 502))
+                return None, post.call_count
+
+    def test_http_errors_are_a_supplier_failure(self):
+        for status in (403, 500, 503):
+            with self.subTest(status=status):
+                self.assertIsNone(self.fetch(response("busy", status=status))[0])
+
+    def test_connection_failures_are_a_supplier_failure(self):
+        for error in (requests.ConnectionError(), requests.exceptions.SSLError()):
+            with self.subTest(error=error), mock.patch("parts.amt_provider.requests.post", side_effect=error), \
+                    self.assertRaises(PartsProviderError):
+                fetch_rows("X")
+
+    def test_a_connection_lost_during_the_body_is_a_supplier_failure(self):
+        partial = response()
+        partial.iter_content = mock.Mock(side_effect=requests.exceptions.ChunkedEncodingError())
+        self.assertIsNone(self.fetch(partial)[0])
+
+    def test_a_truncated_body_is_a_supplier_failure(self):
+        self.assertIsNone(self.fetch(response(ROWS_XML[:40]))[0])
+
+    def test_well_formed_answers_with_an_unexpected_shape_do_not_crash(self):
+        for body in ("<Map/>", "<Map>text</Map>", "<r><Map>text</Map></r>", "<r/>", "<r><row>text</row></r>"):
+            with self.subTest(body=body):
+                self.assertIsNone(self.fetch(*[response(body) for _ in range(36)])[0])
+
+    def test_a_list_mixing_rows_and_text_keeps_the_rows(self):
+        body = "<r><row><oem>A1</oem><brand>B</brand><list_price>10</list_price></row><row>text</row></r>"
+        result, _calls = self.fetch(response(body))
+        self.assertEqual([row["oem"] for row in result[1]], ["A1"])
+
+    def test_a_list_mixing_maps_and_text_keeps_the_maps(self):
+        pair = "<item><key>{}</key><value>{}</value></item>"
+        row = f"<row><Map>{pair.format('oem', 'A1')}{pair.format('brand', 'B')}{pair.format('list_price', '10')}</Map></row>"
+        result, _calls = self.fetch(response(f"<r>{row}<row>text</row></r>"))
+        self.assertEqual([row["oem"] for row in result[1]], ["A1"])
+
+    def test_the_suppliers_no_part_answer_is_an_empty_result_not_a_failure(self):
+        body = "<r><row><oem>X</oem><descr>NO_PART_FOUND</descr></row></r>"
+        result, calls = self.fetch(response(body))
+        self.assertEqual((result[2], calls), ([], 1))
+
+    def test_a_single_plain_row_is_a_result(self):
+        body = "<r><row><oem>A1</oem><brand>B</brand><list_price>10</list_price></row></r>"
+        result, calls = self.fetch(response(body))
+        self.assertEqual(([row["oem"] for row in result[1]], calls), (["A1"], 1))
+
+    def test_incorrect_parameters_stop_at_once(self):
+        result, calls = self.fetch(response("Incorrect parameters"))
+        self.assertEqual((result, calls), (None, 1))
+
+    def test_a_valid_answer_after_a_bad_one_is_used(self):
+        result, calls = self.fetch(response("<html>busy"), response())
+        self.assertEqual((len(result[1]), calls), (2, 2))

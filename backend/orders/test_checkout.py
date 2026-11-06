@@ -206,7 +206,7 @@ class CheckoutTests(CheckoutMixin, TestCase):
         """M3 audit fix 2: fetch_nbg_rates stores a new rate right after checkout read the rate."""
         self.fill_cart(0, 1)
 
-        def read_then_update():
+        def read_then_update(fetch=True):
             rate = get_usd_rate()  # the real read (pricing.currency's name is patched)
             ExchangeRate.objects.filter(pk=self.rate.pk).update(rate=D("2.9000"))
             return rate

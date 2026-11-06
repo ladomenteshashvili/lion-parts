@@ -143,7 +143,7 @@ def _apache_map_to_dict(node: dict[str, Any]) -> dict[str, Any]:
             node = value
             break
 
-    items = node.get("item")
+    items = node.get("item") if isinstance(node, dict) else None
 
     if not items:
         return {}
@@ -194,13 +194,14 @@ def _extract_rows(obj: Any) -> list[dict[str, Any]] | None:
             return [
                 {key.split(":")[-1]: value for key, value in row.items()}
                 for row in obj
+                if isinstance(row, dict)
             ]
 
         if obj and isinstance(obj[0], dict) and _is_apache_map(obj[0]):
             rows = []
 
             for item in obj:
-                row = _apache_map_to_dict(item)
+                row = _apache_map_to_dict(item) if isinstance(item, dict) else None
 
                 if row:
                     rows.append(
@@ -220,6 +221,9 @@ def _extract_rows(obj: Any) -> list[dict[str, Any]] | None:
                 return found
 
     if isinstance(obj, dict):
+        if _looks_like_row(obj):  # one row: xmltodict makes a list only of repeated elements
+            return [{key.split(":")[-1]: value for key, value in obj.items()}]
+
         if _is_apache_map(obj):
             row = _apache_map_to_dict(obj)
 
