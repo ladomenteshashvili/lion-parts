@@ -6,4 +6,4 @@ CRON_TZ=Asia/Tbilisi
 7,22,37,52 * * * *  cd /home/lionparts-stage/lion-parts/backend && venv/bin/python manage.py reconcile_closed_payments
 30 3 1 * *          cd /home/lionparts-stage/lion-parts/backend && venv/bin/python manage.py purge_expired_billing
 45 3 * * *          cd /home/lionparts-stage/lion-parts/backend && venv/bin/python manage.py clearsessions
-10 4 * * *          /home/lionparts-stage/lion-parts/deploy/staging/stage.sh backup >> /home/lionparts-stage/backup.log 2>&1
+10 4 * * *          /home/lionparts-stage/lion-parts/deploy/staging/stage.sh backup >> /home/lionparts-stage/backups/backup.log 2>&1

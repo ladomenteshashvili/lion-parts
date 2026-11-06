@@ -37,28 +37,36 @@ plan() {
     cat <<PLAN
 Would create, and nothing else:
   Linux user   $USER_NAME, home $HOME_DIR (no sudo, no login password)
-  Directories  $HOME_DIR/{media,backups,log}, mode 750
+  Directories  $HOME_DIR/media mode 755 (nginx reads it), $HOME_DIR/backups mode 700
+               $HOME_DIR, lion-parts and backend mode 711: nginx can pass through but not list them
   Checkout     $HOME_DIR/lion-parts from $REPO, with its own virtual environment
   PostgreSQL   role $ROLE (generated password, no superuser, no createdb)
                empty databases $DB and $RESTORE_DB, owned by $ROLE, connection limit 30
   Config       $HOME_DIR/lion-parts/backend/.env, mode 600, from env.staging.example, with generated secrets
   systemd      ${UNITS[*]} copied, not enabled and not started
-Left to the owner: Mailpit binary, DNS, TLS, nginx site, starting services, crontab, createsuperuser.
+Left to the owner: Mailpit binary, DNS, TLS, nginx site, starting services, crontab, the two approved staging superusers.
 PLAN
 }
 
 apply() {
     [[ "$(id -u)" == 0 ]] || { echo "REFUSED: --apply must run as root" >&2; exit 2; }
+    set -E
+    trap 'echo "FAILED part-way. Nothing was removed. Do not run --apply again: docs/staging-runbook.md, If --apply fails part-way." >&2' ERR
     local db_password secret
     db_password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
     secret="$(python3 -c 'import secrets; print(secrets.token_urlsafe(64))')"
 
+    echo "creating: Linux user $USER_NAME and $HOME_DIR"
     useradd --create-home --home-dir "$HOME_DIR" --shell /bin/bash "$USER_NAME"
     passwd --lock "$USER_NAME" > /dev/null
-    install -d -m 750 -o "$USER_NAME" -g "$USER_NAME" "$HOME_DIR"/{media,backups,log}
+    chmod 711 "$HOME_DIR"
+    install -d -m 755 -o "$USER_NAME" -g "$USER_NAME" "$HOME_DIR/media"
+    install -d -m 700 -o "$USER_NAME" -g "$USER_NAME" "$HOME_DIR/backups"
     sudo -u "$USER_NAME" git clone --quiet "$REPO" "$HOME_DIR/lion-parts"
+    chmod 711 "$HOME_DIR/lion-parts" "$HOME_DIR/lion-parts/backend"
     sudo -u "$USER_NAME" python3 -m venv "$HOME_DIR/lion-parts/backend/venv"
 
+    echo "creating: PostgreSQL role $ROLE, databases $DB and $RESTORE_DB"
     # The password travels on psql's stdin, so it is not in the process list or in any file except .env.
     sudo -u postgres psql -v ON_ERROR_STOP=1 -q <<SQL
 CREATE ROLE $ROLE LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE CONNECTION LIMIT 30 PASSWORD '$db_password';
@@ -68,6 +76,7 @@ REVOKE ALL ON DATABASE $DB FROM PUBLIC;
 REVOKE ALL ON DATABASE $RESTORE_DB FROM PUBLIC;
 SQL
 
+    echo "creating: $HOME_DIR/lion-parts/backend/.env"
     local env_file="$HOME_DIR/lion-parts/backend/.env"
     install -m 600 -o "$USER_NAME" -g "$USER_NAME" "$HERE/env.staging.example" "$env_file"
     DB_PASSWORD_VALUE="$db_password" SECRET_VALUE="$secret" python3 - "$env_file" <<'PY'
@@ -79,6 +88,7 @@ with open(path, "w", encoding="utf8") as out:
     for line in lines:
         out.write(line + values[line] + "\n" if line in values else line + "\n")
 PY
+    echo "creating: ${UNITS[*]}"
     for unit in "${UNITS[@]}"; do install -m 644 "$HERE/$unit" /etc/systemd/system/; done
     systemctl daemon-reload
     echo "Created. Next: docs/staging-runbook.md section 3. Nothing was started."

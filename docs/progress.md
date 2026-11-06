@@ -149,6 +149,7 @@ Branch `feature/staging-readiness-hardening`, from `main` at `7ab99b59`. Impleme
 | LPK-220 | The budget now holds against a body trickling on a real socket. No NBG call under cart locks. Odd supplier XML gives `502`. | `parts/test_amt_budget.py`, `api/tests/test_external_calls.py`, `pricing/tests/test_rates.py` |
 | LPK-219 | Read-only review; tests for parallel callbacks. No lifecycle change. | `payments/test_duplicates.py` |
 | LPK-195 to 200 | Staging kit and runbook, rehearsed on disposable resources. | `deploy/staging/`, `docs/staging-runbook.md`, `api/tests/test_staging_kit.py` |
+| LPK-195 to 200, LPK-228 | Operations review: exact database role, host and port, proven on the live connection; nginx permissions and logs; provisioning recovery; two staging superusers. React stays out (LPK-223 to 227). | `deploy/staging/verify_target.py`, `docs/staging-runbook.md`, `api/tests/test_staging_kit.py` |
 | LPK-201 to 205 | Reusable UAT suite, HTTP runner and bounded load tests. | `backend/uat/`, `docs/uat-matrix.md` |
 | LPK-206, 207 | Handoff additions and journeys with real answers. The Figma list could not be read, so that part is blocked. | `docs/api-handoff.md`, `docs/frontend-journeys.md` |
 | Phase F | Catalog audit, real SMTP check, CSP coverage test. | `docs/language-qa.md`, `api/tests/test_csp_coverage.py` |

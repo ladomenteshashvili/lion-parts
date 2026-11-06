@@ -11,7 +11,12 @@ CHECKOUT="${STAGE_CHECKOUT:-$STAGE_HOME/lion-parts}"
 ENV_FILE="${STAGE_ENV_FILE:-$CHECKOUT/backend/.env}"
 BACKUP_DIR="${STAGE_BACKUP_DIR:-$STAGE_HOME/backups}"
 PORT="${STAGE_PORT:-8011}"
+KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Exact on purpose, and not overridable: moving the staging database needs a reviewed change here and in the runbook.
 EXPECTED_DB=lp_stage_v1
+EXPECTED_ROLE=lp_stage
+EXPECTED_DB_HOST=127.0.0.1
+EXPECTED_DB_PORT=5432
 RESTORE_DB=lp_stage_restore_check
 KEEP_BACKUPS=7
 
@@ -30,7 +35,7 @@ load_target() {
     want DEPLOY_ENV staging; want DEBUG False; want PARTS_PROVIDER demo; want PAYMENT_PROVIDER fake
     want SMS_DEMO_MODE True; want SENDER_GE_ENABLED False; want ENABLE_DEMO_ENDPOINTS True
     want DB_NAME "$EXPECTED_DB"
-    case "${DB_USER:-}" in lion_parts*|postgres|"") die "DB_USER '${DB_USER:-}' is not the staging role" ;; esac
+    want DB_USER "$EXPECTED_ROLE"; want DB_HOST "$EXPECTED_DB_HOST"; want DB_PORT "$EXPECTED_DB_PORT"
     want EMAIL_HOST 127.0.0.1
     for name in AMT_API_LOGIN AMT_API_PASSWORD SENDER_GE_API_KEY FLITT_MERCHANT_ID FLITT_SECRET_KEY EMAIL_HOST_PASSWORD; do
         empty "$name"
@@ -38,33 +43,16 @@ load_target() {
     [[ -n "${SECRET_KEY:-}" ]] || die "SECRET_KEY is empty"
     case "$(realpath "$CHECKOUT")" in /home/lado*|/home/lionpartsdev/lion-parts) die "not the staging checkout" ;; esac
     cd "$CHECKOUT/backend"
+    # libpq would let these redirect a connection whatever the host and port say.
+    unset PGHOSTADDR PGSERVICE PGSERVICEFILE PGOPTIONS PGPASSFILE
     export PGHOST="$DB_HOST" PGPORT="$DB_PORT" PGUSER="$DB_USER" PGPASSWORD="$DB_PASSWORD"
 }
 
 manage() { venv/bin/python manage.py "$@"; }
 
-# What Django will really use, read from the loaded settings rather than from the file.
+# What Django will really use and what the server says it is connected as: verify_target.py.
 verify_effective() {
-    venv/bin/python - "$EXPECTED_DB" <<'PY'
-import os, sys
-os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings"
-import django
-django.setup()
-from django.conf import settings as s
-from django.db import connection
-expected = {"DB": sys.argv[1], "DEPLOY_ENV": "staging", "DEBUG": False, "PARTS_PROVIDER": "demo", "PAYMENT_PROVIDER": "fake",
-            "SENDER_GE_ENABLED": False, "SMS_DEMO_MODE": True}
-actual = {"DB": s.DATABASES["default"]["NAME"], **{k: getattr(s, k) for k in list(expected)[1:]}}
-wrong = {k: v for k, v in actual.items() if v != expected[k]}
-if wrong:
-    sys.exit(f"REFUSED: effective settings differ: {wrong}")
-with connection.cursor() as cursor:
-    cursor.execute("SELECT current_database()")
-    name = cursor.fetchone()[0]
-if name != sys.argv[1]:
-    sys.exit(f"REFUSED: connected to {name}")
-print("effective target:", name, "on", s.DATABASES["default"]["HOST"], s.DATABASES["default"]["PORT"])
-PY
+    venv/bin/python "$KIT/verify_target.py" "$EXPECTED_DB" "$EXPECTED_ROLE" "$EXPECTED_DB_HOST" "$EXPECTED_DB_PORT"
 }
 
 cmd_check() {
@@ -97,6 +85,7 @@ cmd_deploy() {
 }
 
 deps_and_assets() {
+    umask 022  # nginx reads staticfiles as another user
     venv/bin/pip install --quiet -r requirements.txt
     manage compilemessages --ignore=venv
     manage collectstatic --noinput
@@ -104,6 +93,7 @@ deps_and_assets() {
 
 cmd_health() {
     load_target
+    verify_effective
     local url="http://127.0.0.1:$PORT/api/health/" answer
     answer="$(curl -fsS -m 10 -H "Host: ${ALLOWED_HOSTS%%,*}" -H "X-Forwarded-Proto: https" "$url")" \
         || die "no healthy answer from $url"
@@ -116,6 +106,7 @@ cmd_health() {
 
 cmd_backup() {
     load_target
+    verify_effective
     mkdir -p "$BACKUP_DIR"; chmod 700 "$BACKUP_DIR"
     local stamp dump; stamp="$(date -u +%Y%m%dT%H%M%SZ)"; dump="$BACKUP_DIR/$EXPECTED_DB-$stamp.dump"
     umask 077
@@ -137,6 +128,7 @@ cmd_restore_verify() {
     local dump="${1:?usage: stage.sh restore-verify <dump>}"
     load_target
     [[ -f "$dump" ]] || die "$dump does not exist"
+    verify_effective
     pg_restore --clean --if-exists --no-owner --exit-on-error -d "$RESTORE_DB" "$dump"
     local live restored; live="$(table_counts "$EXPECTED_DB")"; restored="$(table_counts "$RESTORE_DB")"
     echo "live:     $live"; echo "restored: $restored"
@@ -151,6 +143,7 @@ cmd_restore() {
     load_target
     [[ "${CONFIRM:-}" == "$EXPECTED_DB" ]] || die "set CONFIRM=$EXPECTED_DB to replace that database"
     [[ -f "$dump" ]] || die "$dump does not exist"
+    verify_effective
     if curl -fsS -m 3 -o /dev/null "http://127.0.0.1:$PORT/api/health/" -H "X-Forwarded-Proto: https" -H "Host: ${ALLOWED_HOSTS%%,*}"; then
         die "the service still answers on $PORT: stop it first"
     fi
