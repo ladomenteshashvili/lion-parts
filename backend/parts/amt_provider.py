@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import html
+import logging
+import time
 from typing import Any
+from xml.parsers.expat import ExpatError
 
 import requests
 import urllib3
 import xmltodict
 from django.conf import settings
+
+
+logger = logging.getLogger(__name__)
 
 
 class AMTProviderError(Exception):
@@ -88,16 +94,26 @@ def _headers_soap11(action: str) -> dict[str, str]:
     }
 
 
-def _post(xml: str, headers: dict[str, str]) -> str:
-    response = requests.post(
+def _post(xml: str, headers: dict[str, str], deadline: float) -> str:
+    """One attempt, within what is left of the lookup budget. A requests timeout limits each network wait, not the whole
+    response, so the body is read in chunks: a supplier sending slowly cannot outlast the budget by more than one wait."""
+    timeout = min(settings.AMT_TIMEOUT_SECONDS, deadline - time.monotonic())
+    with requests.post(
         settings.AMT_ENDPOINT,
         data=xml.encode("cp1251", errors="replace"),
         headers=headers,
-        timeout=settings.AMT_TIMEOUT_SECONDS,
+        timeout=timeout,
         verify=settings.AMT_VERIFY_SSL,
-    )
-    response.raise_for_status()
-    return response.text
+        stream=True,
+    ) as response:
+        response.raise_for_status()
+        body = bytearray()
+        for chunk in response.iter_content(chunk_size=8192):
+            if time.monotonic() >= deadline:
+                raise requests.Timeout("AMT lookup budget used up while reading a response")
+            body += chunk
+        response._content = bytes(body)  # streaming skips this; .text keeps its usual charset handling
+        return response.text
 
 
 def _as_text(value: Any) -> Any:
@@ -246,6 +262,7 @@ def get_price_by_oem(oems: list[str] | str) -> list[dict[str, Any]]:
     method_spaces = ["wsdl", "plain"]
 
     last_response = None
+    deadline = time.monotonic() + settings.AMT_LOOKUP_BUDGET_SECONDS
 
     for action in actions:
         for oem_mode in oem_modes:
@@ -256,8 +273,14 @@ def get_price_by_oem(oems: list[str] | str) -> list[dict[str, Any]]:
                     envelope = _envelope(oems_xml, user_xml, method_ns)
                     headers = _headers_soap11(action)
 
+                    if time.monotonic() >= deadline:
+                        # An error, never "no parts": the caller answers supplier_unavailable and changes nothing.
+                        logger.warning("AMT lookup stopped: the %ss budget is used up",
+                                       settings.AMT_LOOKUP_BUDGET_SECONDS)
+                        raise AMTProviderError("AMT lookup budget used up")
+
                     try:
-                        text = _post(envelope, headers)
+                        text = _post(envelope, headers, deadline)
                         last_response = text
 
                         if (
@@ -277,11 +300,7 @@ def get_price_by_oem(oems: list[str] | str) -> list[dict[str, Any]]:
 
                     except AMTProviderError:
                         raise
-                    except (
-                        requests.HTTPError,
-                        requests.ConnectionError,
-                        requests.Timeout,
-                    ):
+                    except (requests.RequestException, ExpatError):
                         continue
 
     if last_response:

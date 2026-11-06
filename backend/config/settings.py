@@ -270,6 +270,10 @@ AMT_API_LOGIN = config("AMT_API_LOGIN", default="")
 AMT_API_PASSWORD = config("AMT_API_PASSWORD", default="")
 AMT_VERIFY_SSL = config("AMT_VERIFY_SSL", default=True, cast=bool)
 AMT_TIMEOUT_SECONDS = config("AMT_TIMEOUT_SECONDS", default=15, cast=int)
+# Limit for one whole lookup across all request variants (LPK-220).
+AMT_LOOKUP_BUDGET_SECONDS = config("AMT_LOOKUP_BUDGET_SECONDS", default=30, cast=int)
+if AMT_LOOKUP_BUDGET_SECONDS <= 0:  # no attempt could ever start, so every search would fail
+    raise ImproperlyConfigured("AMT_LOOKUP_BUDGET_SECONDS must be a positive whole number of seconds.")
 
 
 

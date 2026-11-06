@@ -229,19 +229,30 @@ def proposed_courier_fee(order):
     return proposal.amount if proposal else None
 
 
-@transaction.atomic
-def propose_courier_fee(order_id, fee_gel, message, actor=None):
-    """Admin/demo (G§7.14 step 2): a new proposal version. GEL orders: the GEL fee as is; USD orders: converted
-    with the current NBG rate, which is frozen with the proposal (D21). A pending proposal is superseded;
-    accepted ones stay as they are. Raises RateUnavailable (nothing changes) / OperatorError."""
-    from pricing.rates import get_usd_rate
-
-    order = Order.objects.select_for_update(no_key=True).get(pk=order_id)
+def _check_courier_fee(order, fee_gel):
     if order.status not in Order.OPEN_STATUSES or order.delivery_method != "delivery":
         raise OperatorError("fee_gel", _("Courier fees can be proposed for open delivery orders only."))
     if fee_gel is None or fee_gel < 0:
         raise OperatorError("fee_gel", _("The courier fee must be zero or more."))
+
+
+def propose_courier_fee(order_id, fee_gel, message, actor=None):
+    """Admin/demo (G§7.14 step 2): a new proposal version. GEL orders: the GEL fee as is; USD orders: converted
+    with the current NBG rate, which is frozen with the proposal (D21). A pending proposal is superseded;
+    accepted ones stay as they are. Raises RateUnavailable (nothing changes) / OperatorError.
+    The rate is read before the order lock, because it can mean a call to NBG (LPK-220); an order's currency never changes."""
+    from pricing.rates import get_usd_rate
+
+    order = Order.objects.get(pk=order_id)
+    _check_courier_fee(order, fee_gel)
     rate = None if order.currency == "GEL" else get_usd_rate()
+    with transaction.atomic():
+        return _create_courier_fee_proposal(order_id, fee_gel, rate, message, actor)
+
+
+def _create_courier_fee_proposal(order_id, fee_gel, rate, message, actor):
+    order = Order.objects.select_for_update(no_key=True).get(pk=order_id)
+    _check_courier_fee(order, fee_gel)
     amount = round2(fee_gel) if rate is None else round2(fee_gel / rate)
     order.courier_fee_proposals.filter(status=CourierFeeProposal.STATUS_PENDING).update(
         status=CourierFeeProposal.STATUS_SUPERSEDED, answered_at=timezone.now())

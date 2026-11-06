@@ -10,7 +10,7 @@ from rest_framework import serializers
 
 from api.errors import ApiError
 from cart.models import Cart
-from cart.services import cart_data, get_cart, line_status, sync_prices
+from cart.services import cart_data, get_cart, line_status, load_rate_before_lock, sync_prices
 from payments.services import create_payment
 from pricing.discounts import round2
 from pricing.models import PickupPoint, SiteSettings
@@ -124,6 +124,9 @@ def create_order(customer, data):
     """G§7.12 in one transaction: lock the cart, revalidate it at the current rate, freeze currency, rate
     and every price into the order (D16), empty the cart, create the initial payment. Raises cart_empty,
     cart_invalid (+reasons) or rate_unavailable; nothing is created then. -> (order, payment)."""
+    unlocked = Cart.objects.filter(customer=customer).first()
+    if unlocked is not None and unlocked.items.exists():
+        load_rate_before_lock(unlocked)
     with transaction.atomic():
         cart = Cart.objects.select_for_update().filter(customer=customer).first()
         if cart is None or not cart.items.exists():

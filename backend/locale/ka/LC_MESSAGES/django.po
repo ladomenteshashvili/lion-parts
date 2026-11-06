@@ -1300,3 +1300,6 @@ msgstr "მხარდაჭერა: {email}. დასაკავშირ�
 
 msgid "Please do not reply to this email. To contact us, use our website: {url}"
 msgstr "გთხოვთ, არ უპასუხოთ ამ წერილს. დასაკავშირებლად გამოიყენეთ ჩვენი ვებგვერდი: {url}"
+
+msgid "The request changed while the supplier was being asked; try again."
+msgstr "მოთხოვნა შეიცვალა მომწოდებლის პასუხის მოლოდინში; სცადეთ თავიდან."

@@ -159,6 +159,23 @@ class ContentSecurityPolicySettingsTests(SimpleTestCase):
                          ["False", "['https://r.example/c']"])
 
 
+class AmtBudgetSettingTests(SimpleTestCase):
+    """LPK-220."""
+
+    PROBE = "import config.settings as s; print(s.AMT_LOOKUP_BUDGET_SECONDS)"
+
+    def test_the_default_is_30_seconds_and_the_environment_overrides_it(self):
+        self.assertEqual(run_python(self.PROBE, {"AMT_LOOKUP_BUDGET_SECONDS": None}).stdout.strip(), "30")
+        self.assertEqual(run_python(self.PROBE, {"AMT_LOOKUP_BUDGET_SECONDS": "20"}).stdout.strip(), "20")
+
+    def test_zero_or_a_negative_value_refuses_to_start(self):
+        for value in ("0", "-5"):
+            with self.subTest(value=value):
+                result = run_python(self.PROBE, {"AMT_LOOKUP_BUDGET_SECONDS": value})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("AMT_LOOKUP_BUDGET_SECONDS must be a positive", result.stderr)
+
+
 class EmailTimeoutTests(SimpleTestCase):
     """LPK-181: EMAIL_TIMEOUT maps onto MAILERS, never onto the legacy setting Django 6.1 forbids next to it."""
 

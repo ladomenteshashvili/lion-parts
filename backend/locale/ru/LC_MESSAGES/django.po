@@ -1304,3 +1304,6 @@ msgstr "Поддержка: {email}. Чтобы связаться с нами, 
 
 msgid "Please do not reply to this email. To contact us, use our website: {url}"
 msgstr "Пожалуйста, не отвечайте на это письмо. Чтобы связаться с нами, используйте наш сайт: {url}"
+
+msgid "The request changed while the supplier was being asked; try again."
+msgstr "Запрос изменился, пока мы ждали ответ поставщика; попробуйте ещё раз."

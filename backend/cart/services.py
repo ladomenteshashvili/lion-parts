@@ -19,6 +19,7 @@ from parts.models import PartQuoteRequest
 from parts.services import image_urls, owned_log, priced_for, request_customer, run_search
 from pricing.currency import allowed_currencies, default_currency, display_rate
 from pricing.engine import PriceInput, PriceSnapshot, convert, default_shipping_usd_per_kg, price_offer, reprice
+from pricing.rates import get_usd_rate
 from pricing.validity import is_expired
 
 from .models import Cart, CartItem
@@ -68,6 +69,15 @@ def sync_prices(cart):
         if _sync_line(line, cart.currency, rate):
             line.save(update_fields=[*CONVERTED_FIELDS, "updated_at"])
     return rate
+
+
+def load_rate_before_lock(cart):
+    """An outdated rate is fetched from NBG here, before the caller locks the cart, so reads under the lock find it stored
+    and make no network call (LPK-220). Raises RateUnavailable.
+    shortcut: the rate can still expire in the instant before the lock, so one fetch may run under it; that is rare and
+    limited by the NBG timeout. Make the locked read refuse to fetch if it ever shows up in the logs."""
+    if "GEL" in (cart.currency, default_currency()):
+        get_usd_rate()
 
 
 def refresh_gel_prices(rate):
@@ -140,8 +150,10 @@ def add_item(request, data):
         fields, snap = _line_from_quote(qr)
         shown = snap
 
+    unlocked = get_cart(request)
+    load_rate_before_lock(unlocked)
     with transaction.atomic():
-        cart = Cart.objects.select_for_update().get(pk=get_cart(request).pk)
+        cart = Cart.objects.select_for_update().get(pk=unlocked.pk)
         sync_prices(cart)  # allowed currency + current rate (RateUnavailable before anything changes)
         existing = cart.items.filter(source=fields["source"], offer_id=fields["offer_id"]).first()
         if existing:
@@ -282,17 +294,35 @@ def refresh_line(request, line):
     """G§7.5. Search lines: search the supplier again (a new log), find the same offer (else the same
     brand), reprice; gone -> unavailable; new validity. A customer weight is kept. Prepared quotes:
     no supplier call; the line takes the quote's current approval (re-approved -> new price and
-    validity), an expired quote stays expired. Failures (supplier, rate) -> 502, line unchanged."""
-    cart = line.cart
-    rate = display_rate(cart.currency)
-    if line.source == CartItem.SOURCE_PREPARED_QUOTE:
-        qr = line.quote_request
-        if qr is not None and qr.is_price_ready and not is_expired(qr.price_valid_until):
-            _set_canonical(line, _quote_snapshot(qr), rate)
-            line.price_valid_until = qr.price_valid_until
-            line.save()
-        return cart
-    log = run_search(request, part_number=line.part_number, vin=line.vin, currency=cart.currency)
+    validity), an expired quote stays expired. Failures (supplier, rate) -> 502, line unchanged.
+    The supplier is asked with no lock open, then the cart is locked and the line read again (LPK-220): a line removed
+    meanwhile answers 404 and is not restored, a changed quantity is kept, and an answer older than a refresh that
+    has already been applied is dropped."""
+    load_rate_before_lock(line.cart)
+    log = None if line.source == CartItem.SOURCE_PREPARED_QUOTE else run_search(
+        request, part_number=line.part_number, vin=line.vin, currency=line.cart.currency)
+    with transaction.atomic():
+        cart = Cart.objects.select_for_update().filter(pk=line.cart_id).first()
+        current = cart.items.filter(pk=line.pk).first() if cart else None
+        if current is None:
+            raise ApiError("not_found", status=404)
+        rate = display_rate(cart.currency)
+        if log is None:
+            _refresh_from_quote(current, rate)
+        elif current.search_log_id == line.search_log_id:
+            _refresh_from_search(request, current, log, rate)
+    return cart
+
+
+def _refresh_from_quote(line, rate):
+    qr = line.quote_request
+    if qr is not None and qr.is_price_ready and not is_expired(qr.price_valid_until):
+        _set_canonical(line, _quote_snapshot(qr), rate)
+        line.price_valid_until = qr.price_valid_until
+        line.save()
+
+
+def _refresh_from_search(request, line, log, rate):
     offers = log.offers()
     offer = log.offer(line.offer_id) or next((o for o in offers if o["brand"].lower() == line.brand.lower()), None)
     weight = line.weight_kg if line.weight_source == "customer" else (
@@ -306,7 +336,6 @@ def refresh_line(request, line):
             PriceInput(Decimal(offer["supplier_price_usd"]), weight, default_shipping_usd_per_kg()),
             customer=request_customer(request), part_number=line.part_number, brand=line.brand), rate)
     line.save()
-    return cart
 
 
 def merge_guest_cart(old_session_key, customer):
@@ -314,7 +343,16 @@ def merge_guest_cart(old_session_key, customer):
     reprice the customer's search lines for their tariff (operator-approved quotes keep their USD
     base), delete the guest cart, store merge_summary (returned once). Never breaks a login: without
     a rate the cart-currency amounts aren't refreshed and the lines are listed as problems; the cart
-    can't be read until a rate is available again."""
+    can't be read until a rate is available again. The rate is read before the locks, so an NBG outage cannot hold them
+    (LPK-220)."""
+    guest = Cart.objects.filter(session_key=old_session_key, customer__isnull=True).first()
+    if guest is None:
+        return None
+    rate_currency = (Cart.objects.filter(customer=customer).first() or guest).currency
+    try:
+        rate_read = display_rate(rate_currency)
+    except ApiError:
+        rate_read = None
     with transaction.atomic():
         guest = Cart.objects.select_for_update().filter(session_key=old_session_key, customer__isnull=True).first()
         if guest is None:
@@ -335,10 +373,8 @@ def merge_guest_cart(old_session_key, customer):
                 summary["added_items"] += 1
         guest.delete()
 
-        try:
-            rate = display_rate(cart.currency)
-        except ApiError:
-            rate = None
+        # Another currency here means a parallel change: those lines are refreshed on the next cart read.
+        rate = rate_read if cart.currency == rate_currency else None
         for line in cart.items.all():
             if rate is None:
                 summary["problems"].append({"item_id": line.pk, "code": "rate_unavailable"})

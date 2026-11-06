@@ -49,10 +49,17 @@ def mark_quote_price_ready(quote_request):
     return quote_request
 
 
+def _quote_state(qr):
+    """What a supplier answer must not overwrite if it changed during the call."""
+    return qr.status, qr.offer_id, qr.supplier_price_usd, qr.prepared_weight_kg, qr.price_ready_at
+
+
 def mark_quote_ready(quote_request_id, weight_kg, message="", *, supplier_price_usd=None):
     """Operator "price ready" (G§7.6, LP-BE-1104), used by the admin and the demo endpoint. The supplier price
     S: `supplier_price_usd` when the operator enters it; for a request made from a search offer, the
     supplier is asked again (that offer must still exist); otherwise the price stored on the request.
+    The supplier is asked with no lock or transaction open, then the row is locked and rechecked: if it changed
+    meanwhile the answer is stale and nothing is applied (LPK-220).
     Raises OperatorError (nothing changes) or RateUnavailable. -> the quote request."""
     from django.db import transaction
     from django.utils.translation import gettext as _
@@ -63,11 +70,11 @@ def mark_quote_ready(quote_request_id, weight_kg, message="", *, supplier_price_
 
     if weight_kg is None or weight_kg <= 0:
         raise OperatorError("weight_kg", _("Enter a weight greater than zero."))
-    with transaction.atomic():
-        qr = PartQuoteRequest.objects.select_for_update(no_key=True, of=("self",)).select_related("customer").get(pk=quote_request_id)
-        if qr.status == PartQuoteRequest.STATUS_CANCELLED:
-            raise OperatorError("weight_kg", _("The request is cancelled."))
-        if supplier_price_usd is None and qr.offer_id:
+    asked_at_state = None
+    if supplier_price_usd is None:
+        qr = PartQuoteRequest.objects.get(pk=quote_request_id)
+        if qr.offer_id and qr.status != PartQuoteRequest.STATUS_CANCELLED:
+            asked_at_state = _quote_state(qr)
             try:
                 rows = fetch_rows(qr.part_number)[2]
             except PartsProviderError:
@@ -77,6 +84,13 @@ def mark_quote_ready(quote_request_id, weight_kg, message="", *, supplier_price_
                 raise OperatorError("supplier_price_usd", _("The supplier no longer offers this part; enter the "
                                                             "supplier price."))
             supplier_price_usd = row["supplier_price_usd"]
+    with transaction.atomic():
+        qr = PartQuoteRequest.objects.select_for_update(no_key=True, of=("self",)).select_related("customer").get(pk=quote_request_id)
+        if qr.status == PartQuoteRequest.STATUS_CANCELLED:
+            raise OperatorError("weight_kg", _("The request is cancelled."))
+        if asked_at_state is not None and _quote_state(qr) != asked_at_state:
+            raise OperatorError("supplier_price_usd", _("The request changed while the supplier was being asked; "
+                                                        "try again."))
         supplier_price_usd = supplier_price_usd if supplier_price_usd is not None else qr.supplier_price_usd
         if supplier_price_usd is None or supplier_price_usd <= 0:
             raise OperatorError("supplier_price_usd", _("Enter the supplier price."))
