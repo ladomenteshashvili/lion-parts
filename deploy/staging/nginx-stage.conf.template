@@ -1,0 +1,50 @@
+# Isolated Lion Parts staging. Render with:
+#   STAGE_HOST=... ADMIN_ALLOW=... LISTEN=443 STAGE_HOME=/home/lionparts-stage TLS_CERT=... TLS_KEY=... \
+#   envsubst '$STAGE_HOST $ADMIN_ALLOW $LISTEN $STAGE_HOME $TLS_CERT $TLS_KEY' < nginx-stage.conf.template
+# Install only after owner approval; test with nginx -t before a reload. Every global name has an lp_stage_ prefix, so it
+# cannot collide with the sites already on this host.
+map $request_uri $lp_stage_masked_uri {
+    ~^(?<lp_stage_pre>.*/(?:api/public/)?[nq]/)[0-9A-Fa-f-]{8,}(?<lp_stage_post>.*)$  "${lp_stage_pre}<token>${lp_stage_post}";
+    default $request_uri;
+}
+log_format lp_stage_masked '$remote_addr - [$time_local] "$request_method $lp_stage_masked_uri $server_protocol" '
+                           '$status $body_bytes_sent "$http_user_agent"';
+limit_req_zone $binary_remote_addr zone=lp_stage_admin_login:1m rate=10r/m;
+
+server {
+    listen ${LISTEN} ssl;
+    http2 on;
+    server_name ${STAGE_HOST};
+    ssl_certificate ${TLS_CERT};
+    ssl_certificate_key ${TLS_KEY};
+    ssl_protocols TLSv1.2 TLSv1.3;
+    access_log ${STAGE_HOME}/log/nginx-access.log lp_stage_masked;
+    error_log ${STAGE_HOME}/log/nginx-error.log warn;
+    client_max_body_size 10m;
+
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 70s;
+
+    location /api/ { proxy_pass http://127.0.0.1:8011; }
+
+    location /stage-admin/ {
+        allow ${ADMIN_ALLOW};
+        deny all;
+        proxy_pass http://127.0.0.1:8011;
+    }
+    location = /stage-admin/login/ {
+        allow ${ADMIN_ALLOW};
+        deny all;
+        limit_req zone=lp_stage_admin_login burst=5 nodelay;
+        limit_req_status 429;
+        proxy_pass http://127.0.0.1:8011;
+    }
+
+    location /static/ { alias ${STAGE_HOME}/lion-parts/backend/staticfiles/; }
+    location /media/  { alias ${STAGE_HOME}/media/; }
+    location / { return 404; }
+}

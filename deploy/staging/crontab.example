@@ -1,0 +1,10 @@
+# Install as lionparts-stage only, after the owner approves: crontab -u lionparts-stage deploy/staging/crontab.example
+# Inventory: docs/operations.md section 6. fetch_nbg_rates reads the public NBG rate; the reconcile jobs ask FakeProvider.
+CRON_TZ=Asia/Tbilisi
+ENV_LOAD=set -a; . /home/lionparts-stage/lion-parts/backend/.env; set +a
+15 0,9,13,17 * * *  eval "$ENV_LOAD"; cd /home/lionparts-stage/lion-parts/backend && venv/bin/python manage.py fetch_nbg_rates
+*/5 * * * *         eval "$ENV_LOAD"; cd /home/lionparts-stage/lion-parts/backend && venv/bin/python manage.py reconcile_payments
+7,22,37,52 * * * *  eval "$ENV_LOAD"; cd /home/lionparts-stage/lion-parts/backend && venv/bin/python manage.py reconcile_closed_payments
+30 3 1 * *          eval "$ENV_LOAD"; cd /home/lionparts-stage/lion-parts/backend && venv/bin/python manage.py purge_expired_billing
+45 3 * * *          eval "$ENV_LOAD"; cd /home/lionparts-stage/lion-parts/backend && venv/bin/python manage.py clearsessions
+10 4 * * *          /home/lionparts-stage/lion-parts/deploy/staging/stage.sh backup >> /home/lionparts-stage/backup.log 2>&1

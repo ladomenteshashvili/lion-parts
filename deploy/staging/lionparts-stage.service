@@ -1,0 +1,19 @@
+[Unit]
+Description=Lion Parts isolated staging API
+After=network.target postgresql.service
+
+[Service]
+User=lionparts-stage
+Group=lionparts-stage
+WorkingDirectory=/home/lionparts-stage/lion-parts/backend
+EnvironmentFile=/home/lionparts-stage/lion-parts/backend/.env
+ExecStart=/home/lionparts-stage/lion-parts/backend/venv/bin/gunicorn config.wsgi:application -c /home/lionparts-stage/lion-parts/deploy/staging/gunicorn.conf.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+MemoryMax=1500M
+
+[Install]
+WantedBy=multi-user.target
