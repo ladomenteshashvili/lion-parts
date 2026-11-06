@@ -17,14 +17,20 @@ def handler(delay, trickle):
                 self.send_header("Content-Type", "text/xml")
                 self.end_headers()
                 deadline = time.monotonic() + delay
-                while time.monotonic() < deadline:
-                    self.wfile.write(b" ")
-                    self.wfile.flush()
-                    time.sleep(1)
+                try:
+                    while time.monotonic() < deadline:
+                        self.wfile.write(b" ")
+                        self.wfile.flush()
+                        time.sleep(1)
+                except OSError:  # the client gave up, which is the point of the test
+                    pass
                 return
             time.sleep(delay)
-            self.send_response(503)
-            self.end_headers()
+            try:
+                self.send_response(503)
+                self.end_headers()
+            except OSError:
+                pass
 
         def log_message(self, *_args):
             pass

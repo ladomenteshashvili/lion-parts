@@ -2,13 +2,18 @@
 depends on real time, and nothing touches the network."""
 
 import io
+import threading
+import time
+from http.server import ThreadingHTTPServer
 from unittest import mock
 
 import requests
+import urllib3
 from django.test import SimpleTestCase, override_settings
 
 from parts.amt_provider import AMTProviderError, get_price_by_oem
 from parts.providers import PartsProviderError, fetch_rows
+from uat.slow_supplier import handler
 
 ROWS_XML = ("<r><row><oem>A1</oem><descr>Деталь</descr><brand>B</brand><list_price>10.5</list_price></row>"
             "<row><oem>A2</oem><descr>Other</descr><brand>B</brand><list_price>12</list_price></row></r>")
@@ -16,7 +21,8 @@ ROWS_XML = ("<r><row><oem>A1</oem><descr>Деталь</descr><brand>B</brand><li
 
 def response(body=ROWS_XML, status=200, encoding="cp1251"):
     real = requests.Response()
-    real.status_code, real.encoding, real.raw = status, encoding, io.BytesIO(body.encode(encoding))
+    real.status_code, real.encoding = status, encoding
+    real.raw = urllib3.HTTPResponse(body=io.BytesIO(body.encode(encoding)), preload_content=False)
     return real
 
 
@@ -71,19 +77,6 @@ class LookupBudgetTests(SimpleTestCase):
         self.assertEqual(rows[0]["descr"], "Деталь")  # the charset is handled as before
         self.assertEqual(rows[0]["list_price"], 10.5)
 
-    def test_a_slow_trickling_body_cannot_outlast_the_budget(self):
-        slow = response()
-
-        def chunks(chunk_size):
-            yield b"<r>"
-            self.now += 31  # one network wait passes the deadline
-            yield b"</r>"
-
-        slow.iter_content = chunks
-        with self.supplier(slow), self.assertLogs("parts.amt_provider", "WARNING"), self.assertRaises(AMTProviderError):
-            get_price_by_oem("X")
-        self.assertEqual(len(self.timeouts), 1)
-
     def test_a_timeout_is_a_supplier_failure_never_an_empty_result(self):
         with override_settings(PARTS_PROVIDER="amt"), self.supplier(requests.Timeout()), \
                 self.assertLogs("parts.amt_provider", "WARNING"), self.assertRaises(PartsProviderError) as caught:
@@ -132,7 +125,7 @@ class SupplierAnswerTests(SimpleTestCase):
 
     def test_a_connection_lost_during_the_body_is_a_supplier_failure(self):
         partial = response()
-        partial.iter_content = mock.Mock(side_effect=requests.exceptions.ChunkedEncodingError())
+        partial.raw.read1 = mock.Mock(side_effect=urllib3.exceptions.ProtocolError("connection lost"))
         self.assertIsNone(self.fetch(partial)[0])
 
     def test_a_truncated_body_is_a_supplier_failure(self):
@@ -171,3 +164,29 @@ class SupplierAnswerTests(SimpleTestCase):
     def test_a_valid_answer_after_a_bad_one_is_used(self):
         result, calls = self.fetch(response("<html>busy"), response())
         self.assertEqual((len(result[1]), calls), (2, 2))
+
+
+@override_settings(AMT_API_LOGIN="u", AMT_API_PASSWORD="p", AMT_TIMEOUT_SECONDS=1, AMT_LOOKUP_BUDGET_SECONDS=2)
+class RealSocketTests(SimpleTestCase):
+    """A real server on loopback and the real clock. A faked read once hid that iter_content never saw the deadline."""
+
+    def supplier(self, **behaviour):
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler(delay=20, **behaviour))
+        server.daemon_threads = True
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        return f"http://127.0.0.1:{server.server_address[1]}/"
+
+    def lookup_time(self, endpoint):
+        started = time.monotonic()
+        with override_settings(AMT_ENDPOINT=endpoint), self.assertLogs("parts.amt_provider", "WARNING"), \
+                self.assertRaises(AMTProviderError):
+            get_price_by_oem("X")
+        return time.monotonic() - started
+
+    def test_a_body_trickling_a_byte_a_second_stops_at_the_budget(self):
+        self.assertLess(self.lookup_time(self.supplier(trickle=True)), 5)
+
+    def test_a_silent_supplier_stops_at_the_budget(self):
+        self.assertLess(self.lookup_time(self.supplier(trickle=False)), 5)

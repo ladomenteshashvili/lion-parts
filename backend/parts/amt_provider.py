@@ -96,7 +96,8 @@ def _headers_soap11(action: str) -> dict[str, str]:
 
 def _post(xml: str, headers: dict[str, str], deadline: float) -> str:
     """One attempt, within what is left of the lookup budget. A requests timeout limits each network wait, not the whole
-    response, so the body is read in chunks: a supplier sending slowly cannot outlast the budget by more than one wait."""
+    response, so the body is read one receive at a time: a supplier sending slowly cannot outlast the budget by more than
+    one wait. read1, because iter_content blocks until a whole chunk has arrived, so it never sees the deadline."""
     # At least a tick: the caller checked the deadline just now, and urllib3 refuses a zero or negative timeout.
     timeout = max(min(settings.AMT_TIMEOUT_SECONDS, deadline - time.monotonic()), 0.01)
     with requests.post(
@@ -109,7 +110,7 @@ def _post(xml: str, headers: dict[str, str], deadline: float) -> str:
     ) as response:
         response.raise_for_status()
         body = bytearray()
-        for chunk in response.iter_content(chunk_size=8192):
+        while chunk := response.raw.read1(8192, decode_content=True):
             if time.monotonic() >= deadline:
                 raise requests.Timeout("AMT lookup budget used up while reading a response")
             body += chunk
@@ -305,8 +306,8 @@ def get_price_by_oem(oems: list[str] | str) -> list[dict[str, Any]]:
 
                     except AMTProviderError:
                         raise
-                    except (requests.RequestException, ExpatError):
-                        continue
+                    except (requests.RequestException, urllib3.exceptions.HTTPError, ExpatError):
+                        continue  # raw reads raise urllib3's own errors, which requests would otherwise wrap
 
     if last_response:
         preview = last_response[:400].replace("\r", "").replace("\n", " ")
