@@ -146,6 +146,19 @@ class EmailReplyToTests(SimpleTestCase):
         self.assertIn("EMAIL_REPLY_TO must be one valid email address", result.stderr)
 
 
+class ContentSecurityPolicySettingsTests(SimpleTestCase):
+    """LPK-187: never enforcing by configuration; the collector is optional."""
+
+    PROBE = "import config.settings as s; print(hasattr(s, 'SECURE_CSP'), s.SECURE_CSP_REPORT_ONLY.get('report-uri'))"
+
+    def test_the_default_has_no_collector_and_no_enforcing_policy(self):
+        self.assertEqual(run_python(self.PROBE).stdout.split(), ["False", "None"])
+
+    def test_the_environment_adds_a_collector(self):
+        self.assertEqual(run_python(self.PROBE, {"CSP_REPORT_URI": "https://r.example/c"}).stdout.split(),
+                         ["False", "['https://r.example/c']"])
+
+
 class EmailTimeoutTests(SimpleTestCase):
     """LPK-181: EMAIL_TIMEOUT maps onto MAILERS, never onto the legacy setting Django 6.1 forbids next to it."""
 

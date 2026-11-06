@@ -355,6 +355,20 @@ server {
 
 **If an operator is locked out:** the lockout ends by itself 15 minutes after the failures. Log lines `Admin login blocked` show the client IP, a keyed hash of the username and which limit was reached.
 
+### Content-Security-Policy (LPK-187)
+
+Django sends `Content-Security-Policy-Report-Only` on every response. It blocks nothing, and `SECURE_CSP` (the enforcing
+header) is not set. Inline styles are allowed because the invoice and some admin pages use them; inline scripts are not.
+
+Before anyone proposes enforcement:
+
+1. In staging, walk through the admin (login, order list and detail, every order action, site settings, part images) and
+   print an invoice with the browser console open. Violations appear there as "report only" messages.
+2. Optional: set `CSP_REPORT_URI` to a collector the owner has approved. The backend has no collector endpoint.
+3. Review at least two weeks of normal operator use. Each violation must be explained: fix the page or widen the policy
+   for a stated reason. If static or media files move to another host, `style-src`, `script-src` and `img-src` need it.
+4. Enforcing is a separate owner decision: it means setting `SECURE_CSP` to the reviewed policy and testing again.
+
 ## 6. Scheduled tasks (cron, `CRON_TZ=Asia/Tbilisi`)
 
 All commands are idempotent; run them as the service user with the same `.env`.

@@ -2,13 +2,17 @@
 logs, whatever the logger (G§3, D23, D24)."""
 
 import logging
+import re
 import uuid
 from unittest import mock
 
 import requests
+from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core import mail
 from django.core.cache import cache
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, override_settings
+from django.urls import reverse
 from rest_framework.test import APIClient
 
 from accounts.test_password_reset import link_params
@@ -126,3 +130,50 @@ class SecurityHeaderTests(TestCase):
     def test_browsable_api_is_off(self):
         response = APIClient().get("/api/meta/", headers={"accept": "text/html"})
         self.assertEqual(response["Content-Type"], "application/json")
+
+
+INLINE_SCRIPT = re.compile(r"<script\b(?![^>]*\bsrc=)[^>]*>")
+HEADER = "Content-Security-Policy-Report-Only"
+
+
+class ContentSecurityPolicyTests(TestCase):
+    """LPK-187: report-only on the admin and invoice pages, nothing enforced, and the policy fits what they load."""
+
+    def setUp(self):
+        self.staff = get_user_model().objects.create_superuser("root", "root@example.com", "x")
+
+    def assert_report_only(self, response):
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("Content-Security-Policy", response.headers)
+        for directive in ("default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'",
+                          "frame-ancestors 'none'", "object-src 'none'"):
+            self.assertIn(directive, response[HEADER])
+
+    def test_admin_pages_report_only_and_run_no_inline_script(self):
+        admin_client = Client()
+        self.assert_report_only(admin_client.get(reverse("admin:login")))
+        admin_client.force_login(self.staff)
+        for name in ("admin:index", "admin:orders_order_changelist", "admin:pricing_sitesettings_changelist"):
+            with self.subTest(name=name):
+                response = admin_client.get(reverse(name), follow=True)
+                self.assert_report_only(response)
+                self.assertEqual(INLINE_SCRIPT.findall(response.content.decode()), [])
+
+    def test_customer_and_admin_invoice_report_only_and_run_no_script(self):
+        customer = make_customer()
+        order = make_order(customer)
+        api = APIClient()
+        api.force_login(customer.user)
+        admin_client = Client()
+        admin_client.force_login(self.staff)
+        for client, url in ((api, f"/api/orders/{order.order_number}/invoice/"),
+                            (admin_client, reverse("admin:orders_order_invoice", args=[order.pk]))):
+            with self.subTest(url=url):
+                response = client.get(url)
+                self.assert_report_only(response)
+                self.assertIn(b"<style>", response.content)  # allowed by style-src 'unsafe-inline'
+                self.assertNotIn(b"<script", response.content)
+
+    @override_settings(SECURE_CSP_REPORT_ONLY={**settings.SECURE_CSP_REPORT_ONLY, "report-uri": ["https://r.example/c"]})
+    def test_a_collector_is_added_only_when_configured(self):
+        self.assertIn("report-uri https://r.example/c", APIClient().get("/api/meta/")[HEADER])
