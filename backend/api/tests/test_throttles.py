@@ -48,6 +48,47 @@ def rates(**changes):
 
 
 @override_settings(ROOT_URLCONF=__name__)
+class WhoCountsTests(TestCase):
+    """LPK-221: who shares a limit, and what a client can do about it."""
+
+    def post(self, url, body, **extra):
+        extra.setdefault("REMOTE_ADDR", "10.0.0.1")
+        return Client().post(url, body, content_type="application/json", **extra)
+
+    def login_as(self, email, **extra):
+        return self.post("/login/", {"email": email}, **extra)
+
+    def test_users_sharing_an_ip_share_the_ip_limit_but_not_their_own(self):
+        emails = [f"user{i}@example.com" for i in range(10)]
+        self.assertEqual([self.login_as(email).status_code for email in emails], [200] * 10)
+        self.assertEqual(self.login_as("user10@example.com").status_code, 429)
+        self.assertEqual(self.login_as("user10@example.com", REMOTE_ADDR="10.0.0.2").status_code, 200)
+
+    def test_one_user_is_limited_across_ips_and_spellings(self):
+        spellings = ["Same@Example.com", "same@example.com ", "SAME@EXAMPLE.COM", "same@example.com", " same@example.com"]
+        answers = [self.login_as(email, REMOTE_ADDR=f"10.0.1.{i}") for i, email in enumerate(spellings)]
+        self.assertEqual([answer.status_code for answer in answers], [200] * 5)
+        self.assertEqual(self.login_as("same@example.com", REMOTE_ADDR="10.0.1.9").status_code, 429)
+
+    def test_a_refusal_keeps_the_documented_format_and_header(self):
+        for i in range(10):
+            self.login_as(f"user{i}@example.com")
+        answer = self.login_as("other@example.com")
+        self.assertEqual(answer.status_code, 429)
+        self.assertEqual(answer.json()["code"], "throttled")
+        self.assertEqual(int(answer["Retry-After"]), answer.json()["retry_after"])
+        self.assertTrue(1 <= answer.json()["retry_after"] <= 60)
+
+    @override_settings(REST_FRAMEWORK={**settings.REST_FRAMEWORK, "NUM_PROXIES": 1})
+    def test_behind_a_proxy_a_forged_forwarded_address_does_not_escape_the_ip_limit(self):
+        answers = [self.login_as(f"user{i}@example.com", HTTP_X_FORWARDED_FOR=f"1.2.3.{i}, 198.51.100.7")
+                   for i in range(11)]
+        self.assertEqual([answer.status_code for answer in answers], [200] * 10 + [429])
+        other = self.login_as("x@example.com", HTTP_X_FORWARDED_FOR="1.2.3.4, 198.51.100.8")
+        self.assertEqual(other.status_code, 200)
+
+
+@override_settings(ROOT_URLCONF=__name__)
 class ThrottleTests(TestCase):
     def post(self, url, body, ip="10.0.0.1", client=None):
         return (client or Client()).post(url, body, content_type="application/json", REMOTE_ADDR=ip)
