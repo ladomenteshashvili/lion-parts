@@ -75,7 +75,7 @@ Merged to `main` through PR #66.
 | FIX-03 (LPK-182) | Django Admin login | Failed logins are limited to 10 per IP and 5 per username in 15 minutes, answering `429` without checking the credentials. Only a keyed hash of the username is stored or logged. | `api/tests/test_admin_login.py` |
 | FIX-04 (LPK-183) | Database and process model | `DB_CONN_MAX_AGE` (default 60) and connection health checks. `gthread` guidance for isolated staging tests. A review of shared state found no defects to fix in this change; staging load tests remain to be run. | `config/tests.py`, `api/tests/test_thread_safety.py` |
 
-**Post-review batch (branch `feature/post-review-autonomous-batch`). Implemented and tested locally; not yet reviewed, merged or run in GitHub CI:**
+**Post-review batch, merged through PR #70:**
 
 | Story | Area | What changed | Evidence |
 |---|---|---|---|
@@ -86,6 +86,15 @@ Merged to `main` through PR #66.
 | LPK-221 | Throttling | Atomic limits across threads and workers. A cache failure refuses the request. | `api/tests/test_throttles.py` |
 | LPK-222 | OTP | Parallel sends produce one SMS. Nothing is held open during the provider call. An uncertain delivery keeps the cooldown. | `accounts/test_otp.py`, `accounts/test_register.py` |
 | LPK-220 | Supplier and rate calls | Overall AMT lookup limit. Supplier and NBG calls run outside transactions; stale answers are dropped. | `parts/test_amt_budget.py`, `api/tests/test_external_calls.py`, `cart/test_refresh.py`, `parts/test_admin.py` |
+
+**Staging readiness and hardening (branch `feature/staging-readiness-hardening`). Implemented and tested locally; not yet reviewed, merged or run in GitHub CI:**
+
+| Jira | Area | What changed | Evidence |
+|---|---|---|---|
+| LPK-222 | OTP | An expired claim row can no longer let parallel requests send extra SMS. An SMS answer whose meaning is unconfirmed keeps the cooldown. | `accounts/test_otp.py` |
+| LPK-220 | Supplier and rate calls | The lookup limit now holds against a slow body on a real socket; the earlier test had faked the read. Reads under a cart lock never call NBG. Unexpected supplier or NBG answers are handled as outages. | `parts/test_amt_budget.py`, `api/tests/test_external_calls.py`, `pricing/tests/test_rates.py` |
+| LPK-187 | Browser policy | Report-only stays. A test reads the admin pages and the invoice for what the policy forbids and finds nothing. | `api/tests/test_csp_coverage.py` |
+| LPK-195 to 200 | Staging | Scripts refuse every target except the isolated staging, and every real credential. Not applied to any host. | `api/tests/test_staging_kit.py`, `docs/staging-runbook.md` |
 
 **Deployment requirements:**
 
@@ -99,7 +108,16 @@ Merged to `main` through PR #66.
 | Jira | Scope | Blocker |
 |---|---|---|
 | LPK-219 (Epic LPK-178) | Payment lifecycle review | B5: required before real card payments |
-| LPK-220 | Staging test with real AMT (code is in the batch above) | B7: required before `gthread` with real AMT |
+| LPK-220 | Staging test with real AMT (code is merged, with follow-ups on the branch above) | B7: required before `gthread` with real AMT |
 | LPK-188, LPK-189 | Admin 2FA, pending owner approval | |
+
+## 6. Known limitations
+
+- **Supplier calls and capacity.** Supplier calls hold request threads while they run, so slow calls reduce capacity. Staging stays on the demo supplier until real AMT has a measured thread budget (B7).
+- **Rate limits and the database cache.** Limits depend on the database cache, so watch it as described in `docs/operations.md` and `docs/staging-runbook.md`. A failed cache answers `429`.
+- **OTP sends.** The per-phone and per-IP limits bound the sends.
+- **Rate reads under locks.** If the rate expires in the instant before a cart lock, the request answers `502 rate_unavailable` once.
+- **Demo limits.** The fake provider is exempt from the card block, so staging does not exercise the real provider path (B1, B5). AMT, SMS, NBG and SMTP were fakes in all tests here; the SMTP rehearsal used a local sink.
+- **CSP.** Report-only. Verified by reading HTML, not by a browser.
 
 Detailed review notes are held privately by the project owner.
