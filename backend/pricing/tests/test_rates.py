@@ -106,3 +106,21 @@ class FetchCommandTests(TestCase):
     def test_command_fails_loudly(self):
         with nbg(status=500), self.assertRaises(CommandError), self.assertLogs("pricing.rates", "WARNING"):
             call_command("fetch_nbg_rates", stdout=StringIO())
+
+
+class OddNbgAnswerTests(TestCase):
+    def test_answers_with_an_unexpected_shape_are_rate_unavailable(self):
+        day = {"code": "USD", "quantity": 1, "validFromDate": "2026-01-01"}
+        for payload in ([{"currencies": ["USD"]}], [{"currencies": [{**day, "rate": "NaN"}]}],
+                        [{"currencies": [{**day, "rate": "0"}]}], {"currencies": []}, []):
+            answer = mock.Mock()
+            answer.json.return_value = payload
+            with self.subTest(payload=payload), mock.patch("pricing.rates.requests.get", return_value=answer), \
+                    self.assertRaises(RateUnavailable):
+                fetch_nbg_usd()
+        self.assertFalse(ExchangeRate.objects.exists())
+
+    def test_a_locked_reader_never_calls_nbg(self):
+        with mock.patch("pricing.rates.requests.get") as get, self.assertRaises(RateUnavailable):
+            get_usd_rate(fetch=False)
+        get.assert_not_called()

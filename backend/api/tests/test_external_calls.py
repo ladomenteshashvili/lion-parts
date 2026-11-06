@@ -12,6 +12,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from accounts.testing import PASSWORD, make_customer
+from cart.models import CartItem
 from orders.models import Order
 from orders.services import propose_courier_fee
 from orders.testing import make_order
@@ -91,6 +92,28 @@ class NoCallInTransactionTests(TransactionTestCase):
         self.assertEqual(response.status_code, 200, response.content)
         self.assert_called_outside_transactions()
 
+    def test_a_rate_expiring_just_before_the_cart_lock_makes_no_call_under_it(self):
+        found = self.client.post("/api/parts/search/", {"part_number": "P-1"}, format="json").json()
+        self.rate_goes_stale()
+        with mock.patch("cart.services.load_rate_before_lock"):  # the rate was still fresh when this ran
+            response = self.client.post("/api/cart/items/", {"source": "search", "search_id": found["search_id"],
+                                                             "offer_id": found["offers"][0]["offer_id"]}, format="json")
+        self.assertEqual((response.status_code, response.json()["code"]), (502, "rate_unavailable"))
+        self.assertEqual(self.recorder.in_transaction, [])
+        self.assertFalse(CartItem.objects.exists())
+
+    def test_a_rate_expiring_just_before_the_checkout_lock_makes_no_call_under_it(self):
+        self.add_line()
+        self.rate_goes_stale()
+        with mock.patch("orders.checkout.load_rate_before_lock"):
+            response = self.client.post("/api/orders/checkout/", {
+                "delivery_method": "pickup", "pickup_point_id": PickupPoint.objects.first().pk, "payment_option": "full",
+                "payment_method": "invoice", "terms_accepted": True}, format="json")
+        self.assertEqual((response.status_code, response.json()["code"]), (502, "rate_unavailable"))
+        self.assertEqual(self.recorder.in_transaction, [])
+        self.assertFalse(Order.objects.exists())
+        self.assertEqual(CartItem.objects.count(), 1)
+
     def test_courier_fee_proposal_with_a_stale_rate(self):
         order = make_order(self.customer, currency="USD", status=Order.STATUS_PROCESSING)
         Order.objects.filter(pk=order.pk).update(delivery_method="delivery")
@@ -142,3 +165,84 @@ class SlowSupplierHoldsNoLockTests(TransactionTestCase):
         with mock.patch("parts.providers.fetch_rows", side_effect=slow_supplier):
             mark_quote_ready(qr.pk, D("2.00"))
         self.assertEqual(locked, [qr.pk])
+
+
+@unittest.skipUnless(connection.vendor == "postgresql", "row locks need PostgreSQL")
+class ParallelCartAndQuoteTests(TransactionTestCase):
+    """Parallel writers end in one consistent state. Threads start together through a barrier."""
+
+    serialized_rollback = True
+
+    def together(self, *calls):
+        barrier, results = threading.Barrier(len(calls)), []
+
+        def run(call):
+            try:
+                barrier.wait()
+                results.append(call())
+            except Exception as error:
+                results.append(error)
+            finally:
+                connections.close_all()
+
+        threads = [threading.Thread(target=run, args=(call,)) for call in calls]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        return results
+
+    def setUp(self):
+        ExchangeRate.objects.create(date=timezone.localdate(), rate=D("2.6000"))
+        self.customer = make_customer(is_phone_verified=True, is_email_verified=True)
+
+    def client_for_customer(self):
+        client = APIClient()
+        client.force_login(self.customer.user)
+        return client
+
+    def add_line(self):
+        client = self.client_for_customer()
+        found = client.post("/api/parts/search/", {"part_number": "P-1"}, format="json").json()
+        return {"source": "search", "search_id": found["search_id"], "offer_id": found["offers"][0]["offer_id"]}
+
+    def test_parallel_adds_of_one_offer_sum_on_one_line(self):
+        data = self.add_line()
+        clients = [self.client_for_customer() for _ in range(5)]
+        answers = self.together(*[lambda c=c: c.post("/api/cart/items/", data, format="json").status_code for c in clients])
+        self.assertEqual(answers, [201] * 5)
+        self.assertEqual(list(CartItem.objects.values_list("quantity", flat=True)), [5])
+
+    def test_a_quantity_change_during_a_refresh_is_kept(self):
+        data = self.add_line()
+        client = self.client_for_customer()
+        line = client.post("/api/cart/items/", data, format="json").json()["items"][0]["id"]
+        changed = threading.Event()
+
+        def run_search(*args, **kwargs):
+            other = self.client_for_customer()
+            thread = threading.Thread(target=lambda: (other.patch(f"/api/cart/items/{line}/", {"quantity": 7}, format="json"),
+                                                      connections.close_all(), changed.set()))
+            thread.start()
+            thread.join()
+            return real_search(*args, **kwargs)
+
+        from cart import services
+        real_search = services.run_search
+        with mock.patch("cart.services.run_search", side_effect=run_search):
+            answer = client.post(f"/api/cart/items/{line}/refresh/")
+        self.assertTrue(changed.is_set())
+        self.assertEqual(answer.status_code, 200)
+        self.assertEqual(CartItem.objects.get(pk=line).quantity, 7)
+
+    def test_parallel_quote_approvals_leave_one_consistent_price(self):
+        qr = PartQuoteRequest.objects.create(customer=self.customer, request_type="weight_price", part_number="P-1")
+        answers = self.together(lambda: mark_quote_ready(qr.pk, D("2.00"), supplier_price_usd=D("100.00")),
+                                lambda: mark_quote_ready(qr.pk, D("2.00"), supplier_price_usd=D("200.00")))
+        self.assertFalse([a for a in answers if isinstance(a, Exception)], answers)
+        qr.refresh_from_db()
+        self.assertTrue(qr.is_price_ready)
+        alone = PartQuoteRequest.objects.create(customer=self.customer, request_type="weight_price", part_number="P-1")
+        mark_quote_ready(alone.pk, D("2.00"), supplier_price_usd=qr.supplier_price_usd)
+        alone.refresh_from_db()
+        self.assertEqual(qr.unit_price_usd, alone.unit_price_usd)  # the stored price belongs to the stored supplier price

@@ -24,7 +24,7 @@ def effective_currency(currency):
     return currency if currency in allowed_currencies() else default_currency()
 
 
-def display_rate(currency):
+def display_rate(currency, fetch=True):
     """The factor from USD to `currency`: 1 for USD, the current NBG rate for GEL.
-    Raises RateUnavailable rather than converting with an outdated rate."""
-    return Decimal("1") if currency == BASE_CURRENCY else get_usd_rate()
+    Raises RateUnavailable rather than converting with an outdated rate. fetch: see get_usd_rate."""
+    return Decimal("1") if currency == BASE_CURRENCY else get_usd_rate(fetch)

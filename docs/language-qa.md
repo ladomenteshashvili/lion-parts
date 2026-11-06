@@ -47,3 +47,21 @@ Languages: `ka` (default), `en`, `ru`. msgids are English; catalogs in `backend/
 ## Adding a language
 
 `backend/README.md` → "Adding a language (5 steps)".
+
+## Audit of 2026-11-06 (LPK-185, Phase F)
+
+Machine checks over both catalogs, 307 messages each: nothing missing, empty, fuzzy or in the wrong script; placeholders and final punctuation match every source text; a fresh
+`makemessages` finds no new or lost source text; the catalogs compile. No technical correction was needed. Footer placeholders (`{email}`, `{url}`) are filled from `EMAIL_REPLY_TO` and
+`FRONTEND_BASE_URL`. The English footer was also read in a real SMTP message; ka and ru footers are checked by test.
+
+Main terms found, for the reviewer to confirm as consistent: invoice `ინვოისი` / `счёт`; order `შეკვეთა` / `заказ`; payment `გადახდა` / `платёж`, `оплата`; cart `კალათა` / `корзина`; support `მხარდაჭერა` / `поддержка`.
+Russian uses both `платёж` and `оплата` for payment, and `счёт` also means an account in general: please check that each is natural where it appears.
+
+**Not native-speaker sign-off (B3 stays open).** These were machine-checked only. New texts to review first:
+
+| English | ka | ru |
+|---|---|---|
+| This is a service message from Lion Parts about your account, order or support request. It is not advertising. | ეს არის Lion Parts-ის სერვისული შეტყობინება თქვენი ანგარიშის, შეკვეთის ან მხარდაჭერის მოთხოვნის შესახებ. ის არ არის რეკლამა. | Это служебное сообщение от Lion Parts о вашем аккаунте, заказе или обращении в поддержку. Оно не является рекламой. |
+| Support: {email}. To contact us, reply to this email. | მხარდაჭერა: {email}. დასაკავშირებლად უპასუხეთ ამ წერილს. | Поддержка: {email}. Чтобы связаться с нами, ответьте на это письмо. |
+| Please do not reply to this email. To contact us, use our website: {url} | გთხოვთ, არ უპასუხოთ ამ წერილს. დასაკავშირებლად გამოიყენეთ ჩვენი ვებგვერდი: {url} | Пожалуйста, не отвечайте на это письмо. Чтобы связаться с нами, используйте наш сайт: {url} |
+| The request changed while the supplier was being asked; try again. | მოთხოვნა შეიცვალა მომწოდებლის პასუხის მოლოდინში; სცადეთ თავიდან. | Запрос изменился, пока мы ждали ответ поставщика; попробуйте ещё раз. |

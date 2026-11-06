@@ -11,7 +11,15 @@ For the frontend team. Self-contained; the response shapes are pinned by the bac
   exists (`docs/operations.md` §2). Nothing below depends on a specific host.
 - The backend does not serve the frontend; all links it sends point to `FRONTEND_BASE_URL` (§10).
 
+Journeys with real recorded answers: `docs/frontend-journeys.md`. Scenario coverage: `docs/uat-matrix.md`.
+
 ## 1. Transport, session, CSRF
+
+| Environment | Base URL | Notes |
+|---|---|---|
+| Local | `http://localhost:8000` | `DEBUG=True`, cookies without `Secure` |
+| Isolated staging | given by the owner once it exists | HTTPS, `Secure` cookies, demo codes, demo endpoints, fake payments, Mailpit |
+| Production | not available | blocked by the release blockers; has no demo routes |
 
 - Base path `/api/`, JSON in and out (`Content-Type: application/json`), UTF-8. Exception: the invoice
   (`text/html`).
@@ -24,13 +32,21 @@ For the frontend team. Self-contained; the response shapes are pinned by the bac
   3. The token rotates on login, registration, logout and password change; those responses carry the new
      `csrf_token`.
   4. Missing/invalid → `403 {"code": "csrf_failed"}`: fetch a new token and retry once.
+  5. The browser's `Origin` must be the API's own origin or be listed in `CSRF_TRUSTED_ORIGINS`, or the request answers `csrf_failed` even with a good
+     token. On HTTPS a non-browser client must send `Origin` or `Referer` itself.
+- **Cookies and CORS.** `sessionid` and `csrftoken` are `Secure` outside local development, and `SameSite=Lax` by default.
+  - Same origin as the API (recommended): no CORS is involved.
+  - Another subdomain: the owner sets `CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS`, and `SESSION_COOKIE_DOMAIN`/`CSRF_COOKIE_DOMAIN`
+    (`.lionparts.ge`). Credentials are allowed; `*` is never used. Read the token from `GET /api/auth/csrf/`: JavaScript cannot read a cookie set for
+    another host unless the domain is shared.
+- A guest's session cookie appears with the first request that needs it. Do not clear cookies at login: the guest's cart moves with the session.
 
 ## 2. Data formats
 
 | Kind | Format |
 |---|---|
 | Money | decimal **string** with 2 decimals (`"145.00"`) plus a `currency` (`"GEL"`/`"USD"`) on the object or its parent. Never compute totals client-side. |
-| Datetime / date | ISO 8601 UTC `"2026-10-24T10:00:00Z"` / `"2026-09-24"` |
+| Datetime / date | ISO 8601 `"2026-10-24T10:00:00Z"` / `"2026-09-24"`. Usually UTC, but a fresh search answers `price_valid_until` with its offset (`"2026-11-21T00:00:00+04:00"`), so always parse it; never compare the strings. |
 | Phone | responses: 9 digits `"555123456"`; requests: any format (`+995 555 12 34 56`) |
 | Ids | integers; `offer_id` is a string; link tokens are UUID strings |
 | Enums / codes | lowercase snake_case, never translated; map them to UI labels yourself |
@@ -340,6 +356,33 @@ the answer is `429`, not success.
 
 ## 11. Integration requirements and known limitations
 
+**Demo behaviour (staging only).**
+
+- **OTP:** `demo_code` appears in the answers of `register`, `resend-code` and `profile/phone` when `SMS_DEMO_MODE` is on. Production never has it: do not build a
+  screen that depends on it. No SMS is sent. Limits still apply: 60 s between codes, 5 attempts per code, 5 minutes' validity.
+- **Email:** captured by Mailpit, nothing leaves the server. The link format is in §10. Link parameters are URL-encoded: read them with `URLSearchParams` and
+  send the decoded value.
+- **Fake payments:** `checkout_url` is `<frontend>/payment-result?order=<n>&payment=<id>&fake=1`. Your page plays the provider with
+  `POST /api/payments/fake/<id>/complete/ {"status": "paid"|"failed"|"expired"}`; a payment not `pending` answers `409 nothing_to_pay`. No money moves. After `failed` or `expired` a
+  new payment is allowed at once, which a real provider's page will not always allow: handle `409 payment_in_progress` as in §8 B.
+- **Supplier:** the demo supplier answers for any part number; one starting with `NF` is not found. Prices and names are not real.
+- **Operator steps:** `/api/demo/...` with a staff session, or the Django admin.
+
+**Pitfalls.**
+
+- Registration needs `terms_accepted: true`; checkout needs its own `terms_accepted: true` and a fully verified customer (`403 verification_required`).
+- `POST /api/cart/items/` answers `201` with the whole cart; `register/verify-phone` answers `201`. Accept any 2xx.
+- Replace the stored CSRF token whenever an answer carries `csrf_token`.
+- Limits are exact and per IP on a shared office or mobile network: show `retry_after`, and do not retry `429` automatically. See §9.
+- `502 sms_failed` does not mean the SMS was not sent: the next attempt can answer `409 otp_resend_too_soon`. Show `resend_in`.
+- Never show a retry button from a stored payment status: send the request and read the answer (§8 B).
+- `merge` in the cart appears once: show it when it arrives.
+- A status can change between screens: re-read the order after any action, and use the answer's `can_cancel` and `action.decisions`.
+- The invoice is `text/html`, not JSON, and needs the session: open it in the browser rather than fetching it into JSON handling.
+- `checkout_url` can be `null` on a `pending` payment (§12).
+
+**Requirements.**
+
 - Always send cookies, `X-CSRFToken` and `Accept-Language`; never send prices or totals.
 - Treat `404` on owned resources as "not found" (it may be someone else's).
 - Card payments: fake provider only (§0). Staging only: demo codes, fake payments, demo endpoints.
@@ -363,5 +406,34 @@ the answer is `429`, not success.
 | 2026-11-06 | `POST /api/auth/register/resend-code/` and other OTP sends: after `502 sms_failed` whose delivery outcome is unknown, the next send answers `409 otp_resend_too_soon` with `resend_in` until the cooldown ends. Parallel sends: one succeeds, the others answer `409`. Same codes and fields. | No |
 | 2026-11-06 | `POST /api/cart/items/<id>/refresh/`: a line removed during the supplier lookup answers `404 not_found` and is not restored; a quantity changed meanwhile is kept. A slower answer than a refresh already applied is dropped: `200` with the current cart. | No |
 | 2026-11-06 | Supplier lookups stop at the configured limit (default 30 s) and answer `502 supplier_unavailable`. A non-XML supplier response now also gives that `502` instead of a server error. | No |
+| 2026-11-06 | OTP sends: a Sender.ge answer other than `statusId 1` now keeps the cooldown, because the SMS may have been sent. Same `502 sms_failed`; the next send can answer `409 otp_resend_too_soon` instead of sending again at once. | No |
+| 2026-11-06 | A supplier answer with an unexpected XML shape now gives `502 supplier_unavailable` instead of a server error, and a single plain row is read as one offer. A slow supplier body now stops at the lookup limit too. | No |
+| 2026-11-06 | Cart add, cart refresh and checkout: if the exchange rate expires in the instant before the cart is locked, the answer is the existing `502 rate_unavailable`; the next attempt fetches the rate. Very rare. | No |
 | 2026-11-06 | Demo quote approval: if the request changes during the supplier call, it answers the usual validation error on `supplier_price_usd`, and nothing changes. Staging only; the Django admin shows the same message. | No |
 | 2026-11-06 | All responses carry `Content-Security-Policy-Report-Only`. Emails carry a translated footer and, when configured, `Reply-To`. No JSON changed. | No |
+
+## 13. Design review (LPK-207)
+
+**Blocked:** the 13-item Figma gap list from LPK-207 is in Jira, and neither Jira nor Figma could be read when this was written, so no item is judged
+here and the visual check is pending. To finish it, take each item to the table below. If its screen has no row, or needs a field not in §5, the question goes
+to the product owner and the designer. Do not assume a backend field that is not listed.
+
+| Screen area | Backend capability | Endpoints | Limits the design must respect |
+|---|---|---|---|
+| Registration, OTP | Physical and legal accounts, six-digit code, resend timer | `/api/auth/register/`, `verify-phone/`, `resend-code/` | Timer from `resend_in`; attempts from `attempts_left` |
+| Login, reset, verification | Session cookie, emailed links | `/api/auth/login/`, `password-reset/`, `email/verify/` | Same error for wrong password and unknown email |
+| Profile | Name and ID are read-only after registration; language, marketing, email, phone, password, deletion | `/api/profile/...` | No endpoint changes name, personal ID or company |
+| Search, offers | Offers with status, price, ETA, images | `/api/parts/search/` | `checking` has no price; ETA can be `null` |
+| Weight, price requests | Depend on the tariff | `calculate-price/`, `quote-requests/`, `/api/public/q/<token>/` | Hidden unless the tariff allows |
+| History | Searches and requests with `is_new` | `/api/parts/history/` | Filters: all, ready, checking, other |
+| Cart | Lines, statuses, merge summary, one VIN per line or for all | `/api/cart/...` | Totals come from the server; quantity 1 to 99 |
+| Checkout | Pickup or delivery, full or split, card or invoice | `/api/checkout/options/`, `/api/orders/checkout/` | Options come from the server; delivery fee is proposed later by the operator |
+| Orders | Groups, progress 0 to 6, one attention banner, timeline, per-item decisions | `/api/orders/...` | One banner, chosen by the backend |
+| Payment result | Polling, `failed`, `expired`, `unknown` | `/api/orders/<n>/payments/<id>/` | Needs "being checked" wording (§8 B) |
+| Invoice | Server-rendered page in three languages | `/api/orders/<n>/invoice/` | Layout comes from the backend, not Figma |
+| Notifications, badges | List, read state, blocking support reply, badges | `/api/notifications/`, `/api/auth/me/` | SMS and email text are generic |
+| Support | Guest and customer tickets, order messages | `/api/support/tickets/`, `/api/orders/<n>/support/...` | Guests get the reply by email or SMS only |
+| Operator screens | Django admin only | none | No operator API, so no custom operator design |
+
+Open questions for the designer and product owner regardless of the list: wording for "payment being checked", the states after `502 sms_failed`, and how a
+`429` looks. These come from behaviour in §8 and §11, not from the list.

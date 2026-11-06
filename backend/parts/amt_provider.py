@@ -96,7 +96,8 @@ def _headers_soap11(action: str) -> dict[str, str]:
 
 def _post(xml: str, headers: dict[str, str], deadline: float) -> str:
     """One attempt, within what is left of the lookup budget. A requests timeout limits each network wait, not the whole
-    response, so the body is read in chunks: a supplier sending slowly cannot outlast the budget by more than one wait."""
+    response, so the body is read one receive at a time: a supplier sending slowly cannot outlast the budget by more than
+    one wait. read1, because iter_content blocks until a whole chunk has arrived, so it never sees the deadline."""
     # At least a tick: the caller checked the deadline just now, and urllib3 refuses a zero or negative timeout.
     timeout = max(min(settings.AMT_TIMEOUT_SECONDS, deadline - time.monotonic()), 0.01)
     with requests.post(
@@ -109,7 +110,7 @@ def _post(xml: str, headers: dict[str, str], deadline: float) -> str:
     ) as response:
         response.raise_for_status()
         body = bytearray()
-        for chunk in response.iter_content(chunk_size=8192):
+        while chunk := response.raw.read1(8192, decode_content=True):
             if time.monotonic() >= deadline:
                 raise requests.Timeout("AMT lookup budget used up while reading a response")
             body += chunk
@@ -143,7 +144,7 @@ def _apache_map_to_dict(node: dict[str, Any]) -> dict[str, Any]:
             node = value
             break
 
-    items = node.get("item")
+    items = node.get("item") if isinstance(node, dict) else None
 
     if not items:
         return {}
@@ -194,13 +195,14 @@ def _extract_rows(obj: Any) -> list[dict[str, Any]] | None:
             return [
                 {key.split(":")[-1]: value for key, value in row.items()}
                 for row in obj
+                if isinstance(row, dict)
             ]
 
         if obj and isinstance(obj[0], dict) and _is_apache_map(obj[0]):
             rows = []
 
             for item in obj:
-                row = _apache_map_to_dict(item)
+                row = _apache_map_to_dict(item) if isinstance(item, dict) else None
 
                 if row:
                     rows.append(
@@ -220,6 +222,9 @@ def _extract_rows(obj: Any) -> list[dict[str, Any]] | None:
                 return found
 
     if isinstance(obj, dict):
+        if _looks_like_row(obj):  # one row: xmltodict makes a list only of repeated elements
+            return [{key.split(":")[-1]: value for key, value in obj.items()}]
+
         if _is_apache_map(obj):
             row = _apache_map_to_dict(obj)
 
@@ -301,8 +306,8 @@ def get_price_by_oem(oems: list[str] | str) -> list[dict[str, Any]]:
 
                     except AMTProviderError:
                         raise
-                    except (requests.RequestException, ExpatError):
-                        continue
+                    except (requests.RequestException, urllib3.exceptions.HTTPError, ExpatError):
+                        continue  # raw reads raise urllib3's own errors, which requests would otherwise wrap
 
     if last_response:
         preview = last_response[:400].replace("\r", "").replace("\n", " ")

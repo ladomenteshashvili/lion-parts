@@ -117,9 +117,9 @@ Local validation with that change: SQLite (config.e2e_settings) 853 ran, 834 pas
 
 - **LPK-219 (Epic LPK-178):** payment lifecycle review. Required before real card payments are enabled (release blocker B5). Done so far: test baseline; recording provider evidence on payments; reconciling closed payments; blocking new payments until a session is proven closed; hiding obsolete checkout links and flagging paid results for review. Still needs a real provider adapter and owner sign-off.
 
-### Post-review batch (not merged)
+### Post-review batch
 
-Branch `feature/post-review-autonomous-batch`. Implemented and tested locally; owner review, GitHub CI and merge are still to come.
+Merged to `main` through PR #70 (`7ab99b59`). The tree on `main` equals the tested branch.
 
 | Fix | Jira | Title | Code status | Still needed outside the code |
 |---|---|---|---|---|
@@ -137,6 +137,22 @@ Final QA (LPK-191 to LPK-194):
 - `check --deploy` with staging values shows only the two known owner decisions, `security.W005` and `security.W021`.
 - Disposable PostgreSQL 18 with plain `config.settings`: 1,096 ran, 1,096 passed, 0 skipped. SQLite (`config.e2e_settings`): 1,096 ran, 1,031 passed, 0 failed, 65 skipped (PostgreSQL-only). GitHub CI (PostgreSQL 16) has not run on this branch.
 - Tests that ran against the previous code first: parallel throttle and OTP requests went over their limits, and supplier and rate calls ran inside transactions. The same tests pass now.
+
+### Staging readiness and hardening (not merged)
+
+Branch `feature/staging-readiness-hardening`, from `main` at `7ab99b59`. Implemented and tested locally; owner review, GitHub CI and merge are still to come. Nothing was deployed or provisioned.
+
+| Jira | Work | Evidence |
+|---|---|---|
+| LPK-222 | An expired claim no longer lets parallel requests send extra SMS. A Sender.ge answer other than `statusId 1` keeps the cooldown. | `accounts/test_otp.py` |
+| LPK-221 | Tests for shared IPs, forged proxy headers, spellings and the refusal format. No code change needed. | `api/tests/test_throttles.py` |
+| LPK-220 | The budget now holds against a body trickling on a real socket. No NBG call under cart locks. Odd supplier XML gives `502`. | `parts/test_amt_budget.py`, `api/tests/test_external_calls.py`, `pricing/tests/test_rates.py` |
+| LPK-219 | Read-only review; tests for parallel callbacks. No lifecycle change. | `payments/test_duplicates.py` |
+| LPK-195 to 200 | Staging kit and runbook, rehearsed on disposable resources. | `deploy/staging/`, `docs/staging-runbook.md`, `api/tests/test_staging_kit.py` |
+| LPK-195 to 200, LPK-228 | Operations review: exact database role, host and port, proven on the live connection; nginx permissions and logs; provisioning recovery; two staging superusers. React stays out (LPK-223 to 227). | `deploy/staging/verify_target.py`, `docs/staging-runbook.md`, `api/tests/test_staging_kit.py` |
+| LPK-201 to 205 | Reusable UAT suite, HTTP runner and bounded load tests. | `backend/uat/`, `docs/uat-matrix.md` |
+| LPK-206, 207 | Handoff additions and journeys with real answers. The Figma list could not be read, so that part is blocked. | `docs/api-handoff.md`, `docs/frontend-journeys.md` |
+| Phase F | Catalog audit, real SMTP check, CSP coverage test. | `docs/language-qa.md`, `api/tests/test_csp_coverage.py` |
 
 ### Follow-up recommendations (not approved, not built)
 

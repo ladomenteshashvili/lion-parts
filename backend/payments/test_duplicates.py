@@ -22,7 +22,8 @@ from orders.services import cancel_order
 from orders.testing import make_order
 from payments.models import Payment
 from payments.providers import FakeProvider
-from payments.services import (confirm_manual_payment, create_payment, mark_payment, recheck_payment, record_refund,
+from payments.services import (confirm_manual_payment, create_payment, mark_payment, recheck_payment,
+                               record_provider_result, record_refund,
                                start_payment)
 
 D = Decimal
@@ -345,6 +346,39 @@ class ParallelPaymentTests(TransactionTestCase):
         for t in threads:
             t.join()
         return results
+
+    def parallel_results(self, payment, *statuses):
+        barrier = threading.Barrier(len(statuses))
+
+        def deliver(status):
+            try:
+                barrier.wait()
+                record_provider_result(Payment.objects.get(pk=payment.pk), status, FakeProvider(), payload={"callback": True})
+            finally:
+                connection.close()
+
+        threads = [threading.Thread(target=deliver, args=(status,)) for status in statuses]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+    def pending_card_payment(self):
+        return Payment.objects.create(order=self.order, kind="initial", provider="fake", amount=self.order.total,
+                                      currency="GEL", status="pending")
+
+    def test_parallel_duplicate_paid_callbacks_count_the_money_once(self):
+        payment = self.pending_card_payment()
+        self.parallel_results(payment, *["paid"] * 6)
+        self.assertEqual(Payment.objects.get(pk=payment.pk).status, "paid")
+        self.assertEqual(Order.objects.get(pk=self.order.pk).amount_paid, self.order.total)
+
+    def test_parallel_paid_and_failed_callbacks_never_lose_the_money(self):
+        payment = self.pending_card_payment()
+        with mock.patch("payments.services.logger"):  # whichever order they arrive in; some orders log for review
+            self.parallel_results(payment, "failed", "paid", "failed", "paid")
+        self.assertEqual(Payment.objects.get(pk=payment.pk).status, "paid")
+        self.assertEqual(Order.objects.get(pk=self.order.pk).amount_paid, self.order.total)
 
     def test_two_parallel_invoice_requests_create_one_payment(self):
         def request_invoice(_):

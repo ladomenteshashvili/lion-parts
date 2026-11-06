@@ -11,7 +11,7 @@ class SenderGeError(Exception):
 
 
 class SenderGeDeliveryUnknown(SenderGeError):
-    """The request may have reached Sender.ge, so the SMS may have been sent and billed (timeout, 5xx)."""
+    """The request may have reached Sender.ge, so the SMS may have been sent and billed (timeout, 5xx, an unconfirmed status)."""
 
 
 def send_sms(destination, content):
@@ -65,6 +65,7 @@ def send_sms(destination, content):
     status_id = data.get("statusId") if isinstance(data, dict) else None
 
     if status_id is not None and str(status_id) != "1":
-        raise SenderGeError(f"Sender.ge returned statusId {status_id}")
+        # Sender.ge took the request and only statusId 1 has a confirmed meaning, so this one may still be billed.
+        raise SenderGeDeliveryUnknown(f"Sender.ge returned statusId {status_id}")
 
     return data

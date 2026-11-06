@@ -2,13 +2,18 @@
 depends on real time, and nothing touches the network."""
 
 import io
+import threading
+import time
+from http.server import ThreadingHTTPServer
 from unittest import mock
 
 import requests
+import urllib3
 from django.test import SimpleTestCase, override_settings
 
 from parts.amt_provider import AMTProviderError, get_price_by_oem
 from parts.providers import PartsProviderError, fetch_rows
+from uat.slow_supplier import handler
 
 ROWS_XML = ("<r><row><oem>A1</oem><descr>Деталь</descr><brand>B</brand><list_price>10.5</list_price></row>"
             "<row><oem>A2</oem><descr>Other</descr><brand>B</brand><list_price>12</list_price></row></r>")
@@ -16,7 +21,8 @@ ROWS_XML = ("<r><row><oem>A1</oem><descr>Деталь</descr><brand>B</brand><li
 
 def response(body=ROWS_XML, status=200, encoding="cp1251"):
     real = requests.Response()
-    real.status_code, real.encoding, real.raw = status, encoding, io.BytesIO(body.encode(encoding))
+    real.status_code, real.encoding = status, encoding
+    real.raw = urllib3.HTTPResponse(body=io.BytesIO(body.encode(encoding)), preload_content=False)
     return real
 
 
@@ -71,19 +77,6 @@ class LookupBudgetTests(SimpleTestCase):
         self.assertEqual(rows[0]["descr"], "Деталь")  # the charset is handled as before
         self.assertEqual(rows[0]["list_price"], 10.5)
 
-    def test_a_slow_trickling_body_cannot_outlast_the_budget(self):
-        slow = response()
-
-        def chunks(chunk_size):
-            yield b"<r>"
-            self.now += 31  # one network wait passes the deadline
-            yield b"</r>"
-
-        slow.iter_content = chunks
-        with self.supplier(slow), self.assertLogs("parts.amt_provider", "WARNING"), self.assertRaises(AMTProviderError):
-            get_price_by_oem("X")
-        self.assertEqual(len(self.timeouts), 1)
-
     def test_a_timeout_is_a_supplier_failure_never_an_empty_result(self):
         with override_settings(PARTS_PROVIDER="amt"), self.supplier(requests.Timeout()), \
                 self.assertLogs("parts.amt_provider", "WARNING"), self.assertRaises(PartsProviderError) as caught:
@@ -103,3 +96,97 @@ class LookupBudgetTests(SimpleTestCase):
             get_price_by_oem("X")
         text = f"{caught.exception} {' '.join(logs.output)}"
         self.assertNotIn("secret", text)
+
+
+@override_settings(AMT_API_LOGIN="u", AMT_API_PASSWORD="p", PARTS_PROVIDER="amt", AMT_TIMEOUT_SECONDS=15,
+                   AMT_LOOKUP_BUDGET_SECONDS=30)
+class SupplierAnswerTests(SimpleTestCase):
+    """Every bad answer ends as supplier_unavailable (502), never as a crash or as "no parts"."""
+
+    def fetch(self, *answers):
+        with mock.patch("parts.amt_provider.requests.post", side_effect=lambda *a, **k: next(replies)) as post:
+            replies = iter([*answers, *[answers[-1]] * 40])
+            try:
+                return fetch_rows("X"), post.call_count
+            except PartsProviderError as error:
+                self.assertEqual((error.code, error.status_code), ("supplier_unavailable", 502))
+                return None, post.call_count
+
+    def test_http_errors_are_a_supplier_failure(self):
+        for status in (403, 500, 503):
+            with self.subTest(status=status):
+                self.assertIsNone(self.fetch(response("busy", status=status))[0])
+
+    def test_connection_failures_are_a_supplier_failure(self):
+        for error in (requests.ConnectionError(), requests.exceptions.SSLError()):
+            with self.subTest(error=error), mock.patch("parts.amt_provider.requests.post", side_effect=error), \
+                    self.assertRaises(PartsProviderError):
+                fetch_rows("X")
+
+    def test_a_connection_lost_during_the_body_is_a_supplier_failure(self):
+        partial = response()
+        partial.raw.read1 = mock.Mock(side_effect=urllib3.exceptions.ProtocolError("connection lost"))
+        self.assertIsNone(self.fetch(partial)[0])
+
+    def test_a_truncated_body_is_a_supplier_failure(self):
+        self.assertIsNone(self.fetch(response(ROWS_XML[:40]))[0])
+
+    def test_well_formed_answers_with_an_unexpected_shape_do_not_crash(self):
+        for body in ("<Map/>", "<Map>text</Map>", "<r><Map>text</Map></r>", "<r/>", "<r><row>text</row></r>"):
+            with self.subTest(body=body):
+                self.assertIsNone(self.fetch(*[response(body) for _ in range(36)])[0])
+
+    def test_a_list_mixing_rows_and_text_keeps_the_rows(self):
+        body = "<r><row><oem>A1</oem><brand>B</brand><list_price>10</list_price></row><row>text</row></r>"
+        result, _calls = self.fetch(response(body))
+        self.assertEqual([row["oem"] for row in result[1]], ["A1"])
+
+    def test_a_list_mixing_maps_and_text_keeps_the_maps(self):
+        pair = "<item><key>{}</key><value>{}</value></item>"
+        row = f"<row><Map>{pair.format('oem', 'A1')}{pair.format('brand', 'B')}{pair.format('list_price', '10')}</Map></row>"
+        result, _calls = self.fetch(response(f"<r>{row}<row>text</row></r>"))
+        self.assertEqual([row["oem"] for row in result[1]], ["A1"])
+
+    def test_the_suppliers_no_part_answer_is_an_empty_result_not_a_failure(self):
+        body = "<r><row><oem>X</oem><descr>NO_PART_FOUND</descr></row></r>"
+        result, calls = self.fetch(response(body))
+        self.assertEqual((result[2], calls), ([], 1))
+
+    def test_a_single_plain_row_is_a_result(self):
+        body = "<r><row><oem>A1</oem><brand>B</brand><list_price>10</list_price></row></r>"
+        result, calls = self.fetch(response(body))
+        self.assertEqual(([row["oem"] for row in result[1]], calls), (["A1"], 1))
+
+    def test_incorrect_parameters_stop_at_once(self):
+        result, calls = self.fetch(response("Incorrect parameters"))
+        self.assertEqual((result, calls), (None, 1))
+
+    def test_a_valid_answer_after_a_bad_one_is_used(self):
+        result, calls = self.fetch(response("<html>busy"), response())
+        self.assertEqual((len(result[1]), calls), (2, 2))
+
+
+@override_settings(AMT_API_LOGIN="u", AMT_API_PASSWORD="p", AMT_TIMEOUT_SECONDS=1, AMT_LOOKUP_BUDGET_SECONDS=2)
+class RealSocketTests(SimpleTestCase):
+    """A real server on loopback and the real clock. A faked read once hid that iter_content never saw the deadline."""
+
+    def supplier(self, **behaviour):
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler(delay=20, **behaviour))
+        server.daemon_threads = True
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        return f"http://127.0.0.1:{server.server_address[1]}/"
+
+    def lookup_time(self, endpoint):
+        started = time.monotonic()
+        with override_settings(AMT_ENDPOINT=endpoint), self.assertLogs("parts.amt_provider", "WARNING"), \
+                self.assertRaises(AMTProviderError):
+            get_price_by_oem("X")
+        return time.monotonic() - started
+
+    def test_a_body_trickling_a_byte_a_second_stops_at_the_budget(self):
+        self.assertLess(self.lookup_time(self.supplier(trickle=True)), 5)
+
+    def test_a_silent_supplier_stops_at_the_budget(self):
+        self.assertLess(self.lookup_time(self.supplier(trickle=False)), 5)

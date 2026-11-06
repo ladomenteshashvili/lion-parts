@@ -7,7 +7,7 @@ from unittest import mock
 
 import requests
 from django.core.cache import cache
-from django.db import connection
+from django.db import DatabaseError, connection
 from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
@@ -102,6 +102,57 @@ class SendCodeTests(TestCase):
     def test_an_unexpected_send_error_holds_the_cooldown(self):
         with mock.patch("accounts.otp.send_sms", side_effect=RuntimeError("bug")), self.assertRaises(RuntimeError):
             send()
+        self.assertEqual(error_of(send)["code"], "otp_resend_too_soon")
+
+    def expire_claim(self):
+        with connection.cursor() as cursor:
+            cursor.execute("UPDATE cache_table SET expires = %s", [timezone.now() - timedelta(seconds=5)])
+
+    def test_a_database_failure_after_sending_holds_the_cooldown(self):
+        with mock.patch("accounts.otp.send_sms", return_value={"messageId": 1}) as sms, \
+                mock.patch.object(PhoneVerificationCode, "save", side_effect=DatabaseError("down")), \
+                self.assertRaises(DatabaseError):
+            send()
+        with mock.patch("accounts.otp.send_sms") as again:
+            self.assertEqual(error_of(send)["code"], "otp_resend_too_soon")
+        again.assert_not_called()
+        self.assertEqual(sms.call_count, 1)
+
+    def test_a_process_stopped_during_the_send_holds_the_cooldown(self):
+        with mock.patch("accounts.otp.send_sms", side_effect=SystemExit), self.assertRaises(SystemExit):
+            send()
+        with mock.patch("accounts.otp.send_sms") as again:
+            self.assertEqual(error_of(send)["code"], "otp_resend_too_soon")
+        again.assert_not_called()
+
+    @override_settings(PHONE_VERIFICATION_RESEND_SECONDS=5)
+    def test_a_short_cooldown_still_covers_a_slow_provider_call(self):
+        with mock.patch("accounts.otp.send_sms", side_effect=SenderGeDeliveryUnknown("timeout")):
+            error_of(send)
+        err = error_of(send)
+        self.assertEqual(err["code"], "otp_resend_too_soon")
+        self.assertTrue(5 < err["resend_in"] <= otp.MIN_CLAIM_SECONDS)
+
+    def test_an_expired_claim_allows_one_new_send(self):
+        with mock.patch("accounts.otp.send_sms", side_effect=SenderGeDeliveryUnknown("timeout")):
+            error_of(send)
+        self.expire_claim()
+        with mock.patch("accounts.otp.send_sms", return_value={"messageId": 2}) as sms:
+            self.assertIsNone(error_of(send))
+        self.assertEqual(sms.call_count, 1)
+
+    def test_a_live_claim_is_never_removed_by_a_new_request(self):
+        with mock.patch("accounts.otp.send_sms", side_effect=SenderGeDeliveryUnknown("timeout")):
+            error_of(send)
+        with mock.patch("accounts.otp.send_sms") as sms:
+            self.assertEqual(error_of(send)["code"], "otp_resend_too_soon")
+        sms.assert_not_called()
+
+    def test_success_leaves_no_claim_behind_and_the_code_row_keeps_the_cooldown(self):
+        send()
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT COUNT(*) FROM cache_table")
+            self.assertEqual(cursor.fetchone()[0], 0)
         self.assertEqual(error_of(send)["code"], "otp_resend_too_soon")
 
     def test_a_cache_that_cannot_claim_sends_nothing(self):
@@ -235,13 +286,16 @@ class DeliveryOutcomeTests(SimpleTestCase):
             with self.subTest(kwargs=kwargs), self.assertRaises(SenderGeDeliveryUnknown):
                 self.post(**kwargs)
 
-    def test_explicit_rejections_are_definite(self):
-        rejected = mock.Mock(status_code=200)
-        rejected.json.return_value = {"statusId": 0}
-        for kwargs in ({"return_value": mock.Mock(status_code=400)}, {"return_value": rejected}):
-            with self.subTest(kwargs=kwargs), self.assertRaises(SenderGeError) as caught:
-                self.post(**kwargs)
-            self.assertNotIsInstance(caught.exception, SenderGeDeliveryUnknown)
+    def test_an_accepted_request_with_an_unconfirmed_status_is_unknown(self):
+        answer = mock.Mock(status_code=200)
+        answer.json.return_value = {"statusId": 0}
+        with self.assertRaises(SenderGeDeliveryUnknown):
+            self.post(return_value=answer)
+
+    def test_an_explicit_http_rejection_is_definite(self):
+        with self.assertRaises(SenderGeError) as caught:
+            self.post(return_value=mock.Mock(status_code=400))
+        self.assertNotIsInstance(caught.exception, SenderGeDeliveryUnknown)
 
 
 @override_settings(SMS_DEMO_MODE=True, ENABLE_DEMO_ENDPOINTS=True, DEBUG=False)
@@ -288,6 +342,16 @@ class ParallelResendTests(TransactionTestCase):
         self.assertEqual(results.count(None), 1)
         self.assertEqual(sum(r is not None and r["code"] == "otp_resend_too_soon" for r in results), self.WORKERS - 1)
         self.assertEqual(PhoneVerificationCode.objects.count(), 1)
+
+    def test_parallel_requests_on_an_expired_claim_send_one(self):
+        for _ in range(10):  # add alone let 21 of 60 such rounds send extra SMS; cache.get first still let 5 of 60
+            cache.clear()
+            PhoneVerificationCode.objects.all().delete()
+            with mock.patch("accounts.otp.send_sms", side_effect=SenderGeDeliveryUnknown("timeout")):
+                error_of(send)
+            with connection.cursor() as cursor:
+                cursor.execute("UPDATE cache_table SET expires = %s", [timezone.now() - timedelta(seconds=5)])
+            self.assertEqual(self.race(lambda _phone, _text: {"messageId": 1})[1].call_count, 1)
 
     def test_parallel_resends_after_an_unknown_failure_still_send_one(self):
         results, patched = self.race(lambda _phone, _text: (_ for _ in ()).throw(SenderGeDeliveryUnknown("timeout")))

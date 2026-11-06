@@ -47,6 +47,9 @@ development agent: no environment was provisioned, migrated or changed. Security
 
 Goal: a staging that shares **nothing** with `api-test.lionparts.ge` or the legacy installation.
 
+**The prepared way is `docs/staging-runbook.md`, with the scripts and templates in `deploy/staging/`** (user `lionparts-stage`, database `lp_stage_v1`, port 8011).
+The steps below explain the same setup by hand; the names in them are only examples.
+
 1. **Host and user.** A new VM/container, or at least a new Unix user (e.g. `lionparts-staging`) with its own
    home. Do not reuse `/home/lado`, its `.env`, virtualenv, media or backups.
 2. **Database.** A new PostgreSQL role and an **empty** database created for this staging only, e.g.:
@@ -167,7 +170,7 @@ check is CPU work.
 **AMT lookup limit (LPK-220):** one lookup stops when `AMT_LOOKUP_BUDGET_SECONDS` is used up, and no attempt waits longer
 than the time left. `requests` timeouts limit each network wait, so the last wait can pass the budget: the worst case is
 about budget + one attempt timeout (45 s with the defaults). That stays under `--timeout 60` and nginx's default 60 s.
-Keep this sum below `proxy_read_timeout`. A slow or partial response is read in chunks and stopped at the budget. When
+Keep this sum below `proxy_read_timeout`. A slow or partial response is read one receive at a time and stopped at the budget, tested with a real socket (`docs/uat-matrix.md` D5). When
 the budget runs out the customer gets `502 supplier_unavailable`, never "not found", and nothing changes.
 
 **External calls and database locks (LPK-220):** supplier and NBG calls run with no transaction open. The order is: read
@@ -302,7 +305,7 @@ providers or a supplier sandbox.
 ```nginx
 # Public link tokens (/n/<token>, /q/<token>, /api/public/n|q/<token>/) never reach the access log (D23).
 map $request_uri $masked_uri {
-    ~^(?<pre>.*/(?:api/public/)?[nq]/)[0-9A-Fa-f-]{8,}(?<post>.*)$  "${pre}<token>${post}";
+    "~^(?<pre>.*/(?:api/public/)?[nq]/)[0-9A-Fa-f-]{8,}(?<post>.*)$"  "${pre}<token>${post}";  # quoted: { } would end the block
     default $request_uri;
 }
 log_format masked '$remote_addr - [$time_local] "$request_method $masked_uri $server_protocol" '
