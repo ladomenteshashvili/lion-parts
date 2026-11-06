@@ -198,6 +198,8 @@ class SlotTests(TestCase):
 class ConcurrentSlotTests(TransactionTestCase):
     """LPK-221: never more than the limit, whatever the interleaving."""
 
+    serialized_rollback = True
+
     def setUp(self):
         cache.clear()
         self.addCleanup(cache.clear)

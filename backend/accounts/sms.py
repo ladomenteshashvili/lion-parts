@@ -10,6 +10,10 @@ class SenderGeError(Exception):
     pass
 
 
+class SenderGeDeliveryUnknown(SenderGeError):
+    """The request may have reached Sender.ge, so the SMS may have been sent and billed (timeout, 5xx)."""
+
+
 def send_sms(destination, content):
     """
     Send SMS through Sender.ge.
@@ -45,7 +49,10 @@ def send_sms(destination, content):
             timeout=15,
         )
     except requests.RequestException as exc:
-        raise SenderGeError("Sender.ge request failed") from exc
+        raise SenderGeDeliveryUnknown("Sender.ge request failed") from exc
+
+    if response.status_code >= 500:
+        raise SenderGeDeliveryUnknown(f"Sender.ge returned HTTP {response.status_code}")
 
     if response.status_code != 200:
         raise SenderGeError(f"Sender.ge returned HTTP {response.status_code}")
