@@ -302,7 +302,7 @@ providers or a supplier sandbox.
 ```nginx
 # Public link tokens (/n/<token>, /q/<token>, /api/public/n|q/<token>/) never reach the access log (D23).
 map $request_uri $masked_uri {
-    ~^(?<pre>.*/(?:api/public/)?[nq]/)[0-9A-Fa-f-]{8,}(?<post>.*)$  "${pre}<token>${post}";
+    "~^(?<pre>.*/(?:api/public/)?[nq]/)[0-9A-Fa-f-]{8,}(?<post>.*)$"  "${pre}<token>${post}";  # quoted: { } would end the block
     default $request_uri;
 }
 log_format masked '$remote_addr - [$time_local] "$request_method $masked_uri $server_protocol" '

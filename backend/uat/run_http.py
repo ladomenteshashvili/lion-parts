@@ -28,6 +28,8 @@ class Target:
     def __init__(self, args):
         self.base, self.origin, self.host = args.base_url.rstrip("/"), args.origin, args.host_header
         self.verify, self.timeout = not args.insecure, args.timeout
+        if args.insecure:
+            requests.packages.urllib3.disable_warnings()
 
     def session(self):
         session = requests.Session()
@@ -51,7 +53,10 @@ class Target:
         if host in PROTECTED_HOSTS:
             refuse(f"{host} is a protected host")
         session = self.session()
-        health = session.get(f"{self.base}/api/health/", timeout=self.timeout, allow_redirects=False)
+        try:
+            health = session.get(f"{self.base}/api/health/", timeout=self.timeout, allow_redirects=False)
+        except requests.RequestException as error:
+            refuse(f"cannot reach the target: {type(error).__name__}")
         if health.status_code != 200:
             refuse(f"health answered {health.status_code}")
         route = session.post(f"{self.base}/api/payments/fake/0/complete/", json={}, timeout=self.timeout,

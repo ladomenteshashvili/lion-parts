@@ -4,7 +4,7 @@
 # Install only after owner approval; test with nginx -t before a reload. Every global name has an lp_stage_ prefix, so it
 # cannot collide with the sites already on this host.
 map $request_uri $lp_stage_masked_uri {
-    ~^(?<lp_stage_pre>.*/(?:api/public/)?[nq]/)[0-9A-Fa-f-]{8,}(?<lp_stage_post>.*)$  "${lp_stage_pre}<token>${lp_stage_post}";
+    "~^(?<lp_stage_pre>.*/(?:api/public/)?[nq]/)[0-9A-Fa-f-]{8,}(?<lp_stage_post>.*)$"  "${lp_stage_pre}<token>${lp_stage_post}";
     default $request_uri;
 }
 log_format lp_stage_masked '$remote_addr - [$time_local] "$request_method $lp_stage_masked_uri $server_protocol" '
