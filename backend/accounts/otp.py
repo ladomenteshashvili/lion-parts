@@ -14,7 +14,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.core.cache import cache
-from django.db import transaction
+from django.db import connection, transaction
 from django.utils import timezone, translation
 from django.utils.crypto import salted_hmac
 from django.utils.translation import gettext_lazy as _
@@ -44,10 +44,21 @@ def _pending(session_key, phone, purpose):
     )
 
 
+def _drop_expired_claim(claim):
+    """DatabaseCache.add overwrites an expired row with a plain UPDATE, which parallel requests can all win, and cache.get
+    deletes by key, so it can remove a row another request has just replaced. This deletes only a row still expired (or
+    about to be, so none can expire before add reads it). add then inserts, and the primary key picks one winner."""
+    table = connection.ops.quote_name(settings.CACHES["default"]["LOCATION"])
+    soon = connection.ops.adapt_datetimefield_value(timezone.now() + timedelta(seconds=2))
+    with connection.cursor() as cursor:
+        cursor.execute(f"DELETE FROM {table} WHERE cache_key = %s AND expires < %s", [cache.make_key(claim), soon])
+
+
 def _claim_send(session_key, phone, purpose, cooldown):
     """-> the cache key now held by this request, or otp_resend_too_soon. A cache that cannot answer also refuses."""
     digest = salted_hmac("accounts.otp.send", f"{session_key}|{phone}|{purpose}", algorithm="sha256").hexdigest()
     claim, seconds = f"otp_send:{digest}", max(cooldown, MIN_CLAIM_SECONDS)
+    _drop_expired_claim(claim)
     if cache.add(claim, time.time() + seconds, seconds):
         return claim
     expires_at = cache.get(claim)
