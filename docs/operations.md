@@ -107,6 +107,9 @@ Every variable is listed in `backend/.env.example`. Values that differ per envir
 | `PAYMENT_PROVIDER` | real adapter (**B1**) | `fake` | Production refuses `fake`. |
 | `EMAIL_BACKEND` | smtp | smtp (Mailpit) | Production refuses console/locmem/dummy/filebased. |
 | `EMAIL_TIMEOUT` | `10` | `10` | SMTP connection/socket timeout in whole seconds (§4). With the SMTP backend, 0 or a negative value stops the app at startup. |
+| `EMAIL_REPLY_TO` | support mailbox | test mailbox | Optional. Sets Reply-To and the support address in email footers. Blank: no header, and the footer points to the website. An invalid value stops startup. |
+| `AMT_LOOKUP_BUDGET_SECONDS` | `30` | `30` | Limit for one AMT lookup (§4). 0 or a negative value stops startup. |
+| `CSP_REPORT_URI` | owner decision | blank | Optional collector for report-only CSP violations (§5). |
 | `SECURE_HSTS_INCLUDE_SUBDOMAINS`, `SECURE_HSTS_PRELOAD` | owner decision | `False` | Only when every subdomain is HTTPS-only. |
 | `LOG_LEVEL` | `INFO` | `INFO` | `DEBUG` only briefly for diagnosis. |
 | `MEDIA_ROOT` | persistent path | persistent path | Back it up (§8). |
@@ -174,7 +177,7 @@ provider calls also run outside transactions. In the rare case a stored rate exp
 one NBG call can run under that lock, limited by its 10 s timeout (marked `shortcut:` in `cart/services.py`).
 
 **Thread and connection budget:** an AMT outage can still occupy every thread for up to about 45 s per request, so with 24
-threads new requests may wait during an outage. The `search` throttle limits this per client only. Each busy thread also
+threads new requests may wait during an outage. Each busy thread also
 keeps one idle database connection, and `DB_CONN_MAX_AGE` keeps it open afterwards, so PostgreSQL's `max_connections`
 must cover workers × threads plus cron jobs and admin tools.
 

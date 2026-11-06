@@ -117,11 +117,26 @@ Local validation with that change: SQLite (config.e2e_settings) 853 ran, 834 pas
 
 - **LPK-219 (Epic LPK-178):** payment lifecycle review. Required before real card payments are enabled (release blocker B5). Done so far: test baseline; recording provider evidence on payments; reconciling closed payments; blocking new payments until a session is proven closed; hiding obsolete checkout links and flagging paid results for review. Still needs a real provider adapter and owner sign-off.
 
-### Tracked separately, not implemented
+### Post-review batch (not merged)
 
-- **LPK-220:** supplier lookup limits and external calls within database transactions (release blocker B7).
-- **LPK-221:** authentication and OTP throttling under concurrency.
-- **LPK-222:** OTP resend cooldown under concurrency.
+Branch `feature/post-review-autonomous-batch`. Implemented and tested locally; owner review, GitHub CI and merge are still to come.
+
+| Fix | Jira | Title | Code status | Still needed outside the code |
+|---|---|---|---|---|
+| FIX-05 | LPK-184 | Reply-To on outgoing emails | done | Choose the mailbox (`EMAIL_REPLY_TO`) |
+| FIX-06 | LPK-185 | Translated transactional email footers | done | Native-speaker sign-off of ka and ru (B3) |
+| FIX-07 | LPK-186 | Dependabot | done | Takes effect once on `main` |
+| FIX-08 | LPK-187 | Content-Security-Policy, report-only | done | Staging review before any enforcement (`docs/operations.md` §5) |
+| | LPK-220 | AMT lookup limit; external calls outside database locks | done | Staging test with real AMT before `gthread` (B7) |
+| | LPK-221 | Atomic authentication and OTP throttling | done | Staging load test |
+| | LPK-222 | Atomic OTP resend cooldown | done | None known |
+
+Final QA (LPK-191 to LPK-194):
+
+- `manage.py check` clean; `makemigrations --check --dry-run` found no changes, and the batch adds no migration; ka and ru catalogs compile with 307 messages each; `.env.example` lists every setting read. No new dependency.
+- `check --deploy` with staging values shows only the two known owner decisions, `security.W005` and `security.W021`.
+- Disposable PostgreSQL 18 with plain `config.settings`: 1,096 ran, 1,096 passed, 0 skipped. SQLite (`config.e2e_settings`): 1,096 ran, 1,031 passed, 0 failed, 65 skipped (PostgreSQL-only). GitHub CI (PostgreSQL 16) has not run on this branch.
+- Tests that ran against the previous code first: parallel throttle and OTP requests went over their limits, and supplier and rate calls ran inside transactions. The same tests pass now.
 
 ### Follow-up recommendations (not approved, not built)
 
