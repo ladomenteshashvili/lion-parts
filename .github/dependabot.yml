@@ -1,0 +1,14 @@
+# LPK-186: weekly update proposals only. Nothing merges automatically; each pull request goes through CI and review.
+# The legacy frontend is deliberately not covered (owned by an external team).
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
