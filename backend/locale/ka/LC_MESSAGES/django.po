@@ -1291,3 +1291,15 @@ msgstr "%(payment)s: მოინიშნა შემოწმებულა�
 
 msgid "%(payment)s: nothing to review."
 msgstr "%(payment)s: შესამოწმებელი არაფერია."
+
+msgid "This is a service message from Lion Parts about your account, order or support request. It is not advertising."
+msgstr "ეს არის Lion Parts-ის სერვისული შეტყობინება თქვენი ანგარიშის, შეკვეთის ან მხარდაჭერის მოთხოვნის შესახებ. ის არ არის რეკლამა."
+
+msgid "Support: {email}. To contact us, reply to this email."
+msgstr "მხარდაჭერა: {email}. დასაკავშირებლად უპასუხეთ ამ წერილს."
+
+msgid "Please do not reply to this email. To contact us, use our website: {url}"
+msgstr "გთხოვთ, არ უპასუხოთ ამ წერილს. დასაკავშირებლად გამოიყენეთ ჩვენი ვებგვერდი: {url}"
+
+msgid "The request changed while the supplier was being asked; try again."
+msgstr "მოთხოვნა შეიცვალა მომწოდებლის პასუხის მოლოდინში; სცადეთ თავიდან."

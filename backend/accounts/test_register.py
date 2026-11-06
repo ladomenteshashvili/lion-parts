@@ -12,6 +12,7 @@ from rest_framework.test import APIClient
 
 from accounts.models import Customer, LegalEntityProfile, PhoneVerificationCode
 from accounts.serializers import RegisterSerializer
+from accounts.sms import SenderGeDeliveryUnknown, SenderGeError
 from accounts.testing import make_customer
 
 PHYSICAL = {
@@ -154,6 +155,22 @@ class ResendCodeTests(TestCase):
         response = self.resend()
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["masked_phone"], "+995 555 •• •• 56")
+
+    def test_a_failed_resend_keeps_the_api_contract(self):
+        """LPK-222/LPK-193: a rejected SMS can be retried at once; one that may have left answers 409 with resend_in."""
+        self.client.post("/api/auth/register/", PHYSICAL, format="json")
+        PhoneVerificationCode.objects.update(created_at=timezone.now() - timedelta(seconds=61))
+        with mock.patch("accounts.otp.send_sms", side_effect=SenderGeError("rejected")):
+            response = self.resend()
+        self.assertEqual((response.status_code, response.json()["code"]), (502, "sms_failed"))
+        with mock.patch("accounts.otp.send_sms", side_effect=SenderGeDeliveryUnknown("timeout")):
+            response = self.resend()
+        self.assertEqual((response.status_code, response.json()["code"]), (502, "sms_failed"))
+        with mock.patch("accounts.otp.send_sms") as sms:
+            response = self.resend()
+        sms.assert_not_called()
+        self.assertEqual((response.status_code, response.json()["code"]), (409, "otp_resend_too_soon"))
+        self.assertIsInstance(response.json()["resend_in"], int)
 
     def test_expired_draft(self):
         self.client.post("/api/auth/register/", PHYSICAL, format="json")

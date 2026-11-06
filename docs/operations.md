@@ -18,7 +18,8 @@ development agent: no environment was provisioned, migrated or changed. Security
 - **B5 – LPK-219, second-payment risk.** Must be resolved before real card payments are enabled.
 - **B6 – Django Admin exposure.** The admin must not be publicly exposed without an approved nginx IP/VPN allow-list
   and additional nginx rate limiting (§5).
-- **B7 – `gthread` with real AMT (LPK-220).** No `gthread` with real AMT until LPK-220 is fixed and tested (§4).
+- **B7 – `gthread` with real AMT (LPK-220).** The code limit is in place, but no `gthread` with real AMT until it has passed
+  an isolated staging test with AMT (§4).
 
 > ⚠️ **`scripts/deploy-staging.sh` belongs to the legacy installation and is disabled in this repository.**
 > It checked out `main` (now v1) and ran `migrate` in `/home/lado/lion-parts`, which would apply the v1
@@ -106,6 +107,9 @@ Every variable is listed in `backend/.env.example`. Values that differ per envir
 | `PAYMENT_PROVIDER` | real adapter (**B1**) | `fake` | Production refuses `fake`. |
 | `EMAIL_BACKEND` | smtp | smtp (Mailpit) | Production refuses console/locmem/dummy/filebased. |
 | `EMAIL_TIMEOUT` | `10` | `10` | SMTP connection/socket timeout in whole seconds (§4). With the SMTP backend, 0 or a negative value stops the app at startup. |
+| `EMAIL_REPLY_TO` | support mailbox | test mailbox | Optional. Sets Reply-To and the support address in email footers. Blank: no header, and the footer points to the website. An invalid value stops startup. |
+| `AMT_LOOKUP_BUDGET_SECONDS` | `30` | `30` | Limit for one AMT lookup (§4). 0 or a negative value stops startup. |
+| `CSP_REPORT_URI` | owner decision | blank | Optional collector for report-only CSP violations (§5). |
 | `SECURE_HSTS_INCLUDE_SUBDOMAINS`, `SECURE_HSTS_PRELOAD` | owner decision | `False` | Only when every subdomain is HTTPS-only. |
 | `LOG_LEVEL` | `INFO` | `INFO` | `DEBUG` only briefly for diagnosis. |
 | `MEDIA_ROOT` | persistent path | persistent path | Back it up (§8). |
@@ -134,7 +138,8 @@ WantedBy=multi-user.target
 
 This is a **starting configuration for isolated staging tests, not a production-ready guarantee or optimum**. It gives
 3 × 8 = up to 24 request-handling threads. It is documentation only: no service configuration has been changed or
-deployed. **Do not run `gthread` with real AMT until LPK-220 is fixed and tested (B7).**
+deployed. **Do not run `gthread` with real AMT until the LPK-220 code is merged and it has passed an isolated staging test
+with AMT (B7).**
 
 ### What `--timeout` does with `gthread`
 
@@ -153,14 +158,31 @@ check is CPU work.
 
 | External call | Timeout |
 |---|---|
-| AMT | `AMT_TIMEOUT_SECONDS`, default 15 s per attempt |
+| AMT | `AMT_LOOKUP_BUDGET_SECONDS`, default 30 s for one lookup; `AMT_TIMEOUT_SECONDS`, default 15 s per attempt |
 | Sender.ge | 15 s |
 | NBG | 10 s |
 | SMTP | `EMAIL_TIMEOUT`, default 10 s (below) |
 | Payment provider | None yet: only `FakeProvider` exists (B1). An adapter must set its own timeouts |
 
-**Before using real AMT (release blocker B7):** LPK-220 covers an overall supplier lookup limit and external calls made
-within database transactions. It is not implemented yet.
+**AMT lookup limit (LPK-220):** one lookup stops when `AMT_LOOKUP_BUDGET_SECONDS` is used up, and no attempt waits longer
+than the time left. `requests` timeouts limit each network wait, so the last wait can pass the budget: the worst case is
+about budget + one attempt timeout (45 s with the defaults). That stays under `--timeout 60` and nginx's default 60 s.
+Keep this sum below `proxy_read_timeout`. A slow or partial response is read in chunks and stopped at the budget. When
+the budget runs out the customer gets `502 supplier_unavailable`, never "not found", and nothing changes.
+
+**External calls and database locks (LPK-220):** supplier and NBG calls run with no transaction open. The order is: read
+the current state, make the call, lock the row, check again, then apply. A stale answer is dropped: a price approved by
+another operator stays, a removed cart line stays removed, and a changed quantity is kept. SMS (LPK-222), email and payment
+provider calls also run outside transactions. In the rare case a stored rate expires in the instant before a cart lock,
+one NBG call can run under that lock, limited by its 10 s timeout (marked `shortcut:` in `cart/services.py`).
+
+**Thread and connection budget:** an AMT outage can still occupy every thread for up to about 45 s per request, so with 24
+threads new requests may wait during an outage. Each busy thread also
+keeps one idle database connection, and `DB_CONN_MAX_AGE` keeps it open afterwards, so PostgreSQL's `max_connections`
+must cover workers × threads plus cron jobs and admin tools.
+
+**Still required for B7:** LPK-220 is tested with fakes only. Before `gthread` runs with real AMT, an isolated staging
+test must show real lookups succeed within the budget and the behaviour during a supplier outage.
 
 ### Other points
 
@@ -168,7 +190,9 @@ within database transactions. It is not implemented yet.
 - **Gunicorn control socket (owner decision: disabled unless explicitly needed):** gunicorn 26 opens one by default at
   `~/.gunicorn/gunicorn.ctl`, so the example above passes `--no-control-socket`. Verified locally on gunicorn 26.2.0: the
   server runs and creates no socket. If you upgrade gunicorn, check that the option still exists.
-- **Tracked concurrency work:** throttling (LPK-221) and the OTP resend cooldown (LPK-222). See `docs/security-review.md` §5.
+- **Throttling and OTP resend (LPK-221, LPK-222):** both now hold under threads and multiple workers, using the shared
+  cache table. Each throttled request can add a row, within the `MAX_ENTRIES` capacity of 100,000; expired rows are removed
+  on use. If the table is unavailable, throttled requests get `429` and OTP sends get `otp_resend_too_soon` by design.
 
 ### Email timeout
 
@@ -354,6 +378,20 @@ server {
   wrong address.
 
 **If an operator is locked out:** the lockout ends by itself 15 minutes after the failures. Log lines `Admin login blocked` show the client IP, a keyed hash of the username and which limit was reached.
+
+### Content-Security-Policy (LPK-187)
+
+Django sends `Content-Security-Policy-Report-Only` on every response. It blocks nothing, and `SECURE_CSP` (the enforcing
+header) is not set. Inline styles are allowed because the invoice and some admin pages use them; inline scripts are not.
+
+Before anyone proposes enforcement:
+
+1. In staging, walk through the admin (login, order list and detail, every order action, site settings, part images) and
+   print an invoice with the browser console open. Violations appear there as "report only" messages.
+2. Optional: set `CSP_REPORT_URI` to a collector the owner has approved. The backend has no collector endpoint.
+3. Review at least two weeks of normal operator use. Each violation must be explained: fix the page or widen the policy
+   for a stated reason. If static or media files move to another host, `style-src`, `script-src` and `img-src` need it.
+4. Enforcing is a separate owner decision: it means setting `SECURE_CSP` to the reviewed policy and testing again.
 
 ## 6. Scheduled tasks (cron, `CRON_TZ=Asia/Tbilisi`)
 

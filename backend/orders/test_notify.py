@@ -9,8 +9,10 @@ from unittest import mock
 from django.core import mail
 from django.db import connection, transaction
 from django.test import TestCase, TransactionTestCase, override_settings
+from django.utils import translation
 
 from accounts.testing import make_customer
+from api.mail import transactional_footer
 from orders.models import Notification, NotificationChannelSetting, NotificationDelivery, NotificationTemplate, \
     SupportTicket
 from orders.notifications import notify, notify_after_commit, notify_contact
@@ -80,7 +82,8 @@ class NotifyTests(TestCase):
         link = re.compile(r"https://lionparts\.ge/n/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
                           r"\?lang=(?:ka|en|ru)(?=\s|$)")
         self.assertEqual(link.findall(text), [f"https://lionparts.ge/n/{n.token}?lang=en"])
-        self.assertEqual(re.findall(r"https?://\S+", text), link.findall(text))  # no other URL anywhere
+        # no other URL anywhere, except the public site root in the footer (LPK-185)
+        self.assertEqual(re.findall(r"https?://\S+", text), [*link.findall(text), "https://lionparts.ge"])
         readable = link.sub("<link>", text)
         for private in ("Rustaveli", "address", "wrong", "Nino", "Beridze", "nino@example.com"):  # anywhere
             self.assertNotIn(private, text)
@@ -157,7 +160,6 @@ class GuestReplyTests(TestCase):
         self.assertIn("We found your part.", mail.outbox[-1].body)
 
     def test_georgian_guest_reply_text(self):
-        from django.utils import translation
         from django.utils.translation import gettext
 
         channel("support_reply", "email")
@@ -167,7 +169,9 @@ class GuestReplyTests(TestCase):
             intro = gettext("Lion Parts support replied to your request:")
         self.assertNotEqual(intro, "Lion Parts support replied to your request:")
         self.assertNotIn("%(", intro)
-        self.assertEqual(mail.outbox[-1].body, f"{intro}\n\nFound it.")  # the translation exactly once
+        with translation.override("ka"):
+            footer = transactional_footer()
+        self.assertEqual(mail.outbox[-1].body, f"{intro}\n\nFound it.\n\n{footer}")  # the translation exactly once
 
     def test_phone_contact_gets_an_sms_only_when_the_channel_has_sms(self):
         ticket = SupportTicket.objects.create(contact="555123456", language="ka", context="general", message="?")
@@ -248,7 +252,7 @@ class DeliveryStatusTests(TestCase):
         from orders.notifications import deliver_email
 
         self.assertEqual(deliver_email(self.n, "a@b.ge", "S", "B").status, "sent")  # locmem: really in the outbox
-        with mock.patch("django.core.mail.send_mail", return_value=0), \
+        with mock.patch("django.core.mail.EmailMessage.send", return_value=0), \
                 self.assertLogs("orders.notifications", "WARNING"):
             self.assertEqual(deliver_email(self.n, "a@b.ge", "S", "B").status, "failed")
         for backend in ("console", "dummy"):
@@ -257,3 +261,27 @@ class DeliveryStatusTests(TestCase):
                         "BACKEND": f"django.core.mail.backends.{backend}.EmailBackend"}}):
                 delivery = deliver_email(self.n, "a@b.ge", "S", "B")
             self.assertEqual((delivery.status, backend in delivery.error), ("skipped", True))
+
+    def test_footer_reaches_customer_and_guest_emails_in_their_language(self):
+        """LPK-185: the ticket's language for guests, the customer's for customers; SMS stays as it was."""
+        NotificationChannelSetting.objects.update_or_create(event_type="support_reply", defaults={"channel": "both"})
+        for language in ("ka", "en", "ru"):
+            with self.subTest(language=language), translation.override(language):
+                footer = transactional_footer()
+                ticket = SupportTicket.objects.create(context="other", message="Q", contact="x@y.ge", language=language)
+                notify_contact(ticket, f"Reply {language}")
+                self.assertTrue(mail.outbox[-1].body.endswith(f"\n\n{footer}"), mail.outbox[-1].body)
+                self.customer.preferred_language = language
+                self.customer.save(update_fields=["preferred_language"])
+                notify(self.customer, "support_reply", params={"language": language})
+                self.assertTrue(mail.outbox[-1].body.endswith(f"\n\n{footer}"), mail.outbox[-1].body)
+
+    def test_email_reply_to_follows_the_setting(self):
+        """LPK-184."""
+        from orders.notifications import deliver_email
+
+        for configured, expected in (("", []), ("support@example.com", ["support@example.com"])):
+            with self.subTest(configured=configured), override_settings(EMAIL_REPLY_TO=configured):
+                mail.outbox = []
+                self.assertEqual(deliver_email(self.n, "a@b.ge", "S", "B").status, "sent")
+                self.assertEqual(mail.outbox[0].reply_to, expected)

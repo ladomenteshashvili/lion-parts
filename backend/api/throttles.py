@@ -1,11 +1,21 @@
 """Throttle classes (G§5.5). Rates: REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]; state: the shared
-DatabaseCache, so limits hold across gunicorn workers. Client IP: get_ident() with NUM_PROXIES."""
+DatabaseCache, so limits hold across gunicorn workers. Client IP: get_ident() with NUM_PROXIES.
+
+Each allowed request takes one of N cache slots (LPK-221), as the admin login does. cache.add decides each slot through
+the cache table's primary key, so parallel requests in any thread or worker cannot overshoot; DRF's own read-then-write
+history can. Each slot expires one window after its request, which keeps DRF's sliding window. If the cache fails, the
+request is refused: these limits protect logins and paid SMS, so they never fail open."""
+
+import logging
 
 from django.core.exceptions import ValidationError
+from django.utils.crypto import salted_hmac
 from rest_framework.settings import api_settings
 from rest_framework.throttling import SimpleRateThrottle
 
 from accounts.validators import normalize_phone
+
+logger = logging.getLogger(__name__)
 
 
 def body(request):
@@ -21,6 +31,29 @@ class SettingsRateThrottle(SimpleRateThrottle):
 
     def key(self, ident):
         return self.cache_format % {"scope": self.scope, "ident": ident} if ident else None
+
+    def allow_request(self, request, view):
+        key = None if self.rate is None else self.get_cache_key(request, view)
+        if key is None:
+            return True
+        # Keyed digest: no phone, email or address in the cache table, and any identifier fits the key column.
+        digest = salted_hmac("api.throttles", key, algorithm="sha256").hexdigest()
+        slots = [f"throttle:{self.scope}:{digest}:{slot}" for slot in range(self.num_requests)]
+        self.wait_seconds = self.duration
+        try:
+            held = self.cache.get_many(slots)  # also deletes expired rows; a stale read is safe, add decides
+            now = self.timer()
+            if any(slot not in held and self.cache.add(slot, now, self.duration) for slot in slots):
+                return True
+            taken_at = self.cache.get_many(slots).values()  # an add that lost a race is not in the first read
+            if taken_at:
+                self.wait_seconds = max(min(taken_at) + self.duration - now, 1)
+        except Exception as error:  # any cache backend: refused and logged, never allowed through
+            logger.error("Throttle %s: the cache failed (%s); request refused", self.scope, type(error).__name__)
+        return False
+
+    def wait(self):
+        return self.wait_seconds
 
 
 class IpThrottle(SettingsRateThrottle):

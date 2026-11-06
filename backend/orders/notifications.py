@@ -167,6 +167,7 @@ def _content(notification):
     from django.utils.translation import gettext as _
 
     from accounts.services import customer_language
+    from api.mail import transactional_footer
 
     customer, ticket = notification.customer, notification.support_ticket
     if customer is None:  # guest ticket reply
@@ -174,7 +175,8 @@ def _content(notification):
             return None
         with translation.override(ticket.language):
             title = notification_title(notification)
-            body = f"{_('Lion Parts support replied to your request:')}\n\n{notification.message}"
+            body = (f"{_('Lion Parts support replied to your request:')}\n\n{notification.message}\n\n"
+                    f"{transactional_footer()}")
             return (ticket.language, ticket.contact, ticket.contact, f"Lion Parts: {notification.message}",
                     f"Lion Parts: {title}", body)
     language = customer_language(customer)
@@ -188,7 +190,7 @@ def _content(notification):
         context = template_context(notification, f"{base}{path}?lang={language}", notification_title(notification))
         return (language, customer.phone, customer.user.email, render_text(template.sms_template, context),
                 " ".join(render_text(template.email_subject, context).split()),
-                render_text(template.email_template, context))
+                f"{render_text(template.email_template, context)}\n\n{transactional_footer()}")
 
 
 def send(notification, channels):
@@ -251,8 +253,10 @@ NON_DELIVERING_EMAIL_BACKENDS = ("django.core.mail.backends.console.EmailBackend
 
 def deliver_email(notification, address, subject, body):
     """sent: the backend accepted the message; skipped: a backend that delivers nothing (console, dummy; refused in
-    production); failed: an error, or no message accepted (send_mail returned 0)."""
-    from django.core.mail import send_mail
+    production); failed: an error, or no message accepted (send() returned 0)."""
+    from django.core.mail import EmailMessage
+
+    from api.mail import reply_to
 
     from .models import NotificationDelivery
 
@@ -261,7 +265,7 @@ def deliver_email(notification, address, subject, body):
         return _delivery(notification, "email", address, NotificationDelivery.STATUS_SKIPPED,
                          error=f"email backend delivers nothing ({backend.rsplit('.', 2)[-2]})")
     try:
-        accepted = send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [address])
+        accepted = EmailMessage(subject, body, settings.DEFAULT_FROM_EMAIL, [address], reply_to=reply_to()).send()
     except Exception as error:
         logger.warning("Email for notification %s failed: %s", notification.pk, type(error).__name__)
         return _delivery(notification, "email", address, NotificationDelivery.STATUS_FAILED, error=str(error))

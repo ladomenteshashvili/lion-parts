@@ -323,7 +323,9 @@ customers without `contact` (the reply is a blocking `support_reply` notificatio
 
 Per IP unless noted: OTP sending (also per phone), OTP checks, login (also per email), password reset,
 registration, search and price calculation, guest support tickets, public links; per customer: support tickets
-and order messages, verification emails. `429` carries `retry_after` seconds.
+and order messages, verification emails. `429` carries `retry_after` seconds. Limits now hold exactly under parallel
+requests, so a client that relied on occasional overshoot will see `429` sooner. If the rate-limit store is unavailable,
+the answer is `429`, not success.
 
 ## 10. Routes the frontend must implement (links sent by the backend)
 
@@ -358,3 +360,8 @@ and order messages, verification emails. `429` carries `retry_after` seconds.
 | 2026-11-05 | An `unknown` payment can now resolve later to `paid`, `failed` or `expired` without any client action (reconciliation or an operator's re-check). A `failed` or `expired` payment can become `paid` if the provider confirms it, or `unknown` if the provider's answers conflict; `unknown` then blocks new payments with the existing `409`. No endpoint, field or error code changed. | No |
 | 2026-11-06 | `POST /api/orders/<n>/payments/`: `409 payment_in_progress` is now also returned for a `failed` or `expired` card payment whose provider page may still take money, until the provider confirms it has closed. Previously those always allowed a retry. A payment that never got a provider page still allows one. | Yes: client handling above |
 | 2026-11-06 | `checkout_url` is now returned only for a `pending` payment that is still what the order needs: `null` once the payment is closed, the order is cancelled, the balance no longer covers the amount, or an `initial` payment is overtaken by money already paid. The key stays in every response. A page the customer already opened can still complete; that result is counted, and any excess shows as `refund_pending`. | Yes: never assume a `pending` card payment has a link |
+| 2026-11-06 | `POST /api/auth/register/resend-code/` and other OTP sends: after `502 sms_failed` whose delivery outcome is unknown, the next send answers `409 otp_resend_too_soon` with `resend_in` until the cooldown ends. Parallel sends: one succeeds, the others answer `409`. Same codes and fields. | No |
+| 2026-11-06 | `POST /api/cart/items/<id>/refresh/`: a line removed during the supplier lookup answers `404 not_found` and is not restored; a quantity changed meanwhile is kept. A slower answer than a refresh already applied is dropped: `200` with the current cart. | No |
+| 2026-11-06 | Supplier lookups stop at the configured limit (default 30 s) and answer `502 supplier_unavailable`. A non-XML supplier response now also gives that `502` instead of a server error. | No |
+| 2026-11-06 | Demo quote approval: if the request changes during the supplier call, it answers the usual validation error on `supplier_price_usd`, and nothing changes. Staging only; the Django admin shows the same message. | No |
+| 2026-11-06 | All responses carry `Content-Security-Policy-Report-Only`. Emails carry a translated footer and, when configured, `Reply-To`. No JSON changed. | No |

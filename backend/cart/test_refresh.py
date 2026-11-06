@@ -52,6 +52,44 @@ class RefreshTests(TestCase):
         self.assertGreater(line.price_valid_until, timezone.now())
         self.assertEqual(line.search_log, PartSearchLog.objects.latest("id"))  # saved as a new log
 
+    def refresh_while(self, change, demo_rows=None):
+        """LPK-220: a slow supplier; `change` happens during its answer."""
+        from cart.services import run_search as real_search
+
+        def search(*args, **kwargs):
+            log = real_search(*args, **kwargs)
+            change()
+            return log
+
+        with mock.patch("cart.services.run_search", side_effect=search):
+            return self.refresh(demo_rows)
+
+    def test_a_quantity_changed_during_the_lookup_is_kept(self):
+        response = self.refresh_while(lambda: CartItem.objects.update(quantity=7))
+        self.assertEqual(response.status_code, 200)
+        line = CartItem.objects.get()
+        self.assertEqual(line.quantity, 7)
+        self.assertGreater(line.price_valid_until, timezone.now())
+
+    def test_a_line_removed_during_the_lookup_is_not_restored(self):
+        response = self.refresh_while(lambda: CartItem.objects.all().delete())
+        self.assertEqual((response.status_code, response.json()["code"]), (404, "not_found"))
+        self.assertFalse(CartItem.objects.exists())
+
+    def test_a_slower_answer_does_not_overwrite_a_newer_refresh(self):
+        newer = {}
+
+        def newer_refresh():
+            with mock.patch("cart.services.run_search", side_effect=original):
+                self.client.post(f"/api/cart/items/{self.item_id}/refresh/")
+            newer.update(log=CartItem.objects.get().search_log_id, price=CartItem.objects.get().unit_price)
+
+        from cart.services import run_search as original
+        response = self.refresh_while(newer_refresh, rows(r0={"supplier_price_usd": "999.00"}))
+        self.assertEqual(response.status_code, 200)
+        line = CartItem.objects.get()
+        self.assertEqual((line.search_log_id, line.unit_price), (newer["log"], newer["price"]))
+
     def test_supplier_price_change_is_price_changed_with_the_old_price(self):
         old = CartItem.objects.get().unit_price
         item = self.refresh(rows(r0={"supplier_price_usd": "200.00"})).json()["items"][0]

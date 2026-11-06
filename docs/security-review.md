@@ -61,7 +61,7 @@ SSL redirect, HSTS one year, `X-Frame-Options: DENY`, nosniff, `Referrer-Policy:
 | B4 | **Operations items** in `docs/operations.md` (access-log masking, `NUM_PROXIES`, cron jobs, backups, HSTS policy) and **disabling any old copy of `scripts/deploy-staging.sh` on the legacy server** (the repository copy is disabled since M6; old checkouts on a server are not). | Done by an authorized operator; not verified here. |
 | B5 | **Payment lifecycle review (Jira LPK-219, Epic LPK-178).** Provider-side session handling is unverified. | Resolve LPK-219 before real card payments are enabled. |
 | B6 | **Django Admin exposure (LPK-182).** | The Django Admin must not be publicly exposed without an approved nginx IP/VPN allow-list and additional nginx rate limiting (`docs/operations.md` §5). Admin 2FA is a separate pending task (LPK-188/LPK-189). |
-| B7 | **`gthread` with real AMT (Jira LPK-220).** | No `gthread` with real AMT until LPK-220 is fixed and tested. |
+| B7 | **`gthread` with real AMT (Jira LPK-220).** The code limit is implemented and tested with fakes. | No `gthread` with real AMT until it has passed an isolated staging test with AMT (`docs/operations.md` §4). |
 
 ## 5. Post-review changes (LPK-172)
 
@@ -75,6 +75,18 @@ Merged to `main` through PR #66.
 | FIX-03 (LPK-182) | Django Admin login | Failed logins are limited to 10 per IP and 5 per username in 15 minutes, answering `429` without checking the credentials. Only a keyed hash of the username is stored or logged. | `api/tests/test_admin_login.py` |
 | FIX-04 (LPK-183) | Database and process model | `DB_CONN_MAX_AGE` (default 60) and connection health checks. `gthread` guidance for isolated staging tests. A review of shared state found no defects to fix in this change; staging load tests remain to be run. | `config/tests.py`, `api/tests/test_thread_safety.py` |
 
+**Post-review batch (branch `feature/post-review-autonomous-batch`). Implemented and tested locally; not yet reviewed, merged or run in GitHub CI:**
+
+| Story | Area | What changed | Evidence |
+|---|---|---|---|
+| FIX-05 (LPK-184) | Email | Optional `EMAIL_REPLY_TO` on templated and notification emails. | `api/tests/test_mail.py`, `orders/test_notify.py`, `config/tests.py` |
+| FIX-06 (LPK-185) | Email | Translated service-message footer on all emails, including guest support replies. No marketing unsubscribe; SMS unchanged. | `api/tests/test_mail.py`, `orders/test_notify.py`, `api/tests/test_language_qa.py` |
+| FIX-07 (LPK-186) | Dependencies | Weekly Dependabot proposals for backend Python and GitHub Actions; no automatic merge. | `.github/dependabot.yml` |
+| FIX-08 (LPK-187) | Browser policy | Report-only Content-Security-Policy through Django's own middleware. Nothing enforced. | `api/tests/test_log_secrets.py`, `config/tests.py`, `docs/operations.md` §5 |
+| LPK-221 | Throttling | Atomic limits across threads and workers. A cache failure refuses the request. | `api/tests/test_throttles.py` |
+| LPK-222 | OTP | Parallel sends produce one SMS. Nothing is held open during the provider call. An uncertain delivery keeps the cooldown. | `accounts/test_otp.py`, `accounts/test_register.py` |
+| LPK-220 | Supplier and rate calls | Overall AMT lookup limit. Supplier and NBG calls run outside transactions; stale answers are dropped. | `parts/test_amt_budget.py`, `api/tests/test_external_calls.py`, `cart/test_refresh.py`, `parts/test_admin.py` |
+
 **Deployment requirements:**
 
 - The Django Admin must sit behind an approved nginx IP/VPN allow-list and nginx rate limiting (B6, `docs/operations.md` §5).
@@ -87,9 +99,7 @@ Merged to `main` through PR #66.
 | Jira | Scope | Blocker |
 |---|---|---|
 | LPK-219 (Epic LPK-178) | Payment lifecycle review | B5: required before real card payments |
-| LPK-220 | Supplier lookup limits and external calls within database transactions | B7: required before `gthread` with real AMT |
-| LPK-221 | Authentication and OTP throttling under concurrency | |
-| LPK-222 | OTP resend cooldown under concurrency | |
+| LPK-220 | Staging test with real AMT (code is in the batch above) | B7: required before `gthread` with real AMT |
 | LPK-188, LPK-189 | Admin 2FA, pending owner approval | |
 
 Detailed review notes are held privately by the project owner.

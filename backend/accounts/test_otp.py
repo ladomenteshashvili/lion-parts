@@ -5,13 +5,15 @@ import unittest
 from datetime import timedelta
 from unittest import mock
 
+import requests
+from django.core.cache import cache
 from django.db import connection
 from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
 from accounts import otp
 from accounts.models import PhoneVerificationCode
-from accounts.sms import SenderGeError, send_sms
+from accounts.sms import SenderGeDeliveryUnknown, SenderGeError, send_sms
 from api.errors import ApiError
 
 ARGS = {"session_key": "s1", "phone": "555123456", "purpose": "registration"}
@@ -77,6 +79,42 @@ class SendCodeTests(TestCase):
             err = error_of(send)
         self.assertEqual((err["code"], err["status"]), ("sms_failed", 502))
         self.assertFalse(PhoneVerificationCode.objects.exists())
+
+    def test_a_definite_rejection_can_be_retried_at_once(self):
+        with mock.patch("accounts.otp.send_sms", side_effect=SenderGeError("rejected")):
+            self.assertEqual(error_of(send)["code"], "sms_failed")
+        self.assertIn("demo_code", send())
+
+    def test_an_unknown_outcome_holds_the_cooldown_and_keeps_the_previous_code(self):
+        """LPK-222: the SMS may have left, so an immediate retry must not pay for another one."""
+        first = send()["demo_code"]
+        PhoneVerificationCode.objects.update(created_at=timezone.now() - timedelta(seconds=61))
+        with mock.patch("accounts.otp.send_sms", side_effect=SenderGeDeliveryUnknown("timeout")), \
+                self.assertLogs("accounts.otp", "WARNING"):
+            self.assertEqual(error_of(send)["code"], "sms_failed")
+        with mock.patch("accounts.otp.send_sms") as sms:
+            err = error_of(send)
+        sms.assert_not_called()
+        self.assertEqual(err["code"], "otp_resend_too_soon")
+        self.assertTrue(0 < err["resend_in"] <= 60)
+        verify(first)  # the code already delivered still works
+
+    def test_an_unexpected_send_error_holds_the_cooldown(self):
+        with mock.patch("accounts.otp.send_sms", side_effect=RuntimeError("bug")), self.assertRaises(RuntimeError):
+            send()
+        self.assertEqual(error_of(send)["code"], "otp_resend_too_soon")
+
+    def test_a_cache_that_cannot_claim_sends_nothing(self):
+        with mock.patch("accounts.otp.cache.add", return_value=False), mock.patch("accounts.otp.cache.get", return_value=None), \
+                mock.patch("accounts.otp.send_sms") as sms:
+            err = error_of(send)
+        sms.assert_not_called()
+        self.assertEqual((err["code"], err["resend_in"]), ("otp_resend_too_soon", 60))
+
+    def test_the_claim_never_stores_the_phone_or_session(self):
+        with mock.patch("accounts.otp.cache.add", wraps=cache.add) as add:
+            send()
+        self.assertNotIn("555123456", add.call_args.args[0])
 
     def test_sms_text_uses_the_given_language(self):
         texts = {}
@@ -181,3 +219,78 @@ class ParallelVerifyTests(TransactionTestCase):
             t.join()
         self.assertEqual(results.count("otp_invalid"), 5)
         self.assertEqual(PhoneVerificationCode.objects.get().attempts, 5)
+
+
+class DeliveryOutcomeTests(SimpleTestCase):
+    """LPK-222: which provider failures may have delivered an SMS."""
+
+    def post(self, **kwargs):
+        with self.settings(SENDER_GE_ENABLED=True, SENDER_GE_API_KEY="k"), \
+                mock.patch("accounts.sms.requests.post", **kwargs):
+            send_sms("555123456", "text")
+
+    def test_network_errors_and_server_errors_are_unknown(self):
+        for kwargs in ({"side_effect": requests.Timeout()}, {"side_effect": requests.ConnectionError()},
+                       {"return_value": mock.Mock(status_code=503)}):
+            with self.subTest(kwargs=kwargs), self.assertRaises(SenderGeDeliveryUnknown):
+                self.post(**kwargs)
+
+    def test_explicit_rejections_are_definite(self):
+        rejected = mock.Mock(status_code=200)
+        rejected.json.return_value = {"statusId": 0}
+        for kwargs in ({"return_value": mock.Mock(status_code=400)}, {"return_value": rejected}):
+            with self.subTest(kwargs=kwargs), self.assertRaises(SenderGeError) as caught:
+                self.post(**kwargs)
+            self.assertNotIsInstance(caught.exception, SenderGeDeliveryUnknown)
+
+
+@override_settings(SMS_DEMO_MODE=True, ENABLE_DEMO_ENDPOINTS=True, DEBUG=False)
+@unittest.skipUnless(connection.vendor == "postgresql", "needs real parallel connections")
+class ParallelResendTests(TransactionTestCase):
+    """LPK-222: every request is released together and the first send blocks until the others have answered."""
+
+    WORKERS = 10
+    serialized_rollback = True
+
+    def setUp(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
+
+    def race(self, sms):
+        barrier, results = threading.Barrier(self.WORKERS), []
+
+        def run():
+            try:
+                barrier.wait()
+                results.append(error_of(send))
+            finally:
+                connection.close()
+
+        threads = [threading.Thread(target=run) for _ in range(self.WORKERS)]
+        with mock.patch("accounts.otp.send_sms", side_effect=sms) as patched:
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+        return results, patched
+
+    def test_parallel_resends_send_one_billable_sms_with_no_transaction_open(self):
+        others_done, in_transaction = threading.Event(), []
+
+        def sms(_phone, _text):
+            in_transaction.append(connection.in_atomic_block)
+            others_done.wait(timeout=3)
+            return {"messageId": 1}
+
+        results, patched = self.race(sms)
+        self.assertEqual(patched.call_count, 1)
+        self.assertEqual(in_transaction, [False])
+        self.assertEqual(results.count(None), 1)
+        self.assertEqual(sum(r is not None and r["code"] == "otp_resend_too_soon" for r in results), self.WORKERS - 1)
+        self.assertEqual(PhoneVerificationCode.objects.count(), 1)
+
+    def test_parallel_resends_after_an_unknown_failure_still_send_one(self):
+        results, patched = self.race(lambda _phone, _text: (_ for _ in ()).throw(SenderGeDeliveryUnknown("timeout")))
+        self.assertEqual(patched.call_count, 1)
+        self.assertEqual(sum(r["code"] == "sms_failed" for r in results), 1)
+        self.assertFalse(PhoneVerificationCode.objects.exists())

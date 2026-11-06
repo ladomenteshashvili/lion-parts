@@ -12,9 +12,12 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 Every variable read here is listed in backend/.env.example (G§12).
 """
 
+from email.utils import parseaddr
 from pathlib import Path
 from decouple import config, Csv
-from django.core.exceptions import ImproperlyConfigured
+from django.core.exceptions import ImproperlyConfigured, ValidationError
+from django.core.validators import validate_email
+from django.utils.csp import CSP
 from django.utils.translation import gettext_lazy as _
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -54,6 +57,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     'django.middleware.security.SecurityMiddleware',
+    "django.middleware.csp.ContentSecurityPolicyMiddleware",
     'django.contrib.sessions.middleware.SessionMiddleware',
     "django.middleware.locale.LocaleMiddleware",   # Accept-Language -> active language + Content-Language
     'django.middleware.common.CommonMiddleware',
@@ -160,6 +164,22 @@ SECURE_HSTS_SECONDS = 0 if DEBUG else 31536000
 # Domain-wide HSTS policy is an owner decision (it also forces HTTPS on every subdomain): off unless set.
 SECURE_HSTS_INCLUDE_SUBDOMAINS = config("SECURE_HSTS_INCLUDE_SUBDOMAINS", default=False, cast=bool)
 SECURE_HSTS_PRELOAD = config("SECURE_HSTS_PRELOAD", default=False, cast=bool)
+# Report-Only (LPK-187): browsers report violations and block nothing. SECURE_CSP (enforcing) stays unset until the
+# evaluation in docs/operations.md §5 is done. 'unsafe-inline' only for styles: the invoice's <style> and a few inline
+# style attributes in our admin pages. The Django admin has no inline scripts.
+SECURE_CSP_REPORT_ONLY = {
+    "default-src": [CSP.SELF],
+    "script-src": [CSP.SELF],
+    "style-src": [CSP.SELF, CSP.UNSAFE_INLINE],
+    "img-src": [CSP.SELF],
+    "object-src": [CSP.NONE],
+    "base-uri": [CSP.SELF],
+    "form-action": [CSP.SELF],
+    "frame-ancestors": [CSP.NONE],
+}
+csp_report_uri = config("CSP_REPORT_URI", default="")  # blank: violations appear in the browser console only
+if csp_report_uri:
+    SECURE_CSP_REPORT_ONLY["report-uri"] = [csp_report_uri]
 
 
 # Django REST framework
@@ -216,6 +236,13 @@ if email_backend == "django.core.mail.backends.smtp.EmailBackend":
     }
 MAILERS = {"default": {"BACKEND": email_backend, "OPTIONS": email_options}}
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="Lion Parts <no-reply@lionparts.ge>")
+# Optional mailbox for customer replies (LPK-184). Blank: no Reply-To header.
+EMAIL_REPLY_TO = config("EMAIL_REPLY_TO", default="")
+if EMAIL_REPLY_TO:  # a bad value would otherwise surface only as failed or undeliverable customer email
+    try:
+        validate_email(parseaddr(EMAIL_REPLY_TO)[1])
+    except ValidationError:
+        raise ImproperlyConfigured("EMAIL_REPLY_TO must be one valid email address.") from None
 
 
 # Platform switches (G§5.2, G§12)
@@ -243,6 +270,10 @@ AMT_API_LOGIN = config("AMT_API_LOGIN", default="")
 AMT_API_PASSWORD = config("AMT_API_PASSWORD", default="")
 AMT_VERIFY_SSL = config("AMT_VERIFY_SSL", default=True, cast=bool)
 AMT_TIMEOUT_SECONDS = config("AMT_TIMEOUT_SECONDS", default=15, cast=int)
+# Limit for one whole lookup across all request variants (LPK-220).
+AMT_LOOKUP_BUDGET_SECONDS = config("AMT_LOOKUP_BUDGET_SECONDS", default=30, cast=int)
+if AMT_LOOKUP_BUDGET_SECONDS <= 0:  # no attempt could ever start, so every search would fail
+    raise ImproperlyConfigured("AMT_LOOKUP_BUDGET_SECONDS must be a positive whole number of seconds.")
 
 
 

@@ -115,6 +115,32 @@ class MarkQuoteReadyServiceTests(TestCase):
         qr.refresh_from_db()
         self.assertIsNone(qr.price_ready_at)
 
+    def answer_after(self, change):
+        """A slow supplier: `change` happens while the lookup is running."""
+        def fetch(_part_number):
+            change()
+            return self.rows()
+        return mock.patch("parts.providers.fetch_rows", side_effect=fetch)
+
+    def test_a_stale_answer_does_not_overwrite_a_newer_approval(self):
+        """LPK-220: another operator entered a price during the supplier call."""
+        qr = self.offer_request()
+        with self.answer_after(lambda: mark_quote_ready(qr.pk, D("3.00"), "Newer", supplier_price_usd=D("70.00"))), \
+                self.assertRaises(OperatorError) as caught:
+            mark_quote_ready(qr.pk, D("2.00"), "Stale")
+        self.assertEqual(caught.exception.field, "supplier_price_usd")
+        qr.refresh_from_db()
+        self.assertEqual((qr.supplier_price_usd, qr.prepared_weight_kg, qr.operator_message),
+                         (D("70.00"), D("3.00"), "Newer"))
+
+    def test_a_request_cancelled_during_the_call_stays_cancelled(self):
+        qr = self.offer_request()
+        with self.answer_after(lambda: PartQuoteRequest.objects.filter(pk=qr.pk).update(status="cancelled")), \
+                self.assertRaises(OperatorError):
+            mark_quote_ready(qr.pk, D("2.00"))
+        qr.refresh_from_db()
+        self.assertEqual((qr.status, qr.price_ready_at), ("cancelled", None))
+
     def test_manual_supplier_price_wins_and_cancelled_requests_are_refused(self):
         qr = self.offer_request()
         with mock.patch("parts.providers.fetch_rows") as fetch:
