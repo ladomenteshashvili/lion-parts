@@ -57,6 +57,13 @@ class LookupBudgetTests(SimpleTestCase):
             get_price_by_oem("X")
         self.assertEqual(self.timeouts, [15, 5])
 
+    def test_an_attempt_starting_at_the_deadline_gets_a_valid_timeout(self):
+        from parts.amt_provider import _post
+
+        with self.supplier(response()), self.assertRaises(requests.Timeout):  # no ValueError from a zero timeout
+            _post("<x/>", {}, deadline=self.now)
+        self.assertEqual(self.timeouts, [0.01])
+
     def test_a_valid_answer_after_a_timeout_is_returned(self):
         with self.supplier(requests.Timeout(), response()):
             rows = get_price_by_oem("X")

@@ -97,7 +97,8 @@ def _headers_soap11(action: str) -> dict[str, str]:
 def _post(xml: str, headers: dict[str, str], deadline: float) -> str:
     """One attempt, within what is left of the lookup budget. A requests timeout limits each network wait, not the whole
     response, so the body is read in chunks: a supplier sending slowly cannot outlast the budget by more than one wait."""
-    timeout = min(settings.AMT_TIMEOUT_SECONDS, deadline - time.monotonic())
+    # At least a tick: the caller checked the deadline just now, and urllib3 refuses a zero or negative timeout.
+    timeout = max(min(settings.AMT_TIMEOUT_SECONDS, deadline - time.monotonic()), 0.01)
     with requests.post(
         settings.AMT_ENDPOINT,
         data=xml.encode("cp1251", errors="replace"),

@@ -33,8 +33,8 @@ class SettingsRateThrottle(SimpleRateThrottle):
         return self.cache_format % {"scope": self.scope, "ident": ident} if ident else None
 
     def allow_request(self, request, view):
-        key = self.get_cache_key(request, view)
-        if self.rate is None or key is None:
+        key = None if self.rate is None else self.get_cache_key(request, view)
+        if key is None:
             return True
         # Keyed digest: no phone, email or address in the cache table, and any identifier fits the key column.
         digest = salted_hmac("api.throttles", key, algorithm="sha256").hexdigest()
