@@ -4,5 +4,5 @@
 
 {% translate "If you didn't make this change, contact Lion Parts support right away." %}
 
-Lion Parts
+{{ footer }}
 {% endautoescape %}

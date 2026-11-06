@@ -5,5 +5,5 @@
 
 {% translate "The link is valid for 48 hours. Until you confirm, your old address stays active." %}
 
-Lion Parts
+{{ footer }}
 {% endautoescape %}

@@ -1295,3 +1295,12 @@ msgstr "%(payment)s: отмечено как проверенное."
 
 msgid "%(payment)s: nothing to review."
 msgstr "%(payment)s: проверять нечего."
+
+msgid "This is a service message from Lion Parts about your account, order or support request. It is not advertising."
+msgstr "Это служебное сообщение от Lion Parts о вашем аккаунте, заказе или обращении в поддержку. Оно не является рекламой."
+
+msgid "Support: {email}. To contact us, reply to this email."
+msgstr "Поддержка: {email}. Чтобы связаться с нами, ответьте на это письмо."
+
+msgid "Please do not reply to this email. To contact us, use our website: {url}"
+msgstr "Пожалуйста, не отвечайте на это письмо. Чтобы связаться с нами, используйте наш сайт: {url}"

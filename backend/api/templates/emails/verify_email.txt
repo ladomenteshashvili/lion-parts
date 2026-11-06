@@ -5,5 +5,5 @@
 
 {% translate "The link is valid for 48 hours. If you didn't create a Lion Parts account, ignore this email." %}
 
-Lion Parts
+{{ footer }}
 {% endautoescape %}

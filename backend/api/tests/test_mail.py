@@ -9,7 +9,7 @@ from django.core import mail
 from django.test import SimpleTestCase, override_settings
 from django.utils import translation
 
-from api.mail import SUBJECTS, frontend_link, send_templated_email
+from api.mail import SUBJECTS, frontend_link, send_templated_email, transactional_footer
 
 CONTEXT = {"name": "Nino", "new_email": "new@example.com"}
 
@@ -83,6 +83,45 @@ class ReplyToTests(SimpleTestCase):
         message = self.send()
         self.assertEqual(message.message()["Reply-To"], "Lion Parts Support <support@example.com>")
         self.assertEqual(message.from_email, settings.DEFAULT_FROM_EMAIL)
+
+
+class FooterTests(SimpleTestCase):
+    """LPK-185: identity, purpose, support route and reply guidance in every language, plain and HTML."""
+
+    def rendered(self, language):
+        mail.outbox = []
+        send_templated_email("n@example.com", "password_reset", {**CONTEXT, "link": "L"}, language)
+        return mail.outbox[0].body, mail.outbox[0].alternatives[0].content
+
+    @override_settings(EMAIL_REPLY_TO="Support Team <support@example.com>")
+    def test_with_a_mailbox_it_names_the_address_in_each_language(self):
+        seen = set()
+        for language in ("ka", "en", "ru"):
+            with self.subTest(language=language):
+                text, html = self.rendered(language)
+                for part in (text, html):
+                    self.assertIn("Lion Parts", part)
+                    self.assertIn("support@example.com", part)
+                    self.assertNotIn("Support Team", part)
+                    self.assertNotIn("unsubscribe", part.lower())
+                with translation.override(language):
+                    self.assertIn(transactional_footer(), text)
+                    seen.add(transactional_footer())
+        self.assertEqual(len(seen), 3)  # really translated
+
+    @override_settings(EMAIL_REPLY_TO="", FRONTEND_BASE_URL="https://lionparts.ge/")
+    def test_without_a_mailbox_it_does_not_invite_replies(self):
+        with translation.override("en"):
+            footer = transactional_footer()
+        self.assertIn("Please do not reply to this email", footer)
+        self.assertIn("https://lionparts.ge", footer)
+        self.assertNotIn("reply to this email.", footer.replace("do not reply to this email.", ""))
+
+    @override_settings(EMAIL_REPLY_TO="", FRONTEND_BASE_URL="https://x.example/?a=1&b=<2>")
+    def test_the_html_footer_stays_escaped(self):
+        _text, html = self.rendered("en")
+        self.assertIn("a=1&amp;b=&lt;2&gt;", html)
+        self.assertNotIn("<2>", html)
 
 
 @override_settings(MAILERS={"default": {"BACKEND": "django.core.mail.backends.smtp.EmailBackend", "OPTIONS": {
