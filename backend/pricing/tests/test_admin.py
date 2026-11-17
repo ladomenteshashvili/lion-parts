@@ -29,7 +29,8 @@ def site_form(**changes):
     site = SiteSettings.get()
     data = {}
     for field in ("multi_currency_enabled", "rate_max_age_days", "vat_percent", "price_valid_business_days",
-                  "default_shipping_usd_per_kg", "invoice_seller_code", "invoice_seller_phone", "invoice_seller_email"):
+                  "default_shipping_usd_per_kg", "invoice_seller_code", "invoice_seller_phone", "invoice_seller_email",
+                  "contact_phone", "contact_email", "contact_whatsapp_url"):
         value = getattr(site, field)
         if isinstance(value, bool):
             if value:
@@ -39,7 +40,8 @@ def site_form(**changes):
     for field in ("public_holidays", "delivery_cities", "delivery_districts"):
         data[field] = json.dumps(getattr(site, field))
     for field in ("invoice_seller_name_i18n", "invoice_seller_address_i18n", "invoice_bank_details_i18n",
-                  "invoice_payment_due_text_i18n", "invoice_footer_text_i18n"):
+                  "invoice_payment_due_text_i18n", "invoice_footer_text_i18n", "contact_address_i18n",
+                  "contact_working_hours_i18n"):
         for i, (code, _name) in enumerate(settings.LANGUAGES):
             data[f"{field}_{i}"] = getattr(site, field).get(code, "")
     for key, value in changes.items():

@@ -1303,3 +1303,39 @@ msgstr "გთხოვთ, არ უპასუხოთ ამ წერი�
 
 msgid "The request changed while the supplier was being asked; try again."
 msgstr "მოთხოვნა შეიცვალა მომწოდებლის პასუხის მოლოდინში; სცადეთ თავიდან."
+
+msgid "contact phone"
+msgstr "საკონტაქტო ტელეფონი"
+
+msgid "As customers should see it, with the country code."
+msgstr "ისე, როგორც მომხმარებლებმა უნდა დაინახონ, ქვეყნის კოდით."
+
+msgid "contact email"
+msgstr "საკონტაქტო ელფოსტა"
+
+msgid "contact address"
+msgstr "საკონტაქტო მისამართი"
+
+msgid "working hours"
+msgstr "სამუშაო საათები"
+
+msgid "For example: Monday to Friday, 10:00 to 19:00."
+msgstr "მაგალითად: ორშაბათიდან პარასკევის ჩათვლით, 10:00-დან 19:00-მდე."
+
+msgid "WhatsApp link"
+msgstr "WhatsApp-ის ბმული"
+
+msgid "For example: https://wa.me/ followed by the number."
+msgstr "მაგალითად: https://wa.me/ და შემდეგ ნომერი."
+
+msgid "Contact details"
+msgstr "საკონტაქტო ინფორმაცია"
+
+msgid "Shown to customers on the website. Leave a field empty to hide it."
+msgstr "ჩანს მომხმარებლებისთვის ვებგვერდზე. ველი დატოვეთ ცარიელი, თუ არ გსურთ მისი ჩვენება."
+
+msgid "Enter a phone number: digits, spaces, brackets or dashes, optionally after +."
+msgstr "შეიყვანეთ ტელეფონის ნომერი: ციფრები, გამოტოვებები, ფრჩხილები ან ტირეები, სურვილისამებრ დასაწყისში + ნიშნით."
+
+msgid "Enter a WhatsApp link starting with https://wa.me/ or https://api.whatsapp.com/."
+msgstr "შეიყვანეთ WhatsApp-ის ბმული, რომელიც იწყება https://wa.me/ ან https://api.whatsapp.com/ მისამართით."

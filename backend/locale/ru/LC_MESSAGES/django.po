@@ -1307,3 +1307,39 @@ msgstr "Пожалуйста, не отвечайте на это письмо. 
 
 msgid "The request changed while the supplier was being asked; try again."
 msgstr "Запрос изменился, пока мы ждали ответ поставщика; попробуйте ещё раз."
+
+msgid "contact phone"
+msgstr "контактный телефон"
+
+msgid "As customers should see it, with the country code."
+msgstr "Так, как его должны видеть клиенты, с кодом страны."
+
+msgid "contact email"
+msgstr "контактная эл. почта"
+
+msgid "contact address"
+msgstr "контактный адрес"
+
+msgid "working hours"
+msgstr "часы работы"
+
+msgid "For example: Monday to Friday, 10:00 to 19:00."
+msgstr "Например: с понедельника по пятницу, с 10:00 до 19:00."
+
+msgid "WhatsApp link"
+msgstr "ссылка WhatsApp"
+
+msgid "For example: https://wa.me/ followed by the number."
+msgstr "Например: https://wa.me/ и затем номер."
+
+msgid "Contact details"
+msgstr "Контактная информация"
+
+msgid "Shown to customers on the website. Leave a field empty to hide it."
+msgstr "Показывается клиентам на сайте. Оставьте поле пустым, чтобы скрыть его."
+
+msgid "Enter a phone number: digits, spaces, brackets or dashes, optionally after +."
+msgstr "Введите номер телефона: цифры, пробелы, скобки или дефисы, при необходимости с + в начале."
+
+msgid "Enter a WhatsApp link starting with https://wa.me/ or https://api.whatsapp.com/."
+msgstr "Введите ссылку WhatsApp, начинающуюся с https://wa.me/ или https://api.whatsapp.com/."

@@ -3,13 +3,27 @@
 from datetime import date
 
 from django.core.exceptions import ValidationError
-from django.core.validators import MaxValueValidator, MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from accounts.validators import normalize_part_number
 
 BASE_CURRENCY = "USD"
+
+
+# A display number, landline or mobile: digits with spaces, brackets or dashes, optionally after "+".
+contact_phone_validator = RegexValidator(r"^\+?[0-9(][0-9 ()-]{4,28}[0-9]$",
+                                         _("Enter a phone number: digits, spaces, brackets or dashes, optionally after +."))
+
+
+def validate_whatsapp_url(value):
+    """Only a WhatsApp chat link: the site shows it as a button, so it must not lead anywhere else."""
+    from urllib.parse import urlsplit
+
+    url = urlsplit(value)
+    if url.scheme != "https" or url.netloc not in ("wa.me", "api.whatsapp.com"):  # netloc: no user, port or other host
+        raise ValidationError(_("Enter a WhatsApp link starting with https://wa.me/ or https://api.whatsapp.com/."))
 
 
 def _is_iso_date(value):
@@ -43,6 +57,15 @@ class SiteSettings(models.Model):
     invoice_bank_details_i18n = models.JSONField(default=dict, blank=True)
     invoice_payment_due_text_i18n = models.JSONField(default=dict, blank=True)
     invoice_footer_text_i18n = models.JSONField(default=dict, blank=True)
+    # Public contact details (LPK-230), published in GET /api/meta/ "contact". Empty means not shown.
+    contact_phone = models.CharField(_("contact phone"), max_length=30, blank=True, validators=[contact_phone_validator],
+                                     help_text=_("As customers should see it, with the country code."))
+    contact_email = models.EmailField(_("contact email"), blank=True)
+    contact_address_i18n = models.JSONField(_("contact address"), default=dict, blank=True)
+    contact_working_hours_i18n = models.JSONField(_("working hours"), default=dict, blank=True,
+                                                  help_text=_("For example: Monday to Friday, 10:00 to 19:00."))
+    contact_whatsapp_url = models.URLField(_("WhatsApp link"), blank=True, validators=[validate_whatsapp_url],
+                                           help_text=_("For example: https://wa.me/ followed by the number."))
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
