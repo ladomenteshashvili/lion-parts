@@ -4,14 +4,14 @@ depends on real time, and nothing touches the network."""
 import io
 import threading
 import time
-from http.server import ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest import mock
 
 import requests
 import urllib3
 from django.test import SimpleTestCase, override_settings
 
-from parts.amt_provider import AMTProviderError, get_price_by_oem
+from parts.amt_provider import MAX_RESPONSE_BYTES, AMTProviderError, get_price_by_oem
 from parts.providers import PartsProviderError, fetch_rows
 from uat.slow_supplier import handler
 
@@ -165,6 +165,20 @@ class SupplierAnswerTests(SimpleTestCase):
         result, calls = self.fetch(response("<html>busy"), response())
         self.assertEqual((len(result[1]), calls), (2, 2))
 
+    def test_a_redirect_stops_at_once(self):
+        for status in (301, 302, 307, 308):
+            moved = response("", status=status)
+            moved.headers["location"] = "https://elsewhere.example/"
+            with self.subTest(status=status):
+                self.assertEqual(self.fetch(moved), (None, 1))
+
+    def test_an_oversized_answer_stops_at_once(self):
+        huge = ROWS_XML[:-4] + "<pad>" + "x" * MAX_RESPONSE_BYTES + "</pad></r>"
+        self.assertEqual(self.fetch(response(huge)), (None, 1))
+
+    def test_xml_nested_too_deeply_is_a_supplier_failure_not_a_crash(self):
+        self.assertIsNone(self.fetch(response("<a>" * 5000 + "x" + "</a>" * 5000))[0])
+
 
 @override_settings(AMT_API_LOGIN="u", AMT_API_PASSWORD="p", AMT_TIMEOUT_SECONDS=1, AMT_LOOKUP_BUDGET_SECONDS=2)
 class RealSocketTests(SimpleTestCase):
@@ -190,3 +204,45 @@ class RealSocketTests(SimpleTestCase):
 
     def test_a_silent_supplier_stops_at_the_budget(self):
         self.assertLess(self.lookup_time(self.supplier(trickle=False)), 5)
+
+
+@override_settings(AMT_API_LOGIN="u", AMT_API_PASSWORD="secret-pass", AMT_TIMEOUT_SECONDS=1, AMT_LOOKUP_BUDGET_SECONDS=2)
+class RedirectTests(SimpleTestCase):
+    """The request body holds the AMT credentials, so a redirect must never carry it to another address."""
+
+    def server(self, handler_class):
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler_class)
+        server.daemon_threads = True
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        return f"http://127.0.0.1:{server.server_address[1]}/"
+
+    def test_a_307_does_not_resend_the_credentials(self):
+        received = []
+
+        class Elsewhere(BaseHTTPRequestHandler):
+            def do_POST(self):
+                received.append(self.rfile.read(int(self.headers["Content-Length"])))
+                self.send_response(200)
+                self.end_headers()
+
+            def log_message(self, *args):
+                pass
+
+        target = self.server(Elsewhere)
+
+        class Moved(BaseHTTPRequestHandler):
+            def do_POST(self):
+                self.rfile.read(int(self.headers["Content-Length"]))
+                self.send_response(307)
+                self.send_header("Location", target)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
+            def log_message(self, *args):
+                pass
+
+        with override_settings(AMT_ENDPOINT=self.server(Moved)), self.assertRaises(AMTProviderError):
+            get_price_by_oem("X")
+        self.assertEqual(received, [])

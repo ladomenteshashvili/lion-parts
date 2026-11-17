@@ -14,6 +14,9 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
+# Far above any real price list; a supplier sending more could otherwise fill the worker's memory within the budget.
+MAX_RESPONSE_BYTES = 5 * 1024 * 1024
+
 
 class AMTProviderError(Exception):
     pass
@@ -107,13 +110,19 @@ def _post(xml: str, headers: dict[str, str], deadline: float) -> str:
         timeout=timeout,
         verify=settings.AMT_VERIFY_SSL,
         stream=True,
+        # A redirect would wait again with a fresh timeout and re-send the body, credentials included, elsewhere.
+        allow_redirects=False,
     ) as response:
+        if response.is_redirect:  # the endpoint moved: no other request variant will do better
+            raise AMTProviderError("AMT answered with a redirect")
         response.raise_for_status()
         body = bytearray()
         while chunk := response.raw.read1(8192, decode_content=True):
             if time.monotonic() >= deadline:
                 raise requests.Timeout("AMT lookup budget used up while reading a response")
             body += chunk
+            if len(body) > MAX_RESPONSE_BYTES:
+                raise AMTProviderError("AMT response too large")
         response._content = bytes(body)  # streaming skips this; .text keeps its usual charset handling
         return response.text
 
@@ -306,8 +315,10 @@ def get_price_by_oem(oems: list[str] | str) -> list[dict[str, Any]]:
 
                     except AMTProviderError:
                         raise
-                    except (requests.RequestException, urllib3.exceptions.HTTPError, ExpatError):
-                        continue  # raw reads raise urllib3's own errors, which requests would otherwise wrap
+                    except (requests.RequestException, urllib3.exceptions.HTTPError, ExpatError, RecursionError):
+                        # raw reads raise urllib3's own errors, which requests would otherwise wrap; RecursionError:
+                        # XML nested too deeply for the row search
+                        continue
 
     if last_response:
         preview = last_response[:400].replace("\r", "").replace("\n", " ")

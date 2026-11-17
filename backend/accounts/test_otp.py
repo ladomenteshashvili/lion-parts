@@ -297,6 +297,14 @@ class DeliveryOutcomeTests(SimpleTestCase):
             self.post(return_value=mock.Mock(status_code=400))
         self.assertNotIsInstance(caught.exception, SenderGeDeliveryUnknown)
 
+    def test_a_redirect_is_not_followed_and_is_definite(self):
+        with self.settings(SENDER_GE_ENABLED=True, SENDER_GE_API_KEY="k"), \
+                mock.patch("accounts.sms.requests.post", return_value=mock.Mock(status_code=307)) as post, \
+                self.assertRaises(SenderGeError) as caught:
+            send_sms("555123456", "text")
+        self.assertIs(post.call_args.kwargs["allow_redirects"], False)
+        self.assertNotIsInstance(caught.exception, SenderGeDeliveryUnknown)
+
 
 @override_settings(SMS_DEMO_MODE=True, ENABLE_DEMO_ENDPOINTS=True, DEBUG=False)
 @unittest.skipUnless(connection.vendor == "postgresql", "needs real parallel connections")
