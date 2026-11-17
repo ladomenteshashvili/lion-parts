@@ -15,10 +15,16 @@ from django.conf import settings
 from django.db import connection
 from django.test import SimpleTestCase, TestCase
 
+from config.tests import run_python
+
 KIT = Path(settings.BASE_DIR).parent / "deploy" / "staging"
 GOOD = {"DEPLOY_ENV": "staging", "DEBUG": "False", "PARTS_PROVIDER": "demo", "PAYMENT_PROVIDER": "fake", "SMS_DEMO_MODE": "True",
         "SENDER_GE_ENABLED": "False", "ENABLE_DEMO_ENDPOINTS": "True", "DB_NAME": "lp_stage_v1", "DB_USER": "lp_stage",
         "DB_HOST": "127.0.0.1", "DB_PORT": "5432", "DB_PASSWORD": "x", "EMAIL_HOST": "127.0.0.1", "SECRET_KEY": "x"}
+# The approved real profiles beside the demo one above: real Sender.ge, then real Sender.ge and real AMT. Payments stay fake.
+REAL_SMS = {**GOOD, "SENDER_GE_ENABLED": "True", "SENDER_GE_API_KEY": "k", "SMS_DEMO_MODE": "False", "ENABLE_DEMO_ENDPOINTS": "False"}
+REAL_AMT = {**REAL_SMS, "PARTS_PROVIDER": "amt", "AMT_API_LOGIN": "l", "AMT_API_PASSWORD": "p"}
+PROFILES = {"demo": GOOD, "real sms": REAL_SMS, "real amt": REAL_AMT}
 TARGET = ("lp_stage_v1", "lp_stage", "127.0.0.1", "5432")
 TOOL_SCRIPT = '#!/bin/sh\necho "tool ran: $(basename "$0") $*" >> "$TOOL_LOG"\nexit 99\n'
 
@@ -38,12 +44,12 @@ def add_tools(directory, script, *names):
 
 
 class StageScriptTests(SimpleTestCase):
-    def run_stage(self, *args, mode=0o600, user=None, proof_exit=None, **changes):
+    def run_stage(self, *args, mode=0o600, user=None, proof_exit=None, profile=GOOD, **changes):
         with tempfile.TemporaryDirectory() as home:
             backend = Path(home) / "lion-parts" / "backend"
             backend.mkdir(parents=True)
             env_file = backend / ".env"
-            env_file.write_text("".join(f"{key}={value}\n" for key, value in {**GOOD, **changes}.items()))
+            env_file.write_text("".join(f"{key}={value}\n" for key, value in {**profile, **changes}.items()))
             env_file.chmod(mode)
             env = {"PATH": os.environ["PATH"], "STAGE_USER": user or getpass.getuser(), "STAGE_HOME": home,
                    "STAGE_CHECKOUT": str(backend.parent), "STAGE_ENV_FILE": str(env_file)}
@@ -67,16 +73,53 @@ class StageScriptTests(SimpleTestCase):
                 self.assert_refused(self.run_stage("check", DB_NAME=name), "DB_NAME must be 'lp_stage_v1'")
 
     def test_settings_that_are_not_stagings_are_refused(self):
-        for key, value in (("DEPLOY_ENV", "production"), ("DEBUG", "True"), ("PARTS_PROVIDER", "amt"),
-                           ("PAYMENT_PROVIDER", "flitt"), ("SENDER_GE_ENABLED", "True"), ("SMS_DEMO_MODE", "False"),
-                           ("EMAIL_HOST", "smtp.example.com")):
-            with self.subTest(key=key):
-                self.assert_refused(self.run_stage("backup", **{key: value}), f"{key} must be")
+        for name, profile in PROFILES.items():
+            for key, value in (("DEPLOY_ENV", "production"), ("DEBUG", "True"), ("PAYMENT_PROVIDER", "flitt"),
+                               ("PAYMENT_PROVIDER", ""), ("EMAIL_HOST", "smtp.example.com")):
+                with self.subTest(profile=name, key=key, value=value):
+                    self.assert_refused(self.run_stage("backup", profile=profile, **{key: value}), f"{key} must be")
+
+    def test_only_the_approved_provider_profiles_pass(self):
+        for parts, sms in (("amt", "False"), ("AMT", "True"), ("amt", ""), ("", "True"), ("demo", "true"), ("other", "True")):
+            with self.subTest(parts=parts, sms=sms):
+                self.assert_refused(self.run_stage("check", profile=REAL_AMT, PARTS_PROVIDER=parts, SENDER_GE_ENABLED=sms),
+                                    "PARTS_PROVIDER/SENDER_GE_ENABLED must be demo/False, demo/True or amt/True")
+        for name, profile in PROFILES.items():
+            with self.subTest(profile=name):
+                result = self.run_stage("check", profile=profile, proof_exit=0)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("target verified", result.stdout)
+                self.assertEqual(result.tools_ran, "")
+
+    def test_demo_tools_only_when_nothing_real_is_called(self):
+        self.assert_refused(self.run_stage("check", SMS_DEMO_MODE="False"), "SMS_DEMO_MODE must be 'True'")
+        for name, profile in (("real sms", REAL_SMS), ("real amt", REAL_AMT)):
+            for key in ("SMS_DEMO_MODE", "ENABLE_DEMO_ENDPOINTS"):
+                with self.subTest(profile=name, key=key):
+                    self.assert_refused(self.run_stage("check", profile=profile, **{key: "True"}), f"{key} must be 'False'")
 
     def test_real_credentials_are_refused(self):
-        for key in ("AMT_API_PASSWORD", "SENDER_GE_API_KEY", "FLITT_SECRET_KEY", "EMAIL_HOST_PASSWORD"):
+        for name, profile in PROFILES.items():
+            for key in ("FLITT_MERCHANT_ID", "FLITT_SECRET_KEY", "EMAIL_HOST_PASSWORD"):
+                with self.subTest(profile=name, key=key):
+                    self.assert_refused(self.run_stage("check", profile=profile, **{key: "something"}), f"{key} must be empty")
+        for key in ("AMT_API_LOGIN", "AMT_API_PASSWORD", "SENDER_GE_API_KEY"):
             with self.subTest(key=key):
                 self.assert_refused(self.run_stage("check", **{key: "something"}), f"{key} must be empty")
+        for key in ("AMT_API_LOGIN", "AMT_API_PASSWORD"):
+            with self.subTest(key=key):
+                self.assert_refused(self.run_stage("check", profile=REAL_SMS, **{key: "something"}), f"{key} must be empty")
+
+    def test_a_real_provider_needs_its_credentials(self):
+        for profile, key in ((REAL_AMT, "AMT_API_LOGIN"), (REAL_AMT, "AMT_API_PASSWORD"), (REAL_AMT, "SENDER_GE_API_KEY"),
+                             (REAL_SMS, "SENDER_GE_API_KEY")):
+            with self.subTest(key=key):
+                self.assert_refused(self.run_stage("check", profile=profile, **{key: ""}), f"{key} must be set for this provider")
+
+    def test_a_refusal_never_prints_a_credential(self):
+        result = self.run_stage("check", profile=REAL_AMT, AMT_API_PASSWORD="pw-should-not-appear", DB_NAME="lion_parts")
+        self.assert_refused(result, "DB_NAME")
+        self.assertNotIn("pw-should-not-appear", result.stdout + result.stderr)
 
     def test_any_other_database_role_is_refused(self):
         for role in ("lion_parts", "lion_parts_dev", "postgres", "lp_stage2", "LP_STAGE", ""):
@@ -121,23 +164,72 @@ class StageScriptTests(SimpleTestCase):
 
 
 class TargetProofTests(SimpleTestCase):
-    @staticmethod
-    def staging(**database):
-        db = {"NAME": "lp_stage_v1", "USER": "lp_stage", "HOST": "127.0.0.1", "PORT": "5432", **database}
-        return SimpleNamespace(DATABASES={"default": db}, **verify_target().SETTINGS)
+    DEMO = {"PARTS_PROVIDER": "demo", "SENDER_GE_ENABLED": False, "SMS_DEMO_MODE": True, "ENABLE_DEMO_ENDPOINTS": True,
+            "AMT_API_LOGIN": "", "AMT_API_PASSWORD": "", "SENDER_GE_API_KEY": "", "AMT_TIMEOUT_SECONDS": 15,
+            "AMT_LOOKUP_BUDGET_SECONDS": 30}
+    REAL_AMT = {**DEMO, "PARTS_PROVIDER": "amt", "SENDER_GE_ENABLED": True, "SMS_DEMO_MODE": False, "ENABLE_DEMO_ENDPOINTS": False,
+                "AMT_API_LOGIN": "secret-login", "AMT_API_PASSWORD": "secret-pass", "SENDER_GE_API_KEY": "secret-key"}
 
-    def test_the_right_settings_pass(self):
-        self.assertEqual(verify_target().settings_problems(self.staging(), *TARGET), {})
+    @classmethod
+    def staging(cls, profile=None, **changes):
+        database = {key: changes.pop(key) for key in ("NAME", "USER", "HOST", "PORT") if key in changes}
+        db = {"NAME": "lp_stage_v1", "USER": "lp_stage", "HOST": "127.0.0.1", "PORT": "5432", **database}
+        return SimpleNamespace(DATABASES={"default": db}, **{**verify_target().SETTINGS, **(profile or cls.DEMO), **changes})
+
+    def problems(self, profile=None, **changes):
+        return verify_target().settings_problems(self.staging(profile, **changes), *TARGET)
+
+    def test_the_approved_profiles_pass(self):
+        real_sms = {**self.REAL_AMT, "PARTS_PROVIDER": "demo", "AMT_API_LOGIN": "", "AMT_API_PASSWORD": ""}
+        for profile in (self.DEMO, real_sms, self.REAL_AMT, {**self.REAL_AMT, "AMT_TIMEOUT_SECONDS": 5, "AMT_LOOKUP_BUDGET_SECONDS": 10}):
+            with self.subTest(profile=profile["PARTS_PROVIDER"]):
+                self.assertEqual(self.problems(profile), {})
 
     def test_the_effective_database_settings_must_match_exactly(self):
         for key, value in (("NAME", "lion_parts"), ("USER", "postgres"), ("HOST", "localhost"), ("HOST", "10.0.0.5"), ("PORT", "5433")):
             with self.subTest(key=key, value=value):
-                self.assertEqual(verify_target().settings_problems(self.staging(**{key: value}), *TARGET), {key: value})
+                self.assertEqual(self.problems(**{key: value}), {key: value})
+                self.assertEqual(self.problems(self.REAL_AMT, **{key: value}), {key: value})
 
     def test_other_effective_settings_are_still_checked(self):
-        staging = self.staging()
-        staging.PARTS_PROVIDER = "amt"
-        self.assertEqual(verify_target().settings_problems(staging, *TARGET), {"PARTS_PROVIDER": "amt"})
+        for key, value in (("DEPLOY_ENV", "production"), ("DEBUG", True), ("PAYMENT_PROVIDER", "flitt"), ("AMT_VERIFY_SSL", False),
+                           ("AMT_ENDPOINT", "http://127.0.0.1:9000/"), ("SENDER_GE_SEND_URL", "https://sender.example/send")):
+            with self.subTest(key=key):
+                self.assertEqual(self.problems(self.REAL_AMT, **{key: value}), {key: value})
+
+    def test_an_unapproved_profile_is_refused(self):
+        for parts, sms in (("amt", False), ("AMT", True), ("other", True), ("demo", "True")):
+            with self.subTest(parts=parts, sms=sms):
+                self.assertIn("PARTS_PROVIDER/SENDER_GE_ENABLED", self.problems(self.REAL_AMT, PARTS_PROVIDER=parts, SENDER_GE_ENABLED=sms))
+
+    def test_demo_tools_are_refused_beside_a_real_provider(self):
+        for key in ("SMS_DEMO_MODE", "ENABLE_DEMO_ENDPOINTS"):
+            with self.subTest(key=key):
+                self.assertEqual(self.problems(self.REAL_AMT, **{key: True}), {key: True})
+
+    def test_credentials_only_beside_their_provider_and_never_by_value(self):
+        self.assertEqual(self.problems(self.REAL_AMT, AMT_API_PASSWORD=""), {"AMT_API_PASSWORD set": False})
+        self.assertEqual(self.problems(self.REAL_AMT, SENDER_GE_API_KEY=""), {"SENDER_GE_API_KEY set": False})
+        self.assertEqual(self.problems(AMT_API_LOGIN="secret-login"), {"AMT_API_LOGIN set": True})
+        self.assertEqual(self.problems(SENDER_GE_API_KEY="secret-key"), {"SENDER_GE_API_KEY set": True})
+        wrong = self.problems(self.REAL_AMT, PARTS_PROVIDER="demo", DEBUG=True)
+        self.assertNotRegex(repr(wrong), "secret-")
+
+    def test_the_amt_lookup_stays_within_the_timeout_and_budget(self):
+        for timeout, budget in ((16, 30), (15, 31), (0, 30), (20, 10), (-1, 5)):
+            with self.subTest(timeout=timeout, budget=budget):
+                self.assertEqual(self.problems(self.REAL_AMT, AMT_TIMEOUT_SECONDS=timeout, AMT_LOOKUP_BUDGET_SECONDS=budget),
+                                 {"AMT_TIMEOUT_SECONDS/AMT_LOOKUP_BUDGET_SECONDS": (timeout, budget)})
+
+    def test_the_real_settings_module_passes_with_the_real_amt_profile(self):
+        # The defaults settings.py gives an approved .env (endpoints, TLS, timeouts) must satisfy the proof.
+        env = {key: value for key, value in REAL_AMT.items()}
+        env |= {"SECRET_KEY": "x" * 60, "ALLOWED_HOSTS": "test2.lionparts.ge", "AMT_ENDPOINT": None, "AMT_VERIFY_SSL": None,
+                "AMT_TIMEOUT_SECONDS": None, "AMT_LOOKUP_BUDGET_SECONDS": None, "SENDER_GE_SEND_URL": None}
+        code = (f"import importlib.util, config.settings as s; spec = importlib.util.spec_from_file_location('v', {str(KIT / 'verify_target.py')!r}); "
+                f"m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); print(m.settings_problems(s, *{TARGET!r}))")
+        result = run_python(code, env)
+        self.assertEqual(result.stdout.strip(), "{}", result.stderr)
 
     def test_the_right_connection_passes(self):
         row = ("lp_stage_v1", "lp_stage", "lp_stage", "127.0.0.1", 5432, "off")

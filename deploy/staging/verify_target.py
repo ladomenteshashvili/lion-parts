@@ -7,19 +7,36 @@ from backend/, with .env loaded, and exits non-zero on any difference:
 import os
 import sys
 
-SETTINGS = {"DEPLOY_ENV": "staging", "DEBUG": False, "PARTS_PROVIDER": "demo", "PAYMENT_PROVIDER": "fake",
-            "SENDER_GE_ENABLED": False, "SMS_DEMO_MODE": True}
+SETTINGS = {"DEPLOY_ENV": "staging", "DEBUG": False, "PAYMENT_PROVIDER": "fake", "AMT_VERIFY_SSL": True,
+            "AMT_ENDPOINT": "https://automototrade.com/wsdl/server.php", "SENDER_GE_SEND_URL": "https://sender.ge/api/send.php"}
+# (PARTS_PROVIDER, SENDER_GE_ENABLED) -> SMS_DEMO_MODE and ENABLE_DEMO_ENDPOINTS. Any other pair is refused: stage.sh load_target.
+PROFILES = {("demo", False): True, ("demo", True): False, ("amt", True): False}
+# The longest single AMT lookup gunicorn (timeout 60) should ever wait for: the settings defaults.
+MAX_AMT_TIMEOUT, MAX_AMT_BUDGET = 15, 30
 # host() is NULL over a Unix socket, which is then refused: the approved target is the TCP address.
 IDENTITY_SQL = ("SELECT current_database(), current_user, session_user, host(inet_server_addr()), inet_server_port(), "
                 "current_setting('is_superuser')")
 
 
 def settings_problems(settings, database, role, host, port):
+    """-> {name: wrong value}. Credentials are reported only as set or not, never by value."""
     db = settings.DATABASES["default"]
-    expected = {**SETTINGS, "NAME": database, "USER": role, "HOST": host, "PORT": str(port)}
-    actual = {**{name: getattr(settings, name, None) for name in SETTINGS},
+    pair = (settings.PARTS_PROVIDER, settings.SENDER_GE_ENABLED)
+    demo_tools = PROFILES.get(pair)
+    expected = {**SETTINGS, "SMS_DEMO_MODE": demo_tools, "ENABLE_DEMO_ENDPOINTS": demo_tools,
+                **dict.fromkeys(("AMT_API_LOGIN set", "AMT_API_PASSWORD set"), pair[0] == "amt"), "SENDER_GE_API_KEY set": pair[1] is True,
+                "NAME": database, "USER": role, "HOST": host, "PORT": str(port)}
+    actual = {**{name: getattr(settings, name, None) for name in (*SETTINGS, "SMS_DEMO_MODE", "ENABLE_DEMO_ENDPOINTS")},
+              "AMT_API_LOGIN set": bool(settings.AMT_API_LOGIN), "AMT_API_PASSWORD set": bool(settings.AMT_API_PASSWORD),
+              "SENDER_GE_API_KEY set": bool(settings.SENDER_GE_API_KEY),
               "NAME": db["NAME"], "USER": db["USER"], "HOST": db["HOST"], "PORT": str(db["PORT"])}
-    return {name: value for name, value in actual.items() if value != expected[name]}
+    wrong = {name: value for name, value in actual.items() if value != expected[name]}
+    if demo_tools is None:
+        wrong["PARTS_PROVIDER/SENDER_GE_ENABLED"] = pair
+    timeout, budget = settings.AMT_TIMEOUT_SECONDS, settings.AMT_LOOKUP_BUDGET_SECONDS
+    if not 0 < timeout <= MAX_AMT_TIMEOUT or not timeout <= budget <= MAX_AMT_BUDGET:
+        wrong["AMT_TIMEOUT_SECONDS/AMT_LOOKUP_BUDGET_SECONDS"] = (timeout, budget)
+    return wrong
 
 
 def connection_problems(row, database, role, host, port):

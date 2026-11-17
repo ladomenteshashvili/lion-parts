@@ -24,6 +24,7 @@ die() { echo "REFUSED: $*" >&2; exit 2; }
 say() { echo "== $*"; }
 want() { [[ "${!1:-}" == "$2" ]] || die "$1 must be '$2' in $ENV_FILE"; }
 empty() { [[ -z "${!1:-}" ]] || die "$1 must be empty on staging"; }
+filled() { [[ -n "${!1:-}" ]] || die "$1 must be set for this provider"; }
 
 load_target() {
     [[ "$(id -un)" == "$STAGE_USER" ]] || die "run as $STAGE_USER, not $(id -un)"
@@ -32,12 +33,20 @@ load_target() {
     [[ "$(stat -c %a "$ENV_FILE")" == 600 ]] || die "$ENV_FILE must have mode 600"
     [[ "$(stat -c %U "$ENV_FILE")" == "$STAGE_USER" ]] || die "$ENV_FILE must belong to $STAGE_USER"
     set -a; . "$ENV_FILE"; set +a
-    want DEPLOY_ENV staging; want DEBUG False; want PARTS_PROVIDER demo; want PAYMENT_PROVIDER fake
-    want SMS_DEMO_MODE True; want SENDER_GE_ENABLED False; want ENABLE_DEMO_ENDPOINTS True
+    want DEPLOY_ENV staging; want DEBUG False; want PAYMENT_PROVIDER fake
+    # The approved profiles, and nothing else: verify_target.py PROFILES. Demo tools only when nothing real is called.
+    case "${PARTS_PROVIDER:-}/${SENDER_GE_ENABLED:-}" in
+        demo/False) want SMS_DEMO_MODE True; want ENABLE_DEMO_ENDPOINTS True ;;
+        demo/True|amt/True) want SMS_DEMO_MODE False; want ENABLE_DEMO_ENDPOINTS False ;;
+        *) die "PARTS_PROVIDER/SENDER_GE_ENABLED must be demo/False, demo/True or amt/True" ;;
+    esac
     want DB_NAME "$EXPECTED_DB"
     want DB_USER "$EXPECTED_ROLE"; want DB_HOST "$EXPECTED_DB_HOST"; want DB_PORT "$EXPECTED_DB_PORT"
     want EMAIL_HOST 127.0.0.1
-    for name in AMT_API_LOGIN AMT_API_PASSWORD SENDER_GE_API_KEY FLITT_MERCHANT_ID FLITT_SECRET_KEY EMAIL_HOST_PASSWORD; do
+    # A credential only beside the switch that uses it; payments and outgoing mail never get one here.
+    if [[ "$PARTS_PROVIDER" == amt ]]; then filled AMT_API_LOGIN; filled AMT_API_PASSWORD; else empty AMT_API_LOGIN; empty AMT_API_PASSWORD; fi
+    if [[ "$SENDER_GE_ENABLED" == True ]]; then filled SENDER_GE_API_KEY; else empty SENDER_GE_API_KEY; fi
+    for name in FLITT_MERCHANT_ID FLITT_SECRET_KEY EMAIL_HOST_PASSWORD; do
         empty "$name"
     done
     [[ -n "${SECRET_KEY:-}" ]] || die "SECRET_KEY is empty"
