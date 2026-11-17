@@ -18,7 +18,7 @@ owner's approval. Section 10 says what has been rehearsed and what has not.
 | Backups | `/home/lionparts-stage/backups`, mode 700 |
 | nginx logs | `/var/log/nginx/lionparts-stage-{access,error}.log` |
 | Admin superusers | exactly two, staging only (section 3) |
-| Behaviour | `DEPLOY_ENV=staging`, `DEBUG=False`, `PARTS_PROVIDER=demo`, `PAYMENT_PROVIDER=fake`, `SMS_DEMO_MODE=True`, `SENDER_GE_ENABLED=False`, `ENABLE_DEMO_ENDPOINTS=True` |
+| Behaviour | `DEPLOY_ENV=staging`, `DEBUG=False`, `PAYMENT_PROVIDER=fake` always, plus one of the provider profiles in [section 11](#11-provider-profiles-and-real-amt) |
 
 Before starting, check the host for conflicts with `deploy/staging/provision.sh`, which changes nothing without `--apply`. Do
 not reuse an existing nginx site, service, role or database. `scripts/deploy-staging.sh` is the disabled legacy script: never use it.
@@ -90,10 +90,12 @@ If only the last step failed (`systemctl daemon-reload`) and everything else is 
 7. Optional: in the admin, set notification channels to `email` to see notification emails in Mailpit. **All channels are seeded as
    `none`**, so without this only the account emails (verification, password reset, email change) are sent.
 
-Every `stage.sh` command first refuses any other Linux user, a readable `.env`, any non-demo setting, any real credential, and any
-database other than exactly `lp_stage_v1`, role `lp_stage`, at `127.0.0.1:5432`. The others then prove the target before changing
+Every `stage.sh` command first refuses any other Linux user, a readable `.env`, any setting outside the approved profiles of section 11,
+a credential for a provider that is switched off, any payment or mail credential, and any database other than exactly `lp_stage_v1`, role `lp_stage`, at `127.0.0.1:5432`. The others then prove the target before changing
 anything, by comparing Django's loaded settings and what the server reports for the live connection: database, current and session
-user, address and port, and that the role is not a superuser. `deploy` and `rollback` update the code first, because the proof runs on
+user, address and port, and that the role is not a superuser. The proof also checks the effective provider settings: the approved profile, credentials
+beside their provider only (reported as set or not, never by value), the official AMT and Sender.ge endpoints, AMT TLS
+verification, and an AMT timeout of at most 15 s inside a lookup budget of at most 30 s. `deploy` and `rollback` update the code first, because the proof runs on
 that code, and prove the target before any migration. These values cannot be overridden: moving the database needs a reviewed
 change to `stage.sh` and this runbook. `check --deploy` should report only `security.W005` and `security.W021`, the two HSTS owner
 decisions; anything else stops the script.
@@ -213,7 +215,8 @@ UAT_STAFF_EMAIL="$UAT_STAFF_EMAIL" UAT_STAFF_PASSWORD="$UAT_STAFF_PASSWORD" venv
   --base-url https://<host> --origin https://<frontend origin> --mailpit http://127.0.0.1:8025 --transcript /tmp/uat.json
 ```
 
-Use one of the two superusers from section 3, by its holder. It refuses any target without the demo routes. The rate limits apply to it: a full run uses about 6 registrations of the 10 allowed
+Use one of the two superusers from section 3, by its holder. It refuses any target without the demo routes, so it runs only
+on the demo profile of section 11, never with real SMS or real AMT. The rate limits apply to it: a full run uses about 6 registrations of the 10 allowed
 per IP per hour. Scenario lists and the bounded load tests are in `docs/uat-matrix.md`. To repeat within the hour, on this database only:
 `psql -d lp_stage_v1 -c 'DELETE FROM cache_table'`.
 
@@ -281,3 +284,54 @@ The isolation and path checks were rehearsed the same way on a disposable cluste
 **Not rehearsed:** `provision.sh --apply` as real root (a test runs its failure path with stand-ins only), the cleanup in section 2, the permission check
 as a real nginx user, the systemd units, the real Mailpit (the runner's two API calls ran against a stand-in, so check them first), a real certificate,
 DNS, `rollback`, and the crontab. Treat each as untested until staging exists.
+
+## 11. Provider profiles and real AMT
+
+`stage.sh` and `verify_target.py` accept exactly these profiles. Payments are fake in all three; any other combination is refused.
+
+| Profile | `PARTS_PROVIDER` | `SENDER_GE_ENABLED` | `SMS_DEMO_MODE`, `ENABLE_DEMO_ENDPOINTS` | Credentials that must be set | Must be empty |
+|---|---|---|---|---|---|
+| Demo, as provisioned | `demo` | `False` | `True` | none | AMT, Sender.ge, Flitt, mail |
+| Real SMS | `demo` | `True` | `False` | `SENDER_GE_API_KEY` | AMT, Flitt, mail |
+| Real SMS and real AMT | `amt` | `True` | `False` | `SENDER_GE_API_KEY`, `AMT_API_LOGIN`, `AMT_API_PASSWORD` | Flitt, mail |
+
+With real AMT, leave `AMT_ENDPOINT`, `AMT_VERIFY_SSL` and `SENDER_GE_SEND_URL` out of `.env` so the official defaults apply, and keep
+`AMT_TIMEOUT_SECONDS` at most 15 and `AMT_LOOKUP_BUDGET_SECONDS` at most 30 (the defaults). A lookup that runs out answers
+`supplier_unavailable` and logs `AMT lookup stopped`. Real AMT means every search on staging sends a real supplier request.
+
+### Enable real AMT (owner, as `lionparts-stage`)
+
+Prerequisite: the change that adds these profiles is merged, and `<new-ref>` is its commit. Only `lionparts-stage.service` is
+restarted; the legacy application, its service, site and database are not touched. Edit `.env` with an editor, never with `echo`,
+so no credential reaches the shell history.
+
+```bash
+cd ~/lion-parts
+git rev-parse HEAD                                   # note it as <old-ref>
+git fetch --tags origin
+git diff --stat <old-ref> <new-ref> -- backend ':!backend/*/tests' ':!backend/*/test_*'   # expect no application change
+git checkout --detach <new-ref>                      # the old stage.sh refuses real SMS, so take the new kit first
+deploy/staging/stage.sh check                        # the current real SMS profile must pass unchanged
+deploy/staging/stage.sh backup                       # note the dump path
+install -m 600 backend/.env ~/backups/env-before-amt # the rollback copy, outside the checkout
+${EDITOR:-nano} backend/.env                         # PARTS_PROVIDER=amt, AMT_API_LOGIN=..., AMT_API_PASSWORD=...
+deploy/staging/stage.sh check                        # must say "target verified"; on REFUSED, roll back below
+```
+
+Then, as the owner: `systemctl restart lionparts-stage`, and as `lionparts-stage`: `deploy/staging/stage.sh health`. Run one part
+search through `test2.lionparts.ge` or `test3.lionparts.ge` and watch `journalctl -u lionparts-stage -f` for `AMT lookup stopped`.
+
+If the diff in the third command lists application code, use `deploy/staging/stage.sh deploy <new-ref>` instead of the plain checkout:
+it also installs dependencies, migrates and collects static files.
+
+### Roll back to demo parts
+
+```bash
+cd ~/lion-parts
+install -m 600 ~/backups/env-before-amt backend/.env  # PARTS_PROVIDER=demo, AMT credentials empty
+deploy/staging/stage.sh check
+```
+
+Then, as the owner: `systemctl restart lionparts-stage`, and `deploy/staging/stage.sh health`. The database needs no restore: the
+switch changes no schema. To return the code too, use `git checkout --detach <old-ref>` and restart, not `stage.sh rollback`:
+the old kit refuses the real SMS profile. Delete `~/backups/env-before-amt` once it is no longer needed; it holds the Sender.ge key.
