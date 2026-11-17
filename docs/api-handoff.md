@@ -356,7 +356,12 @@ the answer is `429`, not success.
 
 ## 11. Integration requirements and known limitations
 
-**Demo behaviour (staging only).**
+**Staging at `test2.lionparts.ge` and `test3.lionparts.ge`.** It runs real Sender.ge SMS and the real AMT supplier with fake
+payments, and the demo routes are off: there is no `demo_code`, no `/api/demo/...`, and no fake payment completion route
+(`docs/staging-runbook.md` §11, §12). Use a phone that can receive the SMS, expect real supplier answers and real prices, and
+pay test orders by invoice. The points below describe the demo profile, used for local and automated tests.
+
+**Demo behaviour (demo profile only).**
 
 - **OTP:** `demo_code` appears in the answers of `register`, `resend-code` and `profile/phone` when `SMS_DEMO_MODE` is on. Production never has it: do not build a
   screen that depends on it. No SMS is sent. Limits still apply: 60 s between codes, 5 attempts per code, 5 minutes' validity.

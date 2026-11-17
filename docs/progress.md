@@ -138,9 +138,11 @@ Final QA (LPK-191 to LPK-194):
 - Disposable PostgreSQL 18 with plain `config.settings`: 1,096 ran, 1,096 passed, 0 skipped. SQLite (`config.e2e_settings`): 1,096 ran, 1,031 passed, 0 failed, 65 skipped (PostgreSQL-only). GitHub CI (PostgreSQL 16) has not run on this branch.
 - Tests that ran against the previous code first: parallel throttle and OTP requests went over their limits, and supplier and rate calls ran inside transactions. The same tests pass now.
 
-### Staging readiness and hardening (not merged)
+### Staging readiness and hardening
 
-Branch `feature/staging-readiness-hardening`, from `main` at `7ab99b59`. Implemented and tested locally; owner review, GitHub CI and merge are still to come. Nothing was deployed or provisioned.
+Merged to `main` through PR #79 (`a10f0a1`). PR #80 (`b8e2ede`) then let the staging kit accept the approved real SMS and real AMT
+profiles, payments always fake (`docs/staging-runbook.md` §11). The owner has provisioned the staging behind `test2.lionparts.ge` and
+`test3.lionparts.ge`; what is verified on the server is in `docs/staging-runbook.md` §12.
 
 | Jira | Work | Evidence |
 |---|---|---|
@@ -157,3 +159,63 @@ Branch `feature/staging-readiness-hardening`, from `main` at `7ab99b59`. Impleme
 ### Follow-up recommendations (not approved, not built)
 
 - Controlled demo-only resolution of `unknown` fake payments, so abandoned test payments need no fresh order. It changes the demo endpoint contract, so it needs separate approval and contract documentation.
+
+### QA and hardening batch 1 (2026-11-17, not merged)
+
+Branch `feature/old-backlog-qa-hardening` from `main` at `b8e2ede` (PR #80).
+
+- LPK-220: AMT requests no longer follow redirects, answers over 5 MB stop the lookup, and XML nested too deeply is a `502`,
+  not a `500`. LPK-222: Sender.ge requests no longer follow redirects. Evidence: `parts/test_amt_budget.py`,
+  `accounts/test_otp.py`; every new test fails on the previous code.
+- LPK-220 audit, no further gap found: the lookup budget bounds the 36 request variants and each wait; a timeout or bad answer
+  is `502 supplier_unavailable`, never `not_found` (the supplier's own `NO_PART_FOUND` row is); supplier and NBG calls run
+  outside transactions, and stale answers are dropped (`api/tests/test_external_calls.py`, `cart/test_refresh.py`). Every
+  PostgreSQL-only skip depends on `connection.vendor`, and `settings.py` fixes the PostgreSQL engine, so CI runs them all.
+- Checks: `manage.py check` clean; `makemigrations --check --dry-run` no changes; ka and ru compile; `check --deploy` with
+  staging values shows only W005 and W021.
+- Disposable PostgreSQL 18, plain `config.settings` (CI variables): `main` 1,211 ran, 1,210 passed, 1 skipped; this branch
+  1,216 ran, 1,215 passed, 1 skipped. The skip is the provisioning test, which refuses to run on a host with a real staging and
+  runs in CI. SQLite (`config.e2e_settings`): 1,216 ran, 1,143 passed, 0 failed, 73 skipped (PostgreSQL-only). GitHub CI has
+  not run on this branch.
+- Staging documentation now describes the live staging; `docs/staging-runbook.md` §12 lists which operational items are
+  verified on the server and which are not.
+
+### Backlog reconciliation (2026-11-17)
+
+Jira could not be read in this session, so each row rests on repository evidence and earlier owner briefs. Keys without
+either are not assessed and not guessed. Recommendations only: no Jira status was changed.
+
+| Jira | Work | State in the code | Remaining | Recommendation |
+|---|---|---|---|---|
+| LPK-173 | | Done in Jira | | leave Done |
+| LPK-174, 177, 190, 196–199 (titles unknown), 229–236 | not recorded here | not assessed | read the Jira acceptance criteria | owner to classify |
+| LPK-175 (Epic) | release evidence, parent of LPK-191 to 194 | children below | B1 to B7 stay open | keep open |
+| LPK-176 (Epic) | staging operations, parent of LPK-200 | kit merged (#79, #80) | `docs/staging-runbook.md` §12 items | keep open |
+| LPK-178 (Epic) | payment lifecycle | LPK-219 S0 to S3 merged (#67 to #69) | S4, S5 not approved; B1, B5 | keep open |
+| LPK-179 to 182 | FIX-01 to FIX-03 | merged (#66), CI passed | none in the code | Done |
+| LPK-183 | FIX-04, gthread and persistent connections | merged (#66) | staging load test | awaiting QA |
+| LPK-184 | Reply-To | merged (#70) | choose the mailbox | blocked by owner decision |
+| LPK-185 | translated footers | merged (#70) | native-speaker sign-off (B3) | awaiting QA |
+| LPK-186 | Dependabot | merged (#70) and active | none | Done |
+| LPK-187 | CSP report-only | merged (#70) | browser review before enforcing | awaiting QA |
+| LPK-188, 189 | Admin 2FA | not built | owner approval | blocked by owner decision |
+| LPK-191 to 193 | checks, regression, negative matrix | evidence above and in this batch | none | Done |
+| LPK-194 | documentation and review preparation | updated in this batch | owner review of this PR | Done once this PR is merged |
+| LPK-195 | staging kit | merged (#79, #80), provisioned by the owner | none known | Done after the owner confirms the Jira criteria |
+| LPK-200 | staging backup, restore, monitoring | kit and runbook merged | scheduled backup, off-host copy, restore test, monitoring (§12) | awaiting QA, owner checks |
+| LPK-201 to 205 | UAT suite and load runners | merged (#79) | real runs on staging; `uat.run_http` needs the demo routes, which the real SMS profile turns off | awaiting QA |
+| LPK-206 | API handoff | merged; staging section updated in this batch | none | Done after review |
+| LPK-207 | Figma gap list | blocked when written | judge the 13 items | owner to re-run with Jira access |
+| LPK-219 | payment lifecycle | S0 to S3 merged | S4, S5 not approved | blocked by owner decision |
+| LPK-220 | AMT budget, calls outside locks | merged (#70, #79); redirect, size and nesting fixes in this batch | B7 staging measurement | awaiting QA |
+| LPK-221 | atomic throttling | merged (#70, #79) | staging load test | awaiting QA |
+| LPK-222 | atomic OTP cooldown | merged; redirect fix in this batch | none | Done once this PR is merged |
+| LPK-223 to 227 | React integration with the API | backend done; frontend on a local branch, not pushed | frontend review, nginx site root (LPK-225) | frontend owner |
+| LPK-228 | two staging superusers | runbook procedure merged | creating them is an owner action | awaiting owner |
+| LPK-237 to 242 | Parts Master Registry | not started, by instruction | | future batch |
+
+**Parts Master Registry (LPK-237 to 242), dependencies only.** Search results live in `PartSearchLog.normalized_response`,
+and cart lines copy their price snapshot from it (`cart/services.py`); a persistent part identity has to keep that snapshot
+contract, or cart and order prices change. Supplier weights arrive per row in `parts/providers.py` (`weight_kg`), and the
+operator weight path is `PartQuoteRequest.prepared_weight_kg`, so a weight source field fits there. Supplier price history
+can be recorded from `run_search` after the lookup, outside any transaction, as LPK-220 requires.

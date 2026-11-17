@@ -61,7 +61,7 @@ SSL redirect, HSTS one year, `X-Frame-Options: DENY`, nosniff, `Referrer-Policy:
 | B4 | **Operations items** in `docs/operations.md` (access-log masking, `NUM_PROXIES`, cron jobs, backups, HSTS policy) and **disabling any old copy of `scripts/deploy-staging.sh` on the legacy server** (the repository copy is disabled since M6; old checkouts on a server are not). | Done by an authorized operator; not verified here. |
 | B5 | **Payment lifecycle review (Jira LPK-219, Epic LPK-178).** Provider-side session handling is unverified. | Resolve LPK-219 before real card payments are enabled. |
 | B6 | **Django Admin exposure (LPK-182).** | The Django Admin must not be publicly exposed without an approved nginx IP/VPN allow-list and additional nginx rate limiting (`docs/operations.md` §5). Admin 2FA is a separate pending task (LPK-188/LPK-189). |
-| B7 | **`gthread` with real AMT (Jira LPK-220).** The code limit is implemented and tested with fakes. | No `gthread` with real AMT until it has passed an isolated staging test with AMT (`docs/operations.md` §4). |
+| B7 | **`gthread` with real AMT (Jira LPK-220).** The code limit is implemented and tested with fakes. The isolated staging now runs real AMT (PR #80 profiles); that is the staging test, and its results are not recorded yet. | A recorded staging measurement (thread use, `AMT lookup stopped` count, memory) before `gthread` with real AMT anywhere else (`docs/operations.md` §4, `docs/staging-runbook.md` §12). |
 
 ## 5. Post-review changes (LPK-172)
 
@@ -87,14 +87,21 @@ Merged to `main` through PR #66.
 | LPK-222 | OTP | Parallel sends produce one SMS. Nothing is held open during the provider call. An uncertain delivery keeps the cooldown. | `accounts/test_otp.py`, `accounts/test_register.py` |
 | LPK-220 | Supplier and rate calls | Overall AMT lookup limit. Supplier and NBG calls run outside transactions; stale answers are dropped. | `parts/test_amt_budget.py`, `api/tests/test_external_calls.py`, `cart/test_refresh.py`, `parts/test_admin.py` |
 
-**Staging readiness and hardening (branch `feature/staging-readiness-hardening`). Implemented and tested locally; not yet reviewed, merged or run in GitHub CI:**
+**Staging readiness and hardening, merged through PR #79 (`a10f0a1`):**
 
 | Jira | Area | What changed | Evidence |
 |---|---|---|---|
 | LPK-222 | OTP | An expired claim row can no longer let parallel requests send extra SMS. An SMS answer whose meaning is unconfirmed keeps the cooldown. | `accounts/test_otp.py` |
 | LPK-220 | Supplier and rate calls | The lookup limit now holds against a slow body on a real socket; the earlier test had faked the read. Reads under a cart lock never call NBG. Unexpected supplier or NBG answers are handled as outages. | `parts/test_amt_budget.py`, `api/tests/test_external_calls.py`, `pricing/tests/test_rates.py` |
 | LPK-187 | Browser policy | Report-only stays. A test reads the admin pages and the invoice for what the policy forbids and finds nothing. | `api/tests/test_csp_coverage.py` |
-| LPK-195 to 200 | Staging | Scripts refuse every target except the isolated staging, and every real credential. Not applied to any host. | `api/tests/test_staging_kit.py`, `docs/staging-runbook.md` |
+| LPK-195 to 200 | Staging | Scripts refuse every target except the isolated staging. Since PR #80 (`b8e2ede`) they accept exactly three provider profiles, always with fake payments, and allow a credential only beside the provider that uses it. The owner has provisioned the staging. | `api/tests/test_staging_kit.py`, `docs/staging-runbook.md` §11 |
+
+**QA and hardening batch 1 (branch `feature/old-backlog-qa-hardening`, not merged):**
+
+| Jira | Area | What changed | Evidence |
+|---|---|---|---|
+| LPK-220 | Supplier calls | AMT requests no longer follow redirects, so the request body, which carries the supplier login, is never sent to another address, and no redirect hop gets a fresh timeout outside the budget. A redirect or an answer over 5 MB stops the lookup at once; XML nested too deeply for the row search is a supplier failure (`502`), not a server error. | `parts/test_amt_budget.py` (`RedirectTests` on a real socket, `SupplierAnswerTests`) |
+| LPK-222 | SMS | Sender.ge requests no longer follow redirects, so the API key is never re-sent elsewhere; a redirect is a definite failure (nothing was sent). | `accounts/test_otp.py::DeliveryOutcomeTests` |
 
 **Deployment requirements:**
 
@@ -113,7 +120,7 @@ Merged to `main` through PR #66.
 
 ## 6. Known limitations
 
-- **Supplier calls and capacity.** Supplier calls hold request threads while they run, so slow calls reduce capacity. Staging stays on the demo supplier until real AMT has a measured thread budget (B7).
+- **Supplier calls and capacity.** Supplier calls hold request threads while they run, so slow calls reduce capacity. The isolated staging runs real AMT; its thread budget is not measured yet (B7).
 - **Rate limits and the database cache.** Limits depend on the database cache, so watch it as described in `docs/operations.md` and `docs/staging-runbook.md`. A failed cache answers `429`.
 - **OTP sends.** The per-phone and per-IP limits bound the sends.
 - **Rate reads under locks.** If the rate expires in the instant before a cart lock, the request answers `502 rate_unavailable` once.
