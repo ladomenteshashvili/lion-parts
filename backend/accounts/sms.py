@@ -47,6 +47,7 @@ def send_sms(destination, content):
             settings.SENDER_GE_SEND_URL,
             data=payload,
             timeout=15,
+            allow_redirects=False,  # a redirect would re-send the API key elsewhere; a 3xx sent nothing, so it is definite
         )
     except requests.RequestException as exc:
         raise SenderGeDeliveryUnknown("Sender.ge request failed") from exc

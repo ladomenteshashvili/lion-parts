@@ -1,8 +1,10 @@
 # Isolated staging runbook (LPK-195 to LPK-200)
 
-A staging that shares nothing with any existing application, database or site on the host. Everything here is prepared in
-`deploy/staging/` and **has not been applied to any host**. Provisioning, starting services, nginx, DNS and TLS all need the
-owner's approval. Section 10 says what has been rehearsed and what has not.
+A staging that shares nothing with any existing application, database or site on the host. The kit is in `deploy/staging/`.
+The owner has provisioned it as the isolated staging behind `test2.lionparts.ge` and `test3.lionparts.ge`, running the real SMS
+and real AMT profile with fake payments (section 11). Everything on the server is owner-operated: provisioning, services, nginx,
+DNS, TLS, cron and `.env`. Section 10 says what was rehearsed; section 12 says which operational items are verified on the
+server and which are not.
 
 ## 1. Target
 
@@ -241,7 +243,9 @@ per IP per hour. Scenario lists and the bounded load tests are in `docs/uat-matr
 
 ## 9. Scheduled jobs inventory
 
-`deploy/staging/crontab.example`, for `lionparts-stage` only, after approval. Nothing is installed.
+`deploy/staging/crontab.example`, for `lionparts-stage` only, after approval. Whether it is installed is not verified here
+(section 12). Each job appends its output to `~/backups/jobs.log` (mode 700 directory), because the counts it prints are the
+monitoring signal in `docs/operations.md` §6 and §7.
 
 | Job | Schedule (Asia/Tbilisi) | On staging |
 |---|---|---|
@@ -335,3 +339,34 @@ deploy/staging/stage.sh check
 Then, as the owner: `systemctl restart lionparts-stage`, and `deploy/staging/stage.sh health`. The database needs no restore: the
 switch changes no schema. To return the code too, use `git checkout --detach <old-ref>` and restart, not `stage.sh rollback`:
 the old kit refuses the real SMS profile. Delete `~/backups/env-before-amt` once it is no longer needed; it holds the Sender.ge key.
+
+## 12. Operational readiness (LPK-200, Epic LPK-176)
+
+Status of each item on the live staging. "Owner reported" means the owner said it worked; nothing in this repository proves
+it. "Not verified" means nobody has shown it yet. Every check below only reads. Run them as `lionparts-stage` from
+`~/lion-parts` unless the row says root.
+
+| Item | In the kit | On the server | Read-only check |
+|---|---|---|---|
+| Target isolation | `stage.sh` and `verify_target.py` (sections 3, 11) | owner reported: `stage.sh check` passes | `deploy/staging/stage.sh check` |
+| Manual backup | `stage.sh backup` | owner reported: one successful run | `ls -l ~/backups/`, then `pg_restore --list <dump> \| head -5` |
+| Scheduled backup | `crontab.example`, 04:10 | not verified | `crontab -l`, `tail -n 20 ~/backups/backup.log`, `ls -lt ~/backups/*.dump \| head -3` (one dump a day) |
+| Off-host copy | **not in the kit** | not built | none: it needs a destination and encryption decided by the owner (`docs/operations.md` §8) |
+| Restore test | `stage.sh restore-verify <dump>`, into `lp_stage_restore_check` only | not run on the server | not read-only: it replaces `lp_stage_restore_check`, so it needs the owner's approval each time |
+| NBG rate job | `crontab.example` | not verified | `deploy/staging/stage.sh health` (prints the latest rate date), `grep -c 'fetch_nbg' <(crontab -l)` |
+| Fake payment reconciliation | `reconcile_payments`, `reconcile_closed_payments` | not verified | `crontab -l \| grep reconcile`, `tail -n 20 ~/backups/jobs.log` once the new crontab is installed |
+| Session cleanup | `clearsessions` | not verified | `crontab -l \| grep clearsessions` |
+| Cache cleanup | no job needed: the database cache culls itself at `MAX_ENTRIES` | n/a | `deploy/staging/stage.sh health` (cache rows) |
+| Monitoring | checklist in section 8 only; the kit installs no monitor | not verified | `systemctl is-active lionparts-stage lionparts-stage-mailpit`; as root: `journalctl -u lionparts-stage --since -24h \| grep -cE 'AMT lookup stopped\|OTP send outcome unknown\|Throttle'` |
+| Real AMT under `gthread` (B7) | timeout 15 s, budget 30 s, enforced by `verify_target.py` | real AMT is on; no measurement recorded | as root: `systemctl show lionparts-stage -p MemoryMax -p CPUQuotaPerSecUSec`, `systemctl cat lionparts-stage`, and the journal count of `AMT lookup stopped` above |
+| HSTS | Django sends one year, no `includeSubDomains`, no `preload` (W005, W021 owner decisions) | not verified | `curl -sI https://test2.lionparts.ge/api/health/ \| grep -i strict-transport` |
+| Rollback | sections 7 and 11 | `rollback` not rehearsed | none |
+| `.env` protection | mode 600, owner `lionparts-stage` | checked by every `stage.sh` command | `stat -c '%a %U' backend/.env` |
+
+**Fake card payments cannot finish on this profile.** The fake payment page needs `POST /api/payments/fake/<id>/complete/`,
+which is mounted only with `ENABLE_DEMO_ENDPOINTS=True`, and the real SMS profiles require it off (`settings.py` refuses demo
+routes with real SMS). A fake card payment therefore stays `pending`, becomes `unknown` after 30 minutes and then blocks every
+new payment on that order, invoice included. Choose invoice payment from the start for staging orders (an operator
+records it in the admin), or wait for an owner decision on mounting only the
+fake completion route whenever `PAYMENT_PROVIDER=fake` outside production. Never change a payment status by hand
+(`docs/operations.md` §10).

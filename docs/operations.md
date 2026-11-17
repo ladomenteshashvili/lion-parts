@@ -18,8 +18,8 @@ development agent: no environment was provisioned, migrated or changed. Security
 - **B5 – LPK-219, second-payment risk.** Must be resolved before real card payments are enabled.
 - **B6 – Django Admin exposure.** The admin must not be publicly exposed without an approved nginx IP/VPN allow-list
   and additional nginx rate limiting (§5).
-- **B7 – `gthread` with real AMT (LPK-220).** The code limit is in place, but no `gthread` with real AMT until it has passed
-  an isolated staging test with AMT (§4).
+- **B7 – `gthread` with real AMT (LPK-220).** The code limit is in place. The isolated staging runs real AMT; until its
+  measurement is recorded (`docs/staging-runbook.md` §12), no `gthread` with real AMT anywhere else (§4).
 
 > ⚠️ **`scripts/deploy-staging.sh` belongs to the legacy installation and is disabled in this repository.**
 > It checked out `main` (now v1) and ran `migrate` in `/home/lado/lion-parts`, which would apply the v1
@@ -141,8 +141,8 @@ WantedBy=multi-user.target
 
 This is a **starting configuration for isolated staging tests, not a production-ready guarantee or optimum**. It gives
 3 × 8 = up to 24 request-handling threads. It is documentation only: no service configuration has been changed or
-deployed. **Do not run `gthread` with real AMT until the LPK-220 code is merged and it has passed an isolated staging test
-with AMT (B7).**
+deployed. The LPK-220 code is merged, and the isolated staging is the test with real AMT. **Do not run `gthread` with real AMT
+anywhere else until that staging measurement is recorded (B7).**
 
 ### What `--timeout` does with `gthread`
 

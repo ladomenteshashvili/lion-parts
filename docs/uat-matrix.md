@@ -90,12 +90,13 @@ Alongside each run, watch `SELECT count(*), state FROM pg_stat_activity WHERE da
 | Connection limits | any | connections at most workers x threads + 1 | 8 idle, 1 active, during and after |
 | Cache contention | `login`, `otp` | limits exact, no errors | as above |
 
-Supplier calls hold request threads, so staging keeps `PARTS_PROVIDER=demo` until B7, and real AMT needs its own measured thread budget
-(`docs/operations.md` section 4). These numbers come from a rehearsal on a shared host: treat them as behaviour, not as capacity.
+Supplier calls hold request threads, and real AMT needs its own measured thread budget (`docs/operations.md` section 4). The live
+staging now runs real AMT, and `verify_target.py` refuses any `AMT_ENDPOINT` but the official one, so the slow-supplier scenarios run
+only in a rehearsal, never on the live staging. These numbers come from a rehearsal on a shared host: treat them as behaviour, not as capacity.
 
 ## Still missing
 
-- Real HTTP runs on the actual staging, which does not exist yet (needs approval).
+- Real HTTP runs on the actual staging. It now exists, but `uat.run_http` needs the demo routes, which its real SMS profile turns off.
 - A browser: CSP reports, cookies across origins, and the frontend itself. `api/tests/test_csp_coverage.py` only reads the HTML.
 - Real Mailpit, real SMS, real AMT (B7) and any real payment provider (B1, B5).
 - Long-running behaviour: `cache_table` growth and the cron jobs over days.
