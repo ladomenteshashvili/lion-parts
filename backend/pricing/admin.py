@@ -12,8 +12,7 @@ class SiteSettingsAdmin(TranslatedFieldsAdminMixin, admin.ModelAdmin):
     """Singleton: one row, created by the seed migration; it can't be added twice or deleted."""
 
     textarea_i18n_fields = ("invoice_seller_address_i18n", "invoice_bank_details_i18n",
-                            "invoice_payment_due_text_i18n", "invoice_footer_text_i18n", "contact_address_i18n",
-                            "contact_working_hours_i18n")
+                            "invoice_payment_due_text_i18n", "invoice_footer_text_i18n")
     readonly_fields = ("created_at", "updated_at")
     fieldsets = (
         (_("Currency"), {
@@ -34,10 +33,11 @@ class SiteSettingsAdmin(TranslatedFieldsAdminMixin, admin.ModelAdmin):
         (_("Invoice"), {"fields": ("invoice_seller_name_i18n", "invoice_seller_code", "invoice_seller_address_i18n",
                                    "invoice_seller_phone", "invoice_seller_email", "invoice_bank_details_i18n",
                                    "invoice_payment_due_text_i18n", "invoice_footer_text_i18n")}),
-        (_("Contact details"), {
-            "description": _("Shown to customers on the website. Leave a field empty to hide it."),
-            "fields": ("contact_phone", "contact_email", "contact_address_i18n", "contact_working_hours_i18n",
-                       "contact_whatsapp_url"),
+        (_("Contact page"), {
+            "description": _("Shown on the website's contact page; an empty field is hidden. Pickup point addresses and "
+                             "working hours come from Pickup points."),
+            "fields": ("contact_phone", "contact_email", "whatsapp_phone", "viber_phone", "facebook_url",
+                       "instagram_url"),
         }),
         (None, {"fields": ("created_at", "updated_at")}),
     )

@@ -20,7 +20,7 @@ DISTRICT = {"code", "city", "name"}
 META = {"languages", "default_language", "currencies", "default_currency", "base_currency", "multi_currency_enabled",
         "usd_rate", "price_valid_business_days", "pickup_points", "delivery", "otp_length", "otp_resend_seconds",
         "password_rules", "contact"}
-CONTACT = {"phone", "email", "address", "working_hours", "whatsapp_url"}
+CONTACT = {"phone", "email", "whatsapp", "viber", "facebook", "instagram"}
 
 OFFER = {"offer_id", "name", "brand", "condition", "status", "list_unit_price", "discount_unit_amount", "unit_price",
          "currency", "eta_min_days", "eta_max_days", "weight_kg", "weight_source", "requires_weight",

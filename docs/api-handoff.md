@@ -172,7 +172,7 @@ anything owned by another customer is `404`.
 | POST | `/api/profile/email/` → `/api/profile/email/confirm/` (P) | C | `{new_email, current_password}` → `{token}` | `{sent_to, resend_in}` → `{email}` |
 | POST | `/api/profile/phone/` → `/api/profile/phone/verify/` | C | `{phone}` → `{code}` | `{masked_phone, expires_in, resend_in}` → `Customer` |
 | DELETE | `/api/profile/` | C | `{current_password}` | `204` / `409 account_has_open_orders` |
-| GET | `/api/meta/` | P | — | languages, currencies, `multi_currency_enabled`, `default_currency`, `usd_rate`, `price_valid_business_days`, pickup points, cities/districts, OTP and password rules, `contact` (phone, email, address, working hours, WhatsApp link; `""` when unset) |
+| GET | `/api/meta/` | P | — | languages, currencies, `multi_currency_enabled`, `default_currency`, `usd_rate`, `price_valid_business_days`, pickup points, cities/districts, OTP and password rules, `contact` {`phone`, `email`, `whatsapp`, `viber`, `facebook`, `instagram`}: plain strings, the same in every language, `""` when hidden; the frontend builds `tel:`, WhatsApp and Viber links from the numbers |
 
 ### Search, prices, history
 

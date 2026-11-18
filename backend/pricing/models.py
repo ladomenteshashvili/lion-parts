@@ -1,9 +1,10 @@
 """Pricing configuration (G§6.2): site settings (currency mode, VAT, validity), NBG rates, discounts, pickup points."""
 
+import re
 from datetime import date
 
 from django.core.exceptions import ValidationError
-from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
+from django.core.validators import MaxValueValidator, MinValueValidator, URLValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -12,18 +13,20 @@ from accounts.validators import normalize_part_number
 BASE_CURRENCY = "USD"
 
 
-# A display number, landline or mobile: digits with spaces, brackets or dashes, optionally after "+".
-contact_phone_validator = RegexValidator(r"^\+?[0-9(][0-9 ()-]{4,28}[0-9]$",
-                                         _("Enter a phone number: digits, spaces, brackets or dashes, optionally after +."))
+# Contact page numbers (LPK-230): the frontend builds tel:, WhatsApp and Viber links from them, so a "+" and the country
+# code are required.
+PHONE_MESSAGE = _("Enter a phone number like +995 555 12 34 56.")
+PHONE_PATTERN = re.compile(r"^\+[0-9 ()-]{6,20}$")
 
 
-def validate_whatsapp_url(value):
-    """Only a WhatsApp chat link: the site shows it as a button, so it must not lead anywhere else."""
-    from urllib.parse import urlsplit
+def validate_contact_phone(value):
+    """The Jira pattern, plus at least six digits, so that "+------" is not a number."""
+    if not PHONE_PATTERN.fullmatch(value) or sum(c.isdigit() for c in value) < 6:
+        raise ValidationError(PHONE_MESSAGE, code="invalid")
 
-    url = urlsplit(value)
-    if url.scheme != "https" or url.netloc not in ("wa.me", "api.whatsapp.com"):  # netloc: no user, port or other host
-        raise ValidationError(_("Enter a WhatsApp link starting with https://wa.me/ or https://api.whatsapp.com/."))
+
+contact_phone_validators = [validate_contact_phone]
+web_url_validator = URLValidator(schemes=["https", "http"])  # links the site shows: no ftp or other schemes
 
 
 def _is_iso_date(value):
@@ -57,15 +60,17 @@ class SiteSettings(models.Model):
     invoice_bank_details_i18n = models.JSONField(default=dict, blank=True)
     invoice_payment_due_text_i18n = models.JSONField(default=dict, blank=True)
     invoice_footer_text_i18n = models.JSONField(default=dict, blank=True)
-    # Public contact details (LPK-230), published in GET /api/meta/ "contact". Empty means not shown.
-    contact_phone = models.CharField(_("contact phone"), max_length=30, blank=True, validators=[contact_phone_validator],
-                                     help_text=_("As customers should see it, with the country code."))
+    # Contact page (LPK-230), published as-is in GET /api/meta/ "contact". Empty means hidden. Pickup point addresses and
+    # hours stay on PickupPoint; the invoice seller's details are separate and internal.
+    contact_phone = models.CharField(_("contact phone"), max_length=30, blank=True, validators=contact_phone_validators,
+                                     help_text=PHONE_MESSAGE)
     contact_email = models.EmailField(_("contact email"), blank=True)
-    contact_address_i18n = models.JSONField(_("contact address"), default=dict, blank=True)
-    contact_working_hours_i18n = models.JSONField(_("working hours"), default=dict, blank=True,
-                                                  help_text=_("For example: Monday to Friday, 10:00 to 19:00."))
-    contact_whatsapp_url = models.URLField(_("WhatsApp link"), blank=True, validators=[validate_whatsapp_url],
-                                           help_text=_("For example: https://wa.me/ followed by the number."))
+    whatsapp_phone = models.CharField(_("WhatsApp number"), max_length=30, blank=True,
+                                      validators=contact_phone_validators, help_text=PHONE_MESSAGE)
+    viber_phone = models.CharField(_("Viber number"), max_length=30, blank=True, validators=contact_phone_validators,
+                                   help_text=PHONE_MESSAGE)
+    facebook_url = models.URLField(_("Facebook page"), blank=True, validators=[web_url_validator])
+    instagram_url = models.URLField(_("Instagram page"), blank=True, validators=[web_url_validator])
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

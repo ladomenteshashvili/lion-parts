@@ -12,7 +12,7 @@ def latest_usd_rate():
 
 def meta_pricing():
     """Currency mode (whether to show a currency selector), the latest stored USD rate, price validity,
-    active pickup points, delivery areas and the public contact details, texts in the request language."""
+    active pickup points and delivery areas (names in the request language), and the contact page details."""
     site, rate = SiteSettings.get(), latest_usd_rate()
     return {
         "currencies": [{"code": code, "symbol": SYMBOLS[code]} for code in allowed_currencies()],
@@ -31,12 +31,13 @@ def meta_pricing():
             "districts": [{"code": d["code"], "city": d["city"], "name": tr(d.get("name"))}
                           for d in site.delivery_districts],
         },
-        # Every key always present; "" when not set, like pickup point addresses (LPK-231).
+        # Fixed contract (LPK-231): all six keys, plain untranslated strings, "" when hidden; links are built by the frontend.
         "contact": {
             "phone": site.contact_phone,
             "email": site.contact_email,
-            "address": tr(site.contact_address_i18n),
-            "working_hours": tr(site.contact_working_hours_i18n),
-            "whatsapp_url": site.contact_whatsapp_url,
+            "whatsapp": site.whatsapp_phone,
+            "viber": site.viber_phone,
+            "facebook": site.facebook_url,
+            "instagram": site.instagram_url,
         },
     }
