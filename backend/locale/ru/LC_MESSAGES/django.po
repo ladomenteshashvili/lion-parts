@@ -1362,3 +1362,308 @@ msgstr "Автозапчасти из США, цена по номеру дет�
 
 msgid "You received this email because this address is on a Lion Parts account. It was sent automatically."
 msgstr "Вы получили это письмо, потому что этот адрес указан в аккаунте Lion Parts. Оно отправлено автоматически."
+
+msgid "weight"
+msgstr "вес"
+
+msgid "approved weight known"
+msgstr "утверждённый вес известен"
+
+msgid "no approved weight"
+msgstr "нет утверждённого веса"
+
+msgid "current weight"
+msgstr "текущий вес"
+
+msgid "awaiting weight"
+msgstr "ожидает вес"
+
+msgid "Saved for review: AI estimates and weights outside 0.01 to 500 kg are used only after approval."
+msgstr "Сохранено на проверку: оценки ИИ и вес вне диапазона 0,01–500 кг используются только после утверждения."
+
+msgid "This weight conflicts with the part's current weight; check both."
+msgstr "Этот вес расходится с текущим весом детали; проверьте оба."
+
+msgid "in use"
+msgstr "используется"
+
+#, python-format
+msgid "%(weight)s: done; the part's current weight is now %(current)s."
+msgstr "%(weight)s: готово; текущий вес детали теперь %(current)s."
+
+#, python-format
+msgid "%(weight)s: already so; nothing changed."
+msgstr "%(weight)s: уже так; ничего не изменилось."
+
+msgid "Approve the selected weights"
+msgstr "Утвердить выбранные веса"
+
+msgid "Reject the selected weights"
+msgstr "Отклонить выбранные веса"
+
+msgid "queue"
+msgstr "очередь"
+
+msgid "open"
+msgstr "открытые"
+
+msgid "resolved or cancelled"
+msgstr "решённые или отменённые"
+
+msgid "Weight"
+msgstr "Вес"
+
+msgid "Enter the weight and its source, save, then run “Approve the weight and price the waiting customers”. Every waiting customer is priced with their own tariff and the supplier's current price, and notified once. Leave the weight empty to use the part's approved weight shown above. If the supplier is unavailable, the weight stays approved; run the action again later."
+msgstr "Введите вес и его источник, сохраните, затем запустите «Утвердить вес и рассчитать цену для ожидающих клиентов». Каждому ожидающему клиенту цена рассчитывается по его тарифу и текущей цене поставщика, и он получает одно уведомление. Оставьте вес пустым, чтобы использовать утверждённый вес детали, показанный выше. Если поставщик недоступен, вес остаётся утверждённым; повторите действие позже."
+
+msgid "Result"
+msgstr "Результат"
+
+msgid "customers waiting"
+msgstr "ожидающие клиенты"
+
+msgid "approved weight on record"
+msgstr "сохранённый утверждённый вес"
+
+msgid "Approve the weight and price the waiting customers"
+msgstr "Утвердить вес и рассчитать цену для ожидающих клиентов"
+
+#, python-format
+msgid "#%(id)s: resolved; %(priced)s customers priced and notified, %(skipped)s not eligible, %(before)s already had a price."
+msgstr "#%(id)s: решено; цена рассчитана и отправлена клиентам: %(priced)s, не подходят: %(skipped)s, уже имели цену: %(before)s."
+
+msgid "Cancel the selected tasks"
+msgstr "Отменить выбранные задачи"
+
+#, python-format
+msgid "#%(id)s: cancelled."
+msgstr "#%(id)s: отменено."
+
+#, python-format
+msgid "#%(id)s: not open; nothing changed."
+msgstr "#%(id)s: не открыта; ничего не изменилось."
+
+msgid "part number"
+msgstr "номер детали"
+
+msgid "manufacturer"
+msgstr "производитель"
+
+msgid "name"
+msgstr "название"
+
+msgid "searches"
+msgstr "поиски"
+
+msgid "searches with a VIN"
+msgstr "поиски с VIN"
+
+msgid "last supplier price (USD)"
+msgstr "последняя цена поставщика (USD)"
+
+msgid "first seen"
+msgstr "впервые замечено"
+
+msgid "last searched"
+msgstr "последний поиск"
+
+msgid "part"
+msgstr "деталь"
+
+msgid "parts registry"
+msgstr "реестр деталей"
+
+msgid "supplier price (USD)"
+msgstr "цена поставщика (USD)"
+
+msgid "supplier weight (kg)"
+msgstr "вес поставщика (кг)"
+
+msgid "seen"
+msgstr "замечено"
+
+msgid "supplier offer"
+msgstr "предложение поставщика"
+
+msgid "supplier offers"
+msgstr "предложения поставщика"
+
+msgid "AMT supplier"
+msgstr "поставщик AMT"
+
+msgid "AI estimate"
+msgstr "оценка ИИ"
+
+msgid "operator"
+msgstr "оператор"
+
+msgid "physically measured"
+msgstr "взвешено физически"
+
+msgid "awaiting approval"
+msgstr "ожидает утверждения"
+
+msgid "approved"
+msgstr "утверждён"
+
+msgid "rejected"
+msgstr "отклонён"
+
+msgid "weight (kg)"
+msgstr "вес (кг)"
+
+msgid "source"
+msgstr "источник"
+
+msgid "status"
+msgstr "статус"
+
+msgid "observed"
+msgstr "зафиксировано"
+
+msgid "last seen"
+msgstr "последний раз замечено"
+
+msgid "times seen"
+msgstr "сколько раз замечено"
+
+msgid "evidence"
+msgstr "подтверждение"
+
+msgid "conflicts with the current weight"
+msgstr "расходится с текущим весом"
+
+msgid "outside the plausible range"
+msgstr "вне допустимого диапазона"
+
+msgid "reviewed by"
+msgstr "проверил"
+
+msgid "reviewed"
+msgstr "проверено"
+
+msgid "part weight"
+msgstr "вес детали"
+
+msgid "part weights"
+msgstr "веса деталей"
+
+msgid "recorded"
+msgstr "записано"
+
+msgid "action"
+msgstr "действие"
+
+msgid "by"
+msgstr "кто"
+
+msgid "note"
+msgstr "примечание"
+
+msgid "when"
+msgstr "когда"
+
+msgid "weight history entry"
+msgstr "запись истории веса"
+
+msgid "weight history"
+msgstr "история веса"
+
+msgid "weight approved, pricing failed"
+msgstr "вес утверждён, цена не рассчитана"
+
+msgid "resolved"
+msgstr "решено"
+
+msgid "last search"
+msgstr "последний поиск"
+
+msgid "last offer"
+msgstr "последнее предложение"
+
+msgid "searches waiting"
+msgstr "ожидающие поиски"
+
+msgid "weight to approve (kg)"
+msgstr "вес для утверждения (кг)"
+
+msgid "weight source"
+msgstr "источник веса"
+
+msgid "approved weight"
+msgstr "утверждённый вес"
+
+msgid "last error"
+msgstr "последняя ошибка"
+
+msgid "created"
+msgstr "создано"
+
+msgid "resolved by"
+msgstr "решил"
+
+msgid "missing weight task"
+msgstr "задача без веса"
+
+msgid "missing weight queue"
+msgstr "очередь деталей без веса"
+
+msgid "waiting"
+msgstr "ожидает"
+
+msgid "priced and notified"
+msgstr "цена рассчитана, клиент уведомлён"
+
+msgid "already had a price"
+msgstr "уже имел цену"
+
+msgid "not eligible"
+msgstr "не подходит"
+
+msgid "customer"
+msgstr "клиент"
+
+msgid "search"
+msgstr "поиск"
+
+msgid "quote request"
+msgstr "запрос цены"
+
+msgid "outcome"
+msgstr "результат"
+
+msgid "waiting customer"
+msgstr "ожидающий клиент"
+
+msgid "waiting customers"
+msgstr "ожидающие клиенты"
+
+msgid "Choose operator or physically measured."
+msgstr "Выберите «оператор» или «взвешено физически»."
+
+msgid "Enter the weight to approve."
+msgstr "Введите вес для утверждения."
+
+msgid "The weight must be between 0.01 and 500 kg."
+msgstr "Вес должен быть от 0,01 до 500 кг."
+
+msgid "This task is already resolved."
+msgstr "Эта задача уже решена."
+
+msgid "This task is cancelled."
+msgstr "Эта задача отменена."
+
+msgid "Approve a weight first."
+msgstr "Сначала утвердите вес."
+
+msgid "The task changed while the supplier was being asked; try again."
+msgstr "Задача изменилась во время запроса к поставщику; попробуйте ещё раз."
+
+msgid "The part has no approved weight any more."
+msgstr "У детали больше нет утверждённого веса."
+
+msgid "The supplier is unavailable; retry the pricing later."
+msgstr "Поставщик недоступен; повторите расчёт цены позже."
+
+msgid "The supplier no longer offers this part; cancel the task."
+msgstr "Поставщик больше не предлагает эту деталь; отмените задачу."

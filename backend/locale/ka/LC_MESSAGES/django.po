@@ -1358,3 +1358,308 @@ msgstr "ავტონაწილები აშშ-დან, ფასი �
 
 msgid "You received this email because this address is on a Lion Parts account. It was sent automatically."
 msgstr "ეს წერილი მიიღეთ, რადგან ეს მისამართი მითითებულია Lion Parts-ის ანგარიშში. წერილი გამოგზავნილია ავტომატურად."
+
+msgid "weight"
+msgstr "წონა"
+
+msgid "approved weight known"
+msgstr "დამტკიცებული წონა ცნობილია"
+
+msgid "no approved weight"
+msgstr "დამტკიცებული წონა არ არის"
+
+msgid "current weight"
+msgstr "მიმდინარე წონა"
+
+msgid "awaiting weight"
+msgstr "ელოდება წონას"
+
+msgid "Saved for review: AI estimates and weights outside 0.01 to 500 kg are used only after approval."
+msgstr "შენახულია განსახილველად: AI-ის შეფასება და 0.01–500 კგ-ის ფარგლებს გარეთ არსებული წონა გამოიყენება მხოლოდ დამტკიცების შემდეგ."
+
+msgid "This weight conflicts with the part's current weight; check both."
+msgstr "ეს წონა ეწინააღმდეგება ნაწილის მიმდინარე წონას; შეამოწმეთ ორივე."
+
+msgid "in use"
+msgstr "გამოიყენება"
+
+#, python-format
+msgid "%(weight)s: done; the part's current weight is now %(current)s."
+msgstr "%(weight)s: შესრულდა; ნაწილის მიმდინარე წონა ახლა არის %(current)s."
+
+#, python-format
+msgid "%(weight)s: already so; nothing changed."
+msgstr "%(weight)s: უკვე ასეა; არაფერი შეცვლილა."
+
+msgid "Approve the selected weights"
+msgstr "მონიშნული წონების დამტკიცება"
+
+msgid "Reject the selected weights"
+msgstr "მონიშნული წონების უარყოფა"
+
+msgid "queue"
+msgstr "რიგი"
+
+msgid "open"
+msgstr "ღია"
+
+msgid "resolved or cancelled"
+msgstr "დასრულებული ან გაუქმებული"
+
+msgid "Weight"
+msgstr "წონა"
+
+msgid "Enter the weight and its source, save, then run “Approve the weight and price the waiting customers”. Every waiting customer is priced with their own tariff and the supplier's current price, and notified once. Leave the weight empty to use the part's approved weight shown above. If the supplier is unavailable, the weight stays approved; run the action again later."
+msgstr "შეიყვანეთ წონა და მისი წყარო, შეინახეთ და გაუშვით „წონის დამტკიცება და მომლოდინე მომხმარებლების ფასის გამოთვლა“. ყოველი მომლოდინე მომხმარებლის ფასი გამოითვლება მისი ტარიფით და მომწოდებლის მიმდინარე ფასით, და მას ერთხელ ეცნობება. წონა დატოვეთ ცარიელი, თუ გსურთ ზემოთ ნაჩვენები დამტკიცებული წონის გამოყენება. თუ მომწოდებელი მიუწვდომელია, წონა დამტკიცებული რჩება; მოქმედება მოგვიანებით გაიმეორეთ."
+
+msgid "Result"
+msgstr "შედეგი"
+
+msgid "customers waiting"
+msgstr "მომლოდინე მომხმარებლები"
+
+msgid "approved weight on record"
+msgstr "შენახული დამტკიცებული წონა"
+
+msgid "Approve the weight and price the waiting customers"
+msgstr "წონის დამტკიცება და მომლოდინე მომხმარებლების ფასის გამოთვლა"
+
+#, python-format
+msgid "#%(id)s: resolved; %(priced)s customers priced and notified, %(skipped)s not eligible, %(before)s already had a price."
+msgstr "#%(id)s: დასრულდა; ფასი გამოეთვალა და ეცნობა %(priced)s მომხმარებელს, %(skipped)s არ აკმაყოფილებს პირობებს, %(before)s-ს უკვე ჰქონდა ფასი."
+
+msgid "Cancel the selected tasks"
+msgstr "მონიშნული ამოცანების გაუქმება"
+
+#, python-format
+msgid "#%(id)s: cancelled."
+msgstr "#%(id)s: გაუქმდა."
+
+#, python-format
+msgid "#%(id)s: not open; nothing changed."
+msgstr "#%(id)s: ღია არ არის; არაფერი შეცვლილა."
+
+msgid "part number"
+msgstr "ნაწილის ნომერი"
+
+msgid "manufacturer"
+msgstr "მწარმოებელი"
+
+msgid "name"
+msgstr "დასახელება"
+
+msgid "searches"
+msgstr "ძიებები"
+
+msgid "searches with a VIN"
+msgstr "ძიებები VIN-ით"
+
+msgid "last supplier price (USD)"
+msgstr "მომწოდებლის ბოლო ფასი (USD)"
+
+msgid "first seen"
+msgstr "პირველად ნანახი"
+
+msgid "last searched"
+msgstr "ბოლოს მოძებნილი"
+
+msgid "part"
+msgstr "ნაწილი"
+
+msgid "parts registry"
+msgstr "ნაწილების რეესტრი"
+
+msgid "supplier price (USD)"
+msgstr "მომწოდებლის ფასი (USD)"
+
+msgid "supplier weight (kg)"
+msgstr "მომწოდებლის წონა (კგ)"
+
+msgid "seen"
+msgstr "ნანახი"
+
+msgid "supplier offer"
+msgstr "მომწოდებლის შეთავაზება"
+
+msgid "supplier offers"
+msgstr "მომწოდებლის შეთავაზებები"
+
+msgid "AMT supplier"
+msgstr "მომწოდებელი AMT"
+
+msgid "AI estimate"
+msgstr "AI-ის შეფასება"
+
+msgid "operator"
+msgstr "ოპერატორი"
+
+msgid "physically measured"
+msgstr "ფიზიკურად აწონილი"
+
+msgid "awaiting approval"
+msgstr "ელოდება დამტკიცებას"
+
+msgid "approved"
+msgstr "დამტკიცებული"
+
+msgid "rejected"
+msgstr "უარყოფილი"
+
+msgid "weight (kg)"
+msgstr "წონა (კგ)"
+
+msgid "source"
+msgstr "წყარო"
+
+msgid "status"
+msgstr "სტატუსი"
+
+msgid "observed"
+msgstr "დაფიქსირდა"
+
+msgid "last seen"
+msgstr "ბოლოს ნანახი"
+
+msgid "times seen"
+msgstr "რამდენჯერ ნახეს"
+
+msgid "evidence"
+msgstr "მტკიცებულება"
+
+msgid "conflicts with the current weight"
+msgstr "ეწინააღმდეგება მიმდინარე წონას"
+
+msgid "outside the plausible range"
+msgstr "დასაშვებ ფარგლებს გარეთ"
+
+msgid "reviewed by"
+msgstr "განიხილა"
+
+msgid "reviewed"
+msgstr "განხილულია"
+
+msgid "part weight"
+msgstr "ნაწილის წონა"
+
+msgid "part weights"
+msgstr "ნაწილების წონები"
+
+msgid "recorded"
+msgstr "ჩაწერილია"
+
+msgid "action"
+msgstr "მოქმედება"
+
+msgid "by"
+msgstr "ვინ"
+
+msgid "note"
+msgstr "შენიშვნა"
+
+msgid "when"
+msgstr "როდის"
+
+msgid "weight history entry"
+msgstr "წონის ისტორიის ჩანაწერი"
+
+msgid "weight history"
+msgstr "წონის ისტორია"
+
+msgid "weight approved, pricing failed"
+msgstr "წონა დამტკიცებულია, ფასი ვერ გამოითვალა"
+
+msgid "resolved"
+msgstr "დასრულებული"
+
+msgid "last search"
+msgstr "ბოლო ძიება"
+
+msgid "last offer"
+msgstr "ბოლო შეთავაზება"
+
+msgid "searches waiting"
+msgstr "მომლოდინე ძიებები"
+
+msgid "weight to approve (kg)"
+msgstr "დასამტკიცებელი წონა (კგ)"
+
+msgid "weight source"
+msgstr "წონის წყარო"
+
+msgid "approved weight"
+msgstr "დამტკიცებული წონა"
+
+msgid "last error"
+msgstr "ბოლო შეცდომა"
+
+msgid "created"
+msgstr "შექმნილია"
+
+msgid "resolved by"
+msgstr "დაასრულა"
+
+msgid "missing weight task"
+msgstr "წონის მოლოდინის ამოცანა"
+
+msgid "missing weight queue"
+msgstr "წონის მოლოდინის რიგი"
+
+msgid "waiting"
+msgstr "ელოდება"
+
+msgid "priced and notified"
+msgstr "ფასი გამოითვალა და ეცნობა"
+
+msgid "already had a price"
+msgstr "უკვე ჰქონდა ფასი"
+
+msgid "not eligible"
+msgstr "არ აკმაყოფილებს პირობებს"
+
+msgid "customer"
+msgstr "მომხმარებელი"
+
+msgid "search"
+msgstr "ძიება"
+
+msgid "quote request"
+msgstr "ფასის მოთხოვნა"
+
+msgid "outcome"
+msgstr "შედეგი"
+
+msgid "waiting customer"
+msgstr "მომლოდინე მომხმარებელი"
+
+msgid "waiting customers"
+msgstr "მომლოდინე მომხმარებლები"
+
+msgid "Choose operator or physically measured."
+msgstr "აირჩიეთ „ოპერატორი“ ან „ფიზიკურად აწონილი“."
+
+msgid "Enter the weight to approve."
+msgstr "შეიყვანეთ დასამტკიცებელი წონა."
+
+msgid "The weight must be between 0.01 and 500 kg."
+msgstr "წონა უნდა იყოს 0.01-დან 500 კგ-მდე."
+
+msgid "This task is already resolved."
+msgstr "ეს ამოცანა უკვე დასრულებულია."
+
+msgid "This task is cancelled."
+msgstr "ეს ამოცანა გაუქმებულია."
+
+msgid "Approve a weight first."
+msgstr "ჯერ დაამტკიცეთ წონა."
+
+msgid "The task changed while the supplier was being asked; try again."
+msgstr "ამოცანა შეიცვალა მომწოდებლისთვის მიმართვისას; სცადეთ თავიდან."
+
+msgid "The part has no approved weight any more."
+msgstr "ნაწილს აღარ აქვს დამტკიცებული წონა."
+
+msgid "The supplier is unavailable; retry the pricing later."
+msgstr "მომწოდებელი მიუწვდომელია; ფასის გამოთვლა მოგვიანებით გაიმეორეთ."
+
+msgid "The supplier no longer offers this part; cancel the task."
+msgstr "მომწოდებელი ამ ნაწილს აღარ სთავაზობს; გააუქმეთ ამოცანა."

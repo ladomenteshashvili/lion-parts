@@ -319,6 +319,11 @@ and `courier.message` → `/courier-fee/accept/` (fee added to the total) or `/d
 `/api/parts/calculate-price/` → add with the new `search_id`. Or request a price (`quote-requests`); when it's
 ready the customer gets a `price_ready` notification / SMS link `/q/<token>` → `GET /api/public/q/<token>/` → login
 → `POST /api/cart/items/ {"source": "prepared_quote", "quote_request_id": 18, "quantity": 1}`.
+Since LPK-240 a `checking` offer also reaches the operator by itself: once a weight is approved, every phone-verified
+customer who searched the part while logged in gets a `weight_price` quote request priced for them and the same
+`price_ready` notification, without asking. It appears in `quote-requests` and history like one they made. A search
+offer priced with a weight the operator approved earlier shows `weight_source: "operator"` (LPK-239). No field or value
+is new.
 
 **G. Support**: guests `POST /api/support/tickets/` with `contact` (the reply goes to that email/phone);
 customers without `contact` (the reply is a blocking `support_reply` notification). Order questions:
