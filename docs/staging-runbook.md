@@ -1,7 +1,7 @@
 # Isolated staging runbook (LPK-195 to LPK-200)
 
 A staging that shares nothing with any existing application, database or site on the host. The kit is in `deploy/staging/`.
-The owner has provisioned it as the isolated staging behind `test2.lionparts.ge` and `test3.lionparts.ge`, running the real SMS
+The owner has provisioned it as the isolated staging behind `test3.lionparts.ge` (primary, section 14) and `test2.lionparts.ge` (backup), running the real SMS
 and real AMT profile with fake payments (section 11). Everything on the server is owner-operated: provisioning, services, nginx,
 DNS, TLS, cron and `.env`. Section 10 says what was rehearsed; section 12 says which operational items are verified on the
 server and which are not.
@@ -459,3 +459,57 @@ Then, as the owner: `systemctl restart lionparts-stage`, and `deploy/staging/sta
 changes no schema and no data. Mail sent through Brevo before the rollback has already been delivered. Delete the copy
 `~/backups/env-before-brevo` once it is no longer needed: it holds every staging key. To return the code too, use `git checkout --detach <old-ref>` after
 the `.env` rollback, not before: the old kit refuses Brevo. Revoke the SMTP key in Brevo if it is no longer used.
+
+## 14. Test3 as the primary staging host (LPK-246 follow-up)
+
+`test2.lionparts.ge` and `test3.lionparts.ge` are two nginx sites in front of the **same** staging backend
+(`lionparts-stage.service`, `127.0.0.1:8011`), the same database and the same mail profile. Each site serves its own React build
+(`/var/www/lionparts-test2`, `/var/www/lionparts-test3`). Audit on 2026-11-18, read-only:
+
+| Item | test2 | test3 |
+|---|---|---|
+| `/api/` to `127.0.0.1:8011` | yes | yes |
+| `/stage-admin/` (allow-listed) | yes | no: falls through to the React app |
+| `/static/`, `/media/` | yes | no: part image URLs built on test3 return the React `index.html` |
+| `/email/logo-on-dark.png` | yes | yes (same file) |
+| Same-origin CSRF `POST /api/...` | works | works |
+
+The backend builds every outgoing link from one setting, `FRONTEND_BASE_URL`: email buttons and fallback links, the email logo,
+notification links, the admin's quote link and the payment return URL. Until it is changed, every email sent from a Test3 session
+links to and loads its logo from test2.
+
+### Switch (owner)
+
+As `lionparts-stage`, in `~/lion-parts`:
+
+```bash
+install -m 600 backend/.env ~/backups/env-before-test3      # rollback copy, outside the checkout
+${EDITOR:-nano} backend/.env                               # FRONTEND_BASE_URL=https://test3.lionparts.ge
+grep -E '^(ALLOWED_HOSTS|CSRF_TRUSTED_ORIGINS)=' backend/.env   # keep both hosts in ALLOWED_HOSTS; no other change
+deploy/staging/stage.sh check
+```
+
+Then, as the owner: `systemctl restart lionparts-stage`, and `deploy/staging/stage.sh health`. Test2 keeps working as a backup:
+it shares the API, only the links in new emails point to test3. Links in emails already sent keep pointing to test2.
+
+As root, add to the test3 server block, then `nginx -t && systemctl reload nginx`:
+
+```nginx
+    location /static/ { alias /home/lionparts-stage/lion-parts/backend/staticfiles/; }
+    location /media/  { alias /home/lionparts-stage/media/; }
+```
+
+Keep the admin on test2 unless its allow-list blocks are copied as well (`nginx-stage.conf.template`, section 4); never expose it
+without them.
+
+### Check
+
+1. `curl -s -o /dev/null -w '%{content_type}\n' https://test3.lionparts.ge/static/admin/css/base.css` prints `text/css`.
+2. Request a verification email from a Test3 session (section 13, acceptance check 1): the button, the fallback link and the logo
+   use `https://test3.lionparts.ge`.
+3. Open an invoice from a Test3 order page and print it to PDF: one A4 page with the logo, seller block and bank details.
+
+### Rollback
+
+`install -m 600 ~/backups/env-before-test3 backend/.env`, `stage.sh check`, restart `lionparts-stage` as the owner, and remove the
+two nginx locations. Nothing in the database changes, so nothing needs restoring.

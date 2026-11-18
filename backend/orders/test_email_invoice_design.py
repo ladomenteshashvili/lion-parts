@@ -168,6 +168,8 @@ class InvoiceDesignTests(TestCase):
         # print rules come last, or the narrow-screen block (an A4 page is < 820px) overrides them on paper
         self.assertGreater(html.rindex("@media print"), html.rindex("@media (max-width: 820px)"))
         self.assertEqual(html.count("<script"), 0)
+        # the invoice page is white: a white logo part (the on-dark variant's "PARTS" and "i" dot) would vanish
+        self.assertIsNone(re.search(r'fill="(#fff(fff)?|white)"', html, re.I))
         self.assertNotIn("//fonts.", html)  # no other origin (LPK-187 CSP)
         for field in ("items_total", "discount_total", "courier_fee", "total", "amount_paid", "balance_due",
                       "amount_due_now"):
