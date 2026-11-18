@@ -42,11 +42,16 @@ load_target() {
     esac
     want DB_NAME "$EXPECTED_DB"
     want DB_USER "$EXPECTED_ROLE"; want DB_HOST "$EXPECTED_DB_HOST"; want DB_PORT "$EXPECTED_DB_PORT"
-    want EMAIL_HOST 127.0.0.1
-    # A credential only beside the switch that uses it; payments and outgoing mail never get one here.
+    # The approved mail profiles, and nothing else: verify_target.py mail_problems checks the rest (backend, sender domain).
+    case "${EMAIL_HOST:-}" in
+        127.0.0.1) empty EMAIL_HOST_PASSWORD ;;  # Mailpit: nothing leaves the server
+        smtp-relay.brevo.com) want EMAIL_PORT 587; want EMAIL_USE_TLS True; filled EMAIL_HOST_USER; filled EMAIL_HOST_PASSWORD ;;
+        *) die "EMAIL_HOST must be 127.0.0.1 (Mailpit) or smtp-relay.brevo.com (Brevo)" ;;
+    esac
+    # A credential only beside the switch that uses it; payments never get one here.
     if [[ "$PARTS_PROVIDER" == amt ]]; then filled AMT_API_LOGIN; filled AMT_API_PASSWORD; else empty AMT_API_LOGIN; empty AMT_API_PASSWORD; fi
     if [[ "$SENDER_GE_ENABLED" == True ]]; then filled SENDER_GE_API_KEY; else empty SENDER_GE_API_KEY; fi
-    for name in FLITT_MERCHANT_ID FLITT_SECRET_KEY EMAIL_HOST_PASSWORD; do
+    for name in FLITT_MERCHANT_ID FLITT_SECRET_KEY; do
         empty "$name"
     done
     [[ -n "${SECRET_KEY:-}" ]] || die "SECRET_KEY is empty"

@@ -365,7 +365,8 @@ pay test orders by invoice. The points below describe the demo profile, used for
 
 - **OTP:** `demo_code` appears in the answers of `register`, `resend-code` and `profile/phone` when `SMS_DEMO_MODE` is on. Production never has it: do not build a
   screen that depends on it. No SMS is sent. Limits still apply: 60 s between codes, 5 attempts per code, 5 minutes' validity.
-- **Email:** captured by Mailpit, nothing leaves the server. The link format is in §10. Link parameters are URL-encoded: read them with `URLSearchParams` and
+- **Email:** captured by Mailpit, nothing leaves the server, unless the owner has switched staging to Brevo (`docs/staging-runbook.md`
+  §13): then emails reach the real address. The link format is in §10. Link parameters are URL-encoded: read them with `URLSearchParams` and
   send the decoded value.
 - **Fake payments:** `checkout_url` is `<frontend>/payment-result?order=<n>&payment=<id>&fake=1`. Your page plays the provider with
   `POST /api/payments/fake/<id>/complete/ {"status": "paid"|"failed"|"expired"}`; a payment not `pending` answers `409 nothing_to_pay`. No money moves. After `failed` or `expired` a

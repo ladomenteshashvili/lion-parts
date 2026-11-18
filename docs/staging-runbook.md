@@ -15,7 +15,7 @@ server and which are not.
 | Database and role | new and empty: `lp_stage_v1`, role `lp_stage`, at `127.0.0.1:5432`; `lp_stage_restore_check` only for restore tests |
 | Environment file | `backend/.env`, mode 600, from `deploy/staging/env.staging.example` |
 | Application | `lionparts-stage.service`, gunicorn on `127.0.0.1:8011`, 2 workers x 4 threads |
-| Mail | Mailpit: SMTP `127.0.0.1:1025`, web and API `127.0.0.1:8025`, reached through an SSH tunnel |
+| Mail | Mailpit: SMTP `127.0.0.1:1025`, web and API `127.0.0.1:8025`, reached through an SSH tunnel; or the approved Brevo relay ([section 13](#13-mail-mailpit-or-brevo-lpk-235)) |
 | Media, static | `/home/lionparts-stage/media`, `backend/staticfiles`, read by nginx (section 4) |
 | Backups | `/home/lionparts-stage/backups`, mode 700 |
 | nginx logs | `/var/log/nginx/lionparts-stage-{access,error}.log` |
@@ -93,11 +93,12 @@ If only the last step failed (`systemctl daemon-reload`) and everything else is 
    `none`**, so without this only the account emails (verification, password reset, email change) are sent.
 
 Every `stage.sh` command first refuses any other Linux user, a readable `.env`, any setting outside the approved profiles of section 11,
-a credential for a provider that is switched off, any payment or mail credential, and any database other than exactly `lp_stage_v1`, role `lp_stage`, at `127.0.0.1:5432`. The others then prove the target before changing
+a credential for a provider that is switched off, any payment credential, any mail server other than Mailpit or the approved Brevo
+relay (section 13), and any database other than exactly `lp_stage_v1`, role `lp_stage`, at `127.0.0.1:5432`. The others then prove the target before changing
 anything, by comparing Django's loaded settings and what the server reports for the live connection: database, current and session
 user, address and port, and that the role is not a superuser. The proof also checks the effective provider settings: the approved profile, credentials
 beside their provider only (reported as set or not, never by value), the official AMT and Sender.ge endpoints, AMT TLS
-verification, and an AMT timeout of at most 15 s inside a lookup budget of at most 30 s. `deploy` and `rollback` update the code first, because the proof runs on
+verification, an AMT timeout of at most 15 s inside a lookup budget of at most 30 s, and the mail profile of section 13. `deploy` and `rollback` update the code first, because the proof runs on
 that code, and prove the target before any migration. These values cannot be overridden: moving the database needs a reviewed
 change to `stage.sh` and this runbook. `check --deploy` should report only `security.W005` and `security.W021`, the two HSTS owner
 decisions; anything else stops the script.
@@ -292,12 +293,13 @@ DNS, `rollback`, and the crontab. Treat each as untested until staging exists.
 ## 11. Provider profiles and real AMT
 
 `stage.sh` and `verify_target.py` accept exactly these profiles. Payments are fake in all three; any other combination is refused.
+Mail is chosen separately and works with each of them: section 13.
 
 | Profile | `PARTS_PROVIDER` | `SENDER_GE_ENABLED` | `SMS_DEMO_MODE`, `ENABLE_DEMO_ENDPOINTS` | Credentials that must be set | Must be empty |
 |---|---|---|---|---|---|
-| Demo, as provisioned | `demo` | `False` | `True` | none | AMT, Sender.ge, Flitt, mail |
-| Real SMS | `demo` | `True` | `False` | `SENDER_GE_API_KEY` | AMT, Flitt, mail |
-| Real SMS and real AMT | `amt` | `True` | `False` | `SENDER_GE_API_KEY`, `AMT_API_LOGIN`, `AMT_API_PASSWORD` | Flitt, mail |
+| Demo, as provisioned | `demo` | `False` | `True` | none | AMT, Sender.ge, Flitt |
+| Real SMS | `demo` | `True` | `False` | `SENDER_GE_API_KEY` | AMT, Flitt |
+| Real SMS and real AMT | `amt` | `True` | `False` | `SENDER_GE_API_KEY`, `AMT_API_LOGIN`, `AMT_API_PASSWORD` | Flitt |
 
 With real AMT, leave `AMT_ENDPOINT`, `AMT_VERIFY_SSL` and `SENDER_GE_SEND_URL` out of `.env` so the official defaults apply, and keep
 `AMT_TIMEOUT_SECONDS` at most 15 and `AMT_LOOKUP_BUDGET_SECONDS` at most 30 (the defaults). A lookup that runs out answers
@@ -370,3 +372,90 @@ new payment on that order, invoice included. Choose invoice payment from the sta
 records it in the admin), or wait for an owner decision on mounting only the
 fake completion route whenever `PAYMENT_PROVIDER=fake` outside production. Never change a payment status by hand
 (`docs/operations.md` §10).
+
+## 13. Mail: Mailpit or Brevo (LPK-235)
+
+`stage.sh` and `verify_target.py` accept exactly two mail profiles, chosen by `EMAIL_HOST`, beside any provider profile of section 11.
+Any other host, port, plaintext connection, implicit TLS (`465`), mail backend or sender domain is refused, and every command
+(`check`, `deploy`, `health`, `backup`, `restore-verify`, `restore`, `rollback`) stops before touching the database.
+
+| Profile | `EMAIL_HOST` | Must also be | Credentials |
+|---|---|---|---|
+| Mailpit, as provisioned | `127.0.0.1` | nothing more (the example uses port `1025`, no TLS) | `EMAIL_HOST_PASSWORD` empty |
+| Brevo | `smtp-relay.brevo.com` | `EMAIL_PORT=587`, `EMAIL_USE_TLS=True` (STARTTLS), sender address `@lionparts.ge`, `EMAIL_TIMEOUT` at most 30 (default 10) | `EMAIL_HOST_USER` and `EMAIL_HOST_PASSWORD` set |
+
+Both need `EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend`, which is the default. With Brevo, Django verifies the relay's
+certificate and host name and logs in only after STARTTLS; a server without STARTTLS fails the send instead of falling back.
+`verify_target.py` reports the login and the key only as set or not, never by value. A failed send logs only the error type.
+
+With Brevo, every email goes to the real address a tester enters, and notification channels set to `email` (section 3, step 7)
+reach real people. The UAT runner (section 6) reads Mailpit, so switch back to Mailpit before running it.
+
+### Where the credentials live
+
+In `backend/.env`, mode 600, owner `lionparts-stage`, like the Sender.ge and AMT keys: Django and `stage.sh` read that file, and
+nothing else is needed. Write the values in single quotes, because `stage.sh` reads the file with bash and Django with
+`python-decouple`, which both remove them. A Brevo SMTP key is letters, digits and hyphens. Edit the file with an editor, never with `echo`, so
+no credential reaches the shell history. Never put the key in Git, in the cron line, or in a command argument.
+
+### Switch to Brevo (owner, as `lionparts-stage`)
+
+Prerequisite: the change that adds this profile is merged, and `<new-ref>` is its commit. Only `lionparts-stage.service` is
+restarted; Mailpit can stay running.
+
+```bash
+cd ~/lion-parts
+git rev-parse HEAD                                   # note it as <old-ref>
+git fetch --tags origin
+git diff --stat <old-ref> <new-ref> -- backend ':!backend/*/tests' ':!backend/*/test_*'   # expect no application change
+git checkout --detach <new-ref>                      # the old stage.sh refuses Brevo, so take the new kit first
+deploy/staging/stage.sh check                        # the current Mailpit profile must pass unchanged
+deploy/staging/stage.sh backup                       # note the dump path
+install -m 600 backend/.env ~/backups/env-before-brevo   # the rollback copy, outside the checkout
+${EDITOR:-nano} backend/.env
+```
+
+In `.env`, change these lines and leave the rest:
+
+```
+EMAIL_HOST=smtp-relay.brevo.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER='<Brevo SMTP login>'
+EMAIL_HOST_PASSWORD='<Brevo SMTP key>'
+DEFAULT_FROM_EMAIL="Lion Parts Staging <verify@lionparts.ge>"
+EMAIL_REPLY_TO=<a mailbox someone reads, or empty>
+```
+
+`backup@lionparts.ge` is the other verified sender. Then:
+
+```bash
+stat -c '%a %U' backend/.env                         # 600 lionparts-stage
+deploy/staging/stage.sh check                        # must say "target verified"; on REFUSED, roll back below
+deploy/staging/stage.sh backup                       # the nightly backup must still pass on the new profile
+```
+
+Then, as the owner: `systemctl restart lionparts-stage`, and as `lionparts-stage`: `deploy/staging/stage.sh health`.
+
+### Acceptance check
+
+1. **Email verification:** sign in on `test2.lionparts.ge` with a test customer whose email is a mailbox you can read, and
+   request the verification email (`POST /api/auth/email/send-verification/`). It must arrive from `verify@lionparts.ge`, and its link must verify the address. If it does
+   not arrive, run `journalctl -u lionparts-stage --since -10min | grep 'Sending the'` as root: the log names the error type only.
+   To test the relay alone: `cd backend && venv/bin/python manage.py sendtestemail <your address>`.
+2. **Backups:** the next nightly run must pass on the new profile. `tail -n 5 ~/backups/backup.log` shows a new dump path and no
+   `REFUSED`, and `ls -lt ~/backups/*.dump | head -2` shows the new dump. The off-host Borg copy is set up outside this kit; if it
+   runs `stage.sh backup` or reads `.env` with its own checks, run it once by hand after the switch and check its log.
+
+### Roll back to Mailpit
+
+```bash
+cd ~/lion-parts
+install -m 600 ~/backups/env-before-brevo backend/.env   # EMAIL_HOST=127.0.0.1, no SMTP login or key
+deploy/staging/stage.sh check
+```
+
+Then, as the owner: `systemctl restart lionparts-stage`, and `deploy/staging/stage.sh health`. Nothing needs restoring: the switch
+changes no schema and no data. Mail sent through Brevo before the rollback has already been delivered. Delete the copy
+`~/backups/env-before-brevo` once it is no longer needed: it holds every staging key. To return the code too, use `git checkout --detach <old-ref>` after
+the `.env` rollback, not before: the old kit refuses Brevo. Revoke the SMTP key in Brevo if it is no longer used.

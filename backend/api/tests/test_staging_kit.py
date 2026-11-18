@@ -25,6 +25,10 @@ GOOD = {"DEPLOY_ENV": "staging", "DEBUG": "False", "PARTS_PROVIDER": "demo", "PA
 REAL_SMS = {**GOOD, "SENDER_GE_ENABLED": "True", "SENDER_GE_API_KEY": "k", "SMS_DEMO_MODE": "False", "ENABLE_DEMO_ENDPOINTS": "False"}
 REAL_AMT = {**REAL_SMS, "PARTS_PROVIDER": "amt", "AMT_API_LOGIN": "l", "AMT_API_PASSWORD": "p"}
 PROFILES = {"demo": GOOD, "real sms": REAL_SMS, "real amt": REAL_AMT}
+# LPK-235: the Brevo relay instead of Mailpit, beside any provider profile.
+BREVO_MAIL = {"EMAIL_HOST": "smtp-relay.brevo.com", "EMAIL_PORT": "587", "EMAIL_USE_TLS": "True",
+              "EMAIL_HOST_USER": "login@example.invalid", "EMAIL_HOST_PASSWORD": "brevo-key-should-not-appear"}
+SMTP = "django.core.mail.backends.smtp.EmailBackend"
 TARGET = ("lp_stage_v1", "lp_stage", "127.0.0.1", "5432")
 TOOL_SCRIPT = '#!/bin/sh\necho "tool ran: $(basename "$0") $*" >> "$TOOL_LOG"\nexit 99\n'
 
@@ -121,6 +125,40 @@ class StageScriptTests(SimpleTestCase):
         self.assert_refused(result, "DB_NAME")
         self.assertNotIn("pw-should-not-appear", result.stdout + result.stderr)
 
+    def test_mailpit_and_brevo_pass_beside_every_provider_profile(self):
+        for name, profile in PROFILES.items():
+            for mail, changes in (("mailpit", {}), ("brevo", BREVO_MAIL)):
+                with self.subTest(profile=name, mail=mail):
+                    result = self.run_stage("check", profile=profile, proof_exit=0, **changes)
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertIn("target verified", result.stdout)
+
+    def test_backup_health_and_restore_check_still_run_with_either_mail_profile(self):
+        # Past every refusal to the first database tool (a stand-in that logs and fails). The nightly backup is stage.sh backup.
+        dump = str(KIT / "stage.sh")
+        for mail, changes in (("mailpit", {}), ("brevo", BREVO_MAIL)):
+            for args, tool in ((("backup",), "pg_dump"), (("health",), "curl"), (("restore-verify", dump), "pg_restore")):
+                with self.subTest(mail=mail, command=args[0]):
+                    result = self.run_stage(*args, profile=REAL_AMT, proof_exit=0, ALLOWED_HOSTS="test2.lionparts.ge", **changes)
+                    self.assertIn(f"tool ran: {tool}", result.tools_ran, result.stderr)
+
+    def test_any_other_or_insecure_mail_server_is_refused(self):
+        for host in ("smtp.example.com", "smtp-relay.brevo.com.example.com", "SMTP-RELAY.BREVO.COM", "smtp-relay.sendinblue.com",
+                     "localhost", "127.0.0.2", "0.0.0.0", ""):
+            with self.subTest(host=host):
+                self.assert_refused(self.run_stage("check", **{**BREVO_MAIL, "EMAIL_HOST": host}),
+                                    "EMAIL_HOST must be 127.0.0.1 (Mailpit) or smtp-relay.brevo.com (Brevo)")
+        for key, value, reason in (("EMAIL_PORT", "25", "EMAIL_PORT must be '587'"), ("EMAIL_PORT", "465", "EMAIL_PORT must be '587'"),
+                                   ("EMAIL_PORT", "2525", "EMAIL_PORT must be '587'"), ("EMAIL_PORT", "", "EMAIL_PORT must be '587'"),
+                                   ("EMAIL_USE_TLS", "False", "EMAIL_USE_TLS must be 'True'"),
+                                   ("EMAIL_USE_TLS", "", "EMAIL_USE_TLS must be 'True'"),
+                                   ("EMAIL_HOST_USER", "", "EMAIL_HOST_USER must be set"),
+                                   ("EMAIL_HOST_PASSWORD", "", "EMAIL_HOST_PASSWORD must be set")):
+            with self.subTest(key=key, value=value):
+                result = self.run_stage("backup", profile=REAL_AMT, **{**BREVO_MAIL, key: value})
+                self.assert_refused(result, reason)
+                self.assertNotIn("brevo-key-should-not-appear", result.stdout + result.stderr)
+
     def test_any_other_database_role_is_refused(self):
         for role in ("lion_parts", "lion_parts_dev", "postgres", "lp_stage2", "LP_STAGE", ""):
             with self.subTest(role=role):
@@ -166,7 +204,9 @@ class StageScriptTests(SimpleTestCase):
 class TargetProofTests(SimpleTestCase):
     DEMO = {"PARTS_PROVIDER": "demo", "SENDER_GE_ENABLED": False, "SMS_DEMO_MODE": True, "ENABLE_DEMO_ENDPOINTS": True,
             "AMT_API_LOGIN": "", "AMT_API_PASSWORD": "", "SENDER_GE_API_KEY": "", "AMT_TIMEOUT_SECONDS": 15,
-            "AMT_LOOKUP_BUDGET_SECONDS": 30}
+            "AMT_LOOKUP_BUDGET_SECONDS": 30, "DEFAULT_FROM_EMAIL": "Lion Parts Staging <no-reply@example.invalid>",
+            "MAILERS": {"default": {"BACKEND": SMTP, "OPTIONS": {"host": "127.0.0.1", "port": 1025, "username": "", "password": "",
+                                                                 "use_tls": False, "timeout": 10}}}}
     REAL_AMT = {**DEMO, "PARTS_PROVIDER": "amt", "SENDER_GE_ENABLED": True, "SMS_DEMO_MODE": False, "ENABLE_DEMO_ENDPOINTS": False,
                 "AMT_API_LOGIN": "secret-login", "AMT_API_PASSWORD": "secret-pass", "SENDER_GE_API_KEY": "secret-key"}
 
@@ -178,6 +218,22 @@ class TargetProofTests(SimpleTestCase):
 
     def problems(self, profile=None, **changes):
         return verify_target().settings_problems(self.staging(profile, **changes), *TARGET)
+
+    @staticmethod
+    def brevo(backend=SMTP, from_email="Lion Parts Staging <verify@lionparts.ge>", **options):
+        brevo = {"host": "smtp-relay.brevo.com", "port": 587, "username": "secret-login", "password": "secret-smtp-key",
+                 "use_tls": True, "timeout": 10}
+        return {"MAILERS": {"default": {"BACKEND": backend, "OPTIONS": brevo | options}}, "DEFAULT_FROM_EMAIL": from_email}
+
+    def real_settings_problems(self, env):
+        # The defaults settings.py gives an approved .env (endpoints, TLS, timeouts, mail backend) must satisfy the proof.
+        env = {**env, "SECRET_KEY": "x" * 60, "ALLOWED_HOSTS": "test2.lionparts.ge", "AMT_ENDPOINT": None, "AMT_VERIFY_SSL": None,
+               "AMT_TIMEOUT_SECONDS": None, "AMT_LOOKUP_BUDGET_SECONDS": None, "SENDER_GE_SEND_URL": None, "EMAIL_BACKEND": None,
+               "EMAIL_TIMEOUT": None}
+        code = (f"import importlib.util, config.settings as s; spec = importlib.util.spec_from_file_location('v', {str(KIT / 'verify_target.py')!r}); "
+                f"m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); print(m.settings_problems(s, *{TARGET!r}))")
+        result = run_python(code, env)
+        return result.stdout.strip() or result.stderr
 
     def test_the_approved_profiles_pass(self):
         real_sms = {**self.REAL_AMT, "PARTS_PROVIDER": "demo", "AMT_API_LOGIN": "", "AMT_API_PASSWORD": ""}
@@ -222,14 +278,46 @@ class TargetProofTests(SimpleTestCase):
                                  {"AMT_TIMEOUT_SECONDS/AMT_LOOKUP_BUDGET_SECONDS": (timeout, budget)})
 
     def test_the_real_settings_module_passes_with_the_real_amt_profile(self):
-        # The defaults settings.py gives an approved .env (endpoints, TLS, timeouts) must satisfy the proof.
-        env = {key: value for key, value in REAL_AMT.items()}
-        env |= {"SECRET_KEY": "x" * 60, "ALLOWED_HOSTS": "test2.lionparts.ge", "AMT_ENDPOINT": None, "AMT_VERIFY_SSL": None,
-                "AMT_TIMEOUT_SECONDS": None, "AMT_LOOKUP_BUDGET_SECONDS": None, "SENDER_GE_SEND_URL": None}
-        code = (f"import importlib.util, config.settings as s; spec = importlib.util.spec_from_file_location('v', {str(KIT / 'verify_target.py')!r}); "
-                f"m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); print(m.settings_problems(s, *{TARGET!r}))")
-        result = run_python(code, env)
-        self.assertEqual(result.stdout.strip(), "{}", result.stderr)
+        self.assertEqual(self.real_settings_problems(REAL_AMT), "{}")
+
+    def test_the_real_settings_module_passes_with_brevo_and_refuses_plain_smtp(self):
+        brevo = {**REAL_AMT, **BREVO_MAIL, "DEFAULT_FROM_EMAIL": "Lion Parts Staging <verify@lionparts.ge>"}
+        self.assertEqual(self.real_settings_problems(brevo), "{}")
+        self.assertEqual(self.real_settings_problems({**brevo, "EMAIL_USE_TLS": "False"}), "{'EMAIL_USE_TLS': False}")
+
+    def test_mailpit_and_brevo_pass(self):
+        for profile in (self.DEMO, self.REAL_AMT):
+            with self.subTest(profile=profile["PARTS_PROVIDER"]):
+                self.assertEqual(self.problems(profile), {})
+                for sender in ("Lion Parts Staging <verify@lionparts.ge>", "backup@lionparts.ge", "Lion Parts <verify@LionParts.GE>"):
+                    self.assertEqual(self.problems({**profile, **self.brevo(from_email=sender)}), {}, sender)
+                self.assertEqual(self.problems({**profile, **self.brevo(timeout=30)}), {})
+
+    def test_an_insecure_or_unapproved_mailer_is_refused(self):
+        console = "django.core.mail.backends.console.EmailBackend"
+        mailpit = self.DEMO["MAILERS"]["default"]
+        cases = (
+            (self.brevo(port=25), {"EMAIL_PORT": 25}),
+            (self.brevo(port=465, use_tls=False, use_ssl=True), {"EMAIL_PORT": 465, "EMAIL_USE_TLS": False, "EMAIL_USE_SSL": True}),
+            (self.brevo(use_tls=False), {"EMAIL_USE_TLS": False}),
+            (self.brevo(username=""), {"EMAIL_HOST_USER set": False}),
+            (self.brevo(password=""), {"EMAIL_HOST_PASSWORD set": False}),
+            (self.brevo(timeout=31), {"EMAIL_TIMEOUT": 31}),
+            (self.brevo(timeout=None), {"EMAIL_TIMEOUT": 0}),
+            (self.brevo(host="smtp.example.com"), {"EMAIL_HOST": "smtp.example.com", "EMAIL_HOST_PASSWORD set": True}),
+            (self.brevo(backend=console), {"EMAIL_BACKEND": console}),
+            (self.brevo(from_email="Lion Parts <no-reply@example.com>"), {"sender domain": "example.com"}),
+            (self.brevo(from_email="verify@lionparts.ge.example.com"), {"sender domain": "lionparts.ge.example.com"}),
+            (self.brevo(from_email="verify@mail.lionparts.ge"), {"sender domain": "mail.lionparts.ge"}),
+            ({"MAILERS": {"default": {**mailpit, "OPTIONS": {**mailpit["OPTIONS"], "password": "secret-smtp-key"}}}},
+             {"EMAIL_HOST_PASSWORD set": True}),
+            ({"MAILERS": {"default": {"BACKEND": console, "OPTIONS": {}}}}, {"EMAIL_BACKEND": console, "EMAIL_HOST": None}),
+        )
+        for mail, wrong in cases:
+            with self.subTest(wrong=wrong):
+                problems = self.problems({**self.REAL_AMT, **mail})
+                self.assertEqual(problems, wrong)
+                self.assertNotRegex(repr(problems), "secret-")
 
     def test_the_right_connection_passes(self):
         row = ("lp_stage_v1", "lp_stage", "lp_stage", "127.0.0.1", 5432, "off")

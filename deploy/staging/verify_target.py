@@ -6,6 +6,7 @@ from backend/, with .env loaded, and exits non-zero on any difference:
 
 import os
 import sys
+from email.utils import parseaddr
 
 SETTINGS = {"DEPLOY_ENV": "staging", "DEBUG": False, "PAYMENT_PROVIDER": "fake", "AMT_VERIFY_SSL": True,
             "AMT_ENDPOINT": "https://automototrade.com/wsdl/server.php", "SENDER_GE_SEND_URL": "https://sender.ge/api/send.php"}
@@ -13,6 +14,13 @@ SETTINGS = {"DEPLOY_ENV": "staging", "DEBUG": False, "PAYMENT_PROVIDER": "fake",
 PROFILES = {("demo", False): True, ("demo", True): False, ("amt", True): False}
 # The longest single AMT lookup gunicorn (timeout 60) should ever wait for: the settings defaults.
 MAX_AMT_TIMEOUT, MAX_AMT_BUDGET = 15, 30
+# Mail (LPK-235): Mailpit on loopback without a password, or the Brevo relay over STARTTLS from the verified domain.
+SMTP_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+MAILPIT = {"EMAIL_BACKEND": SMTP_BACKEND, "EMAIL_HOST": "127.0.0.1", "EMAIL_USE_SSL": False, "EMAIL_HOST_PASSWORD set": False}
+BREVO = {**MAILPIT, "EMAIL_HOST": "smtp-relay.brevo.com", "EMAIL_PORT": 587, "EMAIL_USE_TLS": True, "EMAIL_HOST_USER set": True,
+         "EMAIL_HOST_PASSWORD set": True, "sender domain": "lionparts.ge"}
+# A send runs inside a request (gunicorn timeout 60); settings.py allows any positive value.
+MAX_EMAIL_TIMEOUT = 30
 # host() is NULL over a Unix socket, which is then refused: the approved target is the TCP address.
 IDENTITY_SQL = ("SELECT current_database(), current_user, session_user, host(inet_server_addr()), inet_server_port(), "
                 "current_setting('is_superuser')")
@@ -36,6 +44,25 @@ def settings_problems(settings, database, role, host, port):
     timeout, budget = settings.AMT_TIMEOUT_SECONDS, settings.AMT_LOOKUP_BUDGET_SECONDS
     if not 0 < timeout <= MAX_AMT_TIMEOUT or not timeout <= budget <= MAX_AMT_BUDGET:
         wrong["AMT_TIMEOUT_SECONDS/AMT_LOOKUP_BUDGET_SECONDS"] = (timeout, budget)
+    return wrong | mail_problems(settings)
+
+
+def mail_problems(settings):
+    """-> {name: wrong value} for the effective default mailer. The username and password only as set or not."""
+    mailer = settings.MAILERS["default"]
+    options = mailer.get("OPTIONS", {})
+    actual = {"EMAIL_BACKEND": mailer["BACKEND"], "EMAIL_HOST": options.get("host"), "EMAIL_USE_SSL": bool(options.get("use_ssl")),
+              "EMAIL_HOST_PASSWORD set": bool(options.get("password"))}
+    expected = MAILPIT
+    if actual["EMAIL_HOST"] == BREVO["EMAIL_HOST"]:
+        expected = BREVO
+        actual |= {"EMAIL_PORT": options.get("port"), "EMAIL_USE_TLS": options.get("use_tls"),
+                   "EMAIL_HOST_USER set": bool(options.get("username")),
+                   "sender domain": parseaddr(settings.DEFAULT_FROM_EMAIL)[1].rpartition("@")[2].lower()}
+    wrong = {name: value for name, value in actual.items() if value != expected[name]}
+    timeout = options.get("timeout") or 0
+    if expected is BREVO and not 0 < timeout <= MAX_EMAIL_TIMEOUT:
+        wrong["EMAIL_TIMEOUT"] = timeout
     return wrong
 
 

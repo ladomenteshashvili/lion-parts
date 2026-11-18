@@ -81,6 +81,7 @@ The steps below explain the same setup by hand; the names in them are only examp
    ```
 7. **Mail.** Run **Mailpit** (SMTP on 1025, web UI on 8025) on the staging host; set `EMAIL_HOST=127.0.0.1`,
    `EMAIL_PORT=1025`, `EMAIL_USE_TLS=False`. Share the web UI (behind basic auth or VPN) with the frontend team.
+   The only other approved staging mail server is the Brevo relay: `docs/staging-runbook.md` §13.
 8. **Processes:** gunicorn as a systemd service (§4), nginx site (§5), cron (§6).
 9. **Smoke test** (frontend team, G§4.10): register (demo SMS code in the response, verification email in
    Mailpit), search, add to cart, checkout with card, finish the fake payment
