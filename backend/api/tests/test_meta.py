@@ -9,7 +9,7 @@ from api.pagination import Pagination
 
 META_KEYS = {"languages", "default_language", "currencies", "multi_currency_enabled", "default_currency",
              "base_currency", "price_valid_business_days", "usd_rate", "pickup_points", "delivery",
-             "otp_length", "otp_resend_seconds", "password_rules"}
+             "otp_length", "otp_resend_seconds", "password_rules", "contact"}
 
 
 class CountedPagination(Pagination):

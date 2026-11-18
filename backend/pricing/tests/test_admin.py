@@ -29,7 +29,8 @@ def site_form(**changes):
     site = SiteSettings.get()
     data = {}
     for field in ("multi_currency_enabled", "rate_max_age_days", "vat_percent", "price_valid_business_days",
-                  "default_shipping_usd_per_kg", "invoice_seller_code", "invoice_seller_phone", "invoice_seller_email"):
+                  "default_shipping_usd_per_kg", "invoice_seller_code", "invoice_seller_phone", "invoice_seller_email",
+                  "contact_phone", "contact_email", "whatsapp_phone", "viber_phone", "facebook_url", "instagram_url"):
         value = getattr(site, field)
         if isinstance(value, bool):
             if value:

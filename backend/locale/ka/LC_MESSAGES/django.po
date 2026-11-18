@@ -1303,3 +1303,31 @@ msgstr "გთხოვთ, არ უპასუხოთ ამ წერი�
 
 msgid "The request changed while the supplier was being asked; try again."
 msgstr "მოთხოვნა შეიცვალა მომწოდებლის პასუხის მოლოდინში; სცადეთ თავიდან."
+
+msgid "contact phone"
+msgstr "საკონტაქტო ტელეფონი"
+
+
+msgid "contact email"
+msgstr "საკონტაქტო ელფოსტა"
+
+msgid "Contact page"
+msgstr "საკონტაქტო გვერდი"
+
+msgid "Shown on the website's contact page; an empty field is hidden. Pickup point addresses and working hours come from Pickup points."
+msgstr "ჩანს ვებგვერდის საკონტაქტო გვერდზე; ცარიელი ველი არ ჩანს. გაცემის პუნქტების მისამართები და სამუშაო საათები მოდის „Pickup points“ განყოფილებიდან."
+
+msgid "WhatsApp number"
+msgstr "WhatsApp-ის ნომერი"
+
+msgid "Viber number"
+msgstr "Viber-ის ნომერი"
+
+msgid "Facebook page"
+msgstr "Facebook-ის გვერდი"
+
+msgid "Instagram page"
+msgstr "Instagram-ის გვერდი"
+
+msgid "Enter a phone number like +995 555 12 34 56."
+msgstr "შეიყვანეთ ტელეფონის ნომერი ასე: +995 555 12 34 56."

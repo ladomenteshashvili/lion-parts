@@ -92,6 +92,7 @@ class PublicAndAuthContractTests(ContractTestCase):
         self.assert_keys(meta["delivery"]["cities"][0], C.CITY)
         self.assert_keys(meta["delivery"]["districts"][0], C.DISTRICT)
         self.assert_keys(meta["pickup_points"][0], C.PICKUP_POINT)
+        self.assert_keys(meta["contact"], C.CONTACT)
         self.assert_keys(APIClient().get("/api/health/").json(), C.HEALTH)
         self.assert_keys(APIClient().get("/api/auth/csrf/").json(), C.CSRF)
         anonymous = APIClient().get("/api/auth/me/").json()

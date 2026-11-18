@@ -1307,3 +1307,31 @@ msgstr "Пожалуйста, не отвечайте на это письмо. 
 
 msgid "The request changed while the supplier was being asked; try again."
 msgstr "Запрос изменился, пока мы ждали ответ поставщика; попробуйте ещё раз."
+
+msgid "contact phone"
+msgstr "контактный телефон"
+
+
+msgid "contact email"
+msgstr "контактная эл. почта"
+
+msgid "Contact page"
+msgstr "Страница контактов"
+
+msgid "Shown on the website's contact page; an empty field is hidden. Pickup point addresses and working hours come from Pickup points."
+msgstr "Показывается на странице контактов сайта; пустое поле скрыто. Адреса и часы работы пунктов выдачи берутся из раздела «Pickup points»."
+
+msgid "WhatsApp number"
+msgstr "номер WhatsApp"
+
+msgid "Viber number"
+msgstr "номер Viber"
+
+msgid "Facebook page"
+msgstr "страница Facebook"
+
+msgid "Instagram page"
+msgstr "страница Instagram"
+
+msgid "Enter a phone number like +995 555 12 34 56."
+msgstr "Введите номер телефона в формате +995 555 12 34 56."

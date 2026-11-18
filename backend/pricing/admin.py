@@ -33,6 +33,12 @@ class SiteSettingsAdmin(TranslatedFieldsAdminMixin, admin.ModelAdmin):
         (_("Invoice"), {"fields": ("invoice_seller_name_i18n", "invoice_seller_code", "invoice_seller_address_i18n",
                                    "invoice_seller_phone", "invoice_seller_email", "invoice_bank_details_i18n",
                                    "invoice_payment_due_text_i18n", "invoice_footer_text_i18n")}),
+        (_("Contact page"), {
+            "description": _("Shown on the website's contact page; an empty field is hidden. Pickup point addresses and "
+                             "working hours come from Pickup points."),
+            "fields": ("contact_phone", "contact_email", "whatsapp_phone", "viber_phone", "facebook_url",
+                       "instagram_url"),
+        }),
         (None, {"fields": ("created_at", "updated_at")}),
     )
 
