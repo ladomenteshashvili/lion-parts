@@ -74,7 +74,9 @@ class Command(BaseCommand):
             for row in rows:
                 row["part"] = parts.get(identity(row["oem"], row["brand"]))
             with transaction.atomic():
-                record_search(log, rows)
+                if not record_search(log, rows):  # a live search recorded it meanwhile
+                    counts["logs already linked"] += 1
+                    continue
             counts["logs linked"] += 1
             counts["supplier offers"] += sum(1 for row in rows if row["part"])
         first_seen = PartSupplierOffer.objects.filter(part=OuterRef("pk")).values("part").annotate(

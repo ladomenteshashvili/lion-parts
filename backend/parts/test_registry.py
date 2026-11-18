@@ -1,6 +1,7 @@
 """LPK-238 to LPK-240: parts registry, reusable weights and the missing-weight queue."""
 
 import threading
+import time
 import unittest
 from decimal import Decimal
 from io import StringIO
@@ -17,11 +18,13 @@ from accounts.models import Customer, CustomerTariff
 from accounts.testing import make_customer
 from orders.models import Notification
 from orders.services import OperatorError
+from orders.testing import make_order
 from parts.models import (CarrierService, PartMaster, PartQuoteRequest, PartSearchLog, PartSupplierOffer, PartWeight,
                           PartWeightEvent, WeightTask, WeightTaskRequest)
-from parts.providers import OFFER_KEYS, PartsProviderError
-from parts.registry import InvalidWeight, clean_weight, get_parts, record_weight, review_weight
-from parts.services import mark_quote_ready
+from parts.providers import OFFER_KEYS, PartsProviderError, fetch_rows
+from parts.registry import (InvalidWeight, clean_weight, get_parts, record_search, record_weight, review_weight,
+                            with_known_weights)
+from parts.services import _learn_from_search, mark_quote_ready
 from parts.weight_tasks import approve_task, cancel_task, queue_missing_weights
 from pricing.engine import PriceInput, price_offer
 from pricing.models import ExchangeRate
@@ -114,7 +117,21 @@ class IdentityTests(RegistryTestCase):
         with mock.patch("parts.registry.get_parts", side_effect=RuntimeError("boom")), \
                 self.assertLogs("parts.registry", "ERROR"):
             self.supplier = [amt_row(weight="1.00")]
-            self.assertEqual(self.search()["offers"][0]["status"], "ready")
+            self.assertEqual(len(self.search()["offers"]), 1)
+
+    def test_a_registry_failure_never_prices_an_unverifiable_weight(self):
+        self.supplier = [amt_row(weight="7.00")]
+        self.search()
+        review_weight(PartWeight.objects.get().pk, "rejected", self.staff, "a filter is not 7 kg")
+        searches = PartMaster.objects.get().search_count
+        with mock.patch("parts.registry.get_parts", side_effect=RuntimeError("boom")), \
+                self.assertLogs("parts.registry", "ERROR"):
+            offer = self.search()["offers"][0]
+        # The rejection cannot be checked: the rejected 7 kg is not priced, the offer waits as `checking`.
+        self.assertEqual((offer["status"], offer["weight_kg"], offer["unit_price"]), ("checking", None, None))
+        self.assertEqual((PartMaster.objects.get().search_count, WeightTask.objects.count()), (searches, 0))
+        offer = self.search()["offers"][0]  # registry back: still refused, now queued for the operator
+        self.assertEqual((offer["status"], WeightTask.objects.count()), ("checking", 1))
 
     def test_the_offer_contract_is_unchanged(self):
         self.supplier = [amt_row(weight="0.40"), amt_row("Denso")]
@@ -387,6 +404,84 @@ class MissingWeightQueueTests(RegistryTestCase):
         self.assertEqual(PartMaster.objects.get().current_weight, estimate)
 
 
+class ReviewRegressionTests(RegistryTestCase):
+    """PR #84 review: idempotent counters, repeat searches, and prices that must not move."""
+
+    def setUp(self):
+        super().setUp()
+        self.partner = CustomerTariff.objects.create(name="Partner", markup_percent=D("5"))
+        self.nino, self.nino_client = self.customer("nino@example.com", "555000001")
+        self.giorgi, self.giorgi_client = self.customer("giorgi@example.com", "555000002", tariff=self.partner)
+
+    def state(self):
+        return (list(PartMaster.objects.values_list("pk", "search_count", "vin_search_count")),
+                PartSupplierOffer.objects.count(), list(PartWeight.objects.values_list("pk", "seen_count")),
+                list(WeightTask.objects.values_list("pk", "request_count")), WeightTaskRequest.objects.count())
+
+    def test_recording_a_search_again_counts_nothing_twice(self):
+        self.supplier = [amt_row(weight="0.40"), amt_row("Denso")]
+        self.search(self.nino_client, vin="JTDBR32E720123456")
+        log, before = PartSearchLog.objects.get(), self.state()
+        with self.amt():
+            rows = with_known_weights(fetch_rows(PART)[2])
+        _learn_from_search(log, rows, self.nino)  # a retry of the whole step
+        self.assertFalse(record_search(log, rows))
+        self.assertEqual(self.state(), before)
+        self.assertEqual(before[0][0][1:], (1, 1))
+
+    def test_a_repeat_search_prices_the_latest_search_once(self):
+        Customer.objects.filter(pk=self.nino.pk).update(is_phone_verified=False)
+        self.search(self.nino_client)
+        Customer.objects.filter(pk=self.nino.pk).update(is_phone_verified=True)  # verified before the repeat
+        latest = self.search(self.nino_client)
+        task = WeightTask.objects.get()
+        entry = task.requests.get()
+        self.assertEqual((task.request_count, entry.search_log_id, entry.outcome), (2, latest["search_id"], WeightTaskRequest.OUTCOME_WAITING))
+        self.approve(task)
+        entry.refresh_from_db()
+        quote = PartQuoteRequest.objects.get()
+        self.assertEqual((entry.outcome, entry.quote_request, quote.search_log_id), ("priced", quote, latest["search_id"]))
+        self.assertEqual(Notification.objects.filter(event_type="price_ready").count(), 1)
+
+    def test_a_search_queued_after_its_task_resolved_is_not_priced_twice(self):
+        first = self.search(self.nino_client)
+        task = self.approve(WeightTask.objects.get(), D("0.50"))
+        # Nino's repeat search and Giorgi's first one were `checking` and reach the queue just after the pricing run.
+        log = PartSearchLog.objects.get(pk=first["search_id"])
+        row = {"part": self.part(), "weight_kg": None, "offer_id": first["offers"][0]["offer_id"],
+               "supplier_price_usd": D("40.00")}
+        for customer in (self.nino, self.giorgi):
+            queue_missing_weights(log, [row], customer)
+        self.assertEqual(task.requests.count(), 1)  # nobody joins a resolved task
+        again = WeightTask.objects.get(status="awaiting_weight")
+        self.assertEqual({r.customer for r in again.requests.all()}, {self.nino, self.giorgi})
+        self.approve(again, weight=None)  # the weight approved meanwhile
+        self.assertEqual(dict(again.requests.values_list("customer", "outcome")),
+                         {self.nino.pk: "already_priced", self.giorgi.pk: "priced"})
+        for customer in (self.nino, self.giorgi):
+            self.assertEqual(PartQuoteRequest.objects.filter(customer=customer).count(), 1)
+            self.assertEqual(Notification.objects.filter(customer=customer, event_type="price_ready").count(), 1)
+
+    def test_existing_order_and_search_prices_do_not_move(self):
+        order = make_order(self.nino, items=((PART, D("100.00"), 2),))
+        items = list(order.items.values_list("unit_price_usd", "unit_price", "list_price_usd"))
+        old = self.search(self.giorgi_client)
+        snapshot = PartSearchLog.objects.get(pk=old["search_id"]).normalized_response
+        self.supplier = [amt_row(price="44.00")]
+        self.approve(WeightTask.objects.get(), D("0.50"))
+        record_weight(self.part(), D("0.70"), PartWeight.SOURCE_PHYSICAL, status=PartWeight.STATUS_APPROVED)
+        new = self.search(self.giorgi_client)["offers"][0]
+        order.refresh_from_db()
+        self.assertEqual(list(order.items.values_list("unit_price_usd", "unit_price", "list_price_usd")), items)
+        self.assertEqual(PartSearchLog.objects.get(pk=old["search_id"]).normalized_response, snapshot)
+        # A new search is priced fresh: the current supplier price, the stronger weight and Giorgi's own tariff.
+        expected = price_offer(PriceInput(D("44.00"), D("0.70"), D("8.00")), customer=self.giorgi,
+                               part_number=PART, brand="Toyota")
+        log = PartSearchLog.objects.order_by("-pk").first()
+        self.assertEqual((new["weight_kg"], log.offers()[0]["snapshot"]["unit_price_usd"]),
+                         ("0.70", str(expected.unit_price_usd)))
+
+
 class BackfillTests(RegistryTestCase):
     def log(self, offers, provider="amt", **fields):
         return PartSearchLog.objects.create(provider=provider, part_number=PART, normalized_response={"offers": offers},
@@ -472,3 +567,65 @@ class ConcurrentSearchTests(TransactionTestCase):
         self.assertEqual(PartMaster.objects.count(), 1)
         task = WeightTask.objects.get()
         self.assertEqual((task.request_count, task.requests.count()), (4, 4))
+
+    def test_parallel_retries_of_one_search_count_it_once(self):
+        log = PartSearchLog.objects.create(provider="amt", part_number=PART)
+        part = get_parts([("90915YZZE1", "Toyota", "OIL FILTER")])[("90915YZZE1", "TOYOTA")]
+        rows = [{"part": part, "offer_id": "AMT-1-90915YZZE1", "supplier_price_usd": D("40.00"),
+                 "supplier_weight_kg": D("0.40"), "weight_kg": D("0.40")}]
+        barrier, errors, recorded = threading.Barrier(4), [], []
+
+        def retry():
+            try:
+                barrier.wait()
+                recorded.append(record_search(log, rows))
+            except Exception as error:  # pragma: no cover - reported below
+                errors.append(error)
+            finally:
+                connections.close_all()
+
+        threads = [threading.Thread(target=retry) for _ in range(4)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual((errors, sorted(recorded)), ([], [False, False, False, True]))
+        part.refresh_from_db()
+        self.assertEqual((part.search_count, PartSupplierOffer.objects.count()), (1, 1))
+        self.assertEqual(list(PartWeight.objects.values_list("seen_count", flat=True)), [1])
+
+    def test_a_search_waits_for_a_pricing_run_and_never_joins_the_resolved_task(self):
+        customer = make_customer(email="c@example.com", phone="555000009")
+        log = PartSearchLog.objects.create(provider="amt", part_number=PART)
+        part = get_parts([("90915YZZE1", "Toyota", "OIL FILTER")])[("90915YZZE1", "TOYOTA")]
+        task = WeightTask.objects.create(part=part)
+        locked, errors = threading.Event(), []
+
+        def pricing_run():  # what price_task holds: the task locked until it is resolved
+            try:
+                with transaction.atomic():
+                    WeightTask.objects.select_for_update().get(pk=task.pk)
+                    locked.set()
+                    time.sleep(0.5)
+                    WeightTask.objects.filter(pk=task.pk).update(status=WeightTask.STATUS_RESOLVED)
+            finally:
+                connections.close_all()
+
+        def search():
+            try:
+                locked.wait()
+                row = {"part": part, "weight_kg": None, "offer_id": "AMT-1-90915YZZE1", "supplier_price_usd": D("40")}
+                queue_missing_weights(log, [row], customer)
+            except Exception as error:  # pragma: no cover - reported below
+                errors.append(error)
+            finally:
+                connections.close_all()
+
+        threads = [threading.Thread(target=pricing_run), threading.Thread(target=search)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual(errors, [])
+        self.assertFalse(task.requests.exists())
+        self.assertEqual(WeightTask.objects.get(status="awaiting_weight").requests.get().customer, customer)

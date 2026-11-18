@@ -170,8 +170,8 @@ def _learn_from_search(log, rows, customer):
 
     try:
         with transaction.atomic():
-            record_search(log, rows)
-            queue_missing_weights(log, rows, customer)
+            if record_search(log, rows):  # a retry of an already recorded log queues nothing again
+                queue_missing_weights(log, rows, customer)
     except Exception:
         logger.exception("Recording search %s in the parts registry failed", log.pk)
 

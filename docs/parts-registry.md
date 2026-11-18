@@ -28,7 +28,8 @@ Backend and Django Admin only. No API field, value or endpoint is new, and neith
 3. Otherwise the part's approved weight on record, such as an earlier AMT weight or an approved AI estimate.
 4. Otherwise none: the offer is `checking`, as before, and the part joins the missing-weight queue.
 
-Pending and rejected weights are never used. Every reused weight is priced again for the customer who searches, with
+If the registry itself cannot be read during a search, no supplier weight is used: it cannot be checked against
+rejections, so the offers are `checking` until the registry is back (fail closed). Pending and rejected weights are never used. Every reused weight is priced again for the customer who searches, with
 their tariff, the current supplier price, shipping, VAT and discounts, through `pricing.engine.price_offer`. No price
 is ever copied from another customer. Offers keep `weight_source` `api` for a supplier weight and show `operator` for
 an operator-approved one, both existing values (G§8.0).
@@ -134,7 +135,12 @@ and deletes nothing.
 
 - The search does a few more queries per call, batched per search. The registry is written after the supplier call
   and outside any lock (LPK-220). A registry failure is logged and never fails a search.
-- Two simultaneous searches may both record the same new AMT weight once. That is harmless: same value and same rank.
+- Recording a search is idempotent: the search log is locked, and a log already recorded (a retry, a parallel call or
+  the backfill) adds no counts, offers, weights or queue entries.
+- A search that reaches the queue while a pricing run is resolving the same part's task waits for it and then opens a
+  new task, never joins the resolved one. A customer who already holds a valid price with the same weight is reported
+  as "already had a price" there, so nobody is priced or notified twice.
+- Two simultaneous searches (different logs) may both record the same new AMT weight once. That is harmless: same value and same rank.
 - The waiting-customer list keeps each customer's latest search of the part only.
 - A part number with several supplier rows of the same manufacturer is one part; the latest row's price is the "last
   supplier price".

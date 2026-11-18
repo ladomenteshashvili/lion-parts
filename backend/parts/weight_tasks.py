@@ -4,11 +4,11 @@ supplier price, through the existing quote request "price ready" flow (G§7.6): 
 price_ready notification work as they do for a quote the operator priced by hand. Nobody has to search again."""
 
 from django.db import IntegrityError, transaction
-from django.db.models import F
+from django.db.models import F, Q
 from django.utils import timezone
 from django.utils.translation import gettext as _
 
-from .models import PartQuoteRequest, PartWeight, WeightTask, WeightTaskRequest
+from .models import PartMaster, PartQuoteRequest, PartWeight, WeightTask, WeightTaskRequest
 from .registry import InvalidWeight, clean_weight, identity, is_plausible, record_weight
 
 
@@ -21,36 +21,35 @@ def queue_missing_weights(log, rows, customer):
         if part is None or row["weight_kg"] is not None or part.pk in done:
             continue
         done.add(part.pk)
-        task = _open_task(part)
-        WeightTask.objects.filter(pk=task.pk).update(request_count=F("request_count") + 1, last_search_log=log,
-                                                     offer_id=row["offer_id"],
-                                                     supplier_price_usd=row["supplier_price_usd"])
-        if customer is not None:
-            _wait(task, customer, log, row["offer_id"])
+        with transaction.atomic():
+            task = _open_task(part)
+            WeightTask.objects.filter(pk=task.pk).update(request_count=F("request_count") + 1, last_search_log=log,
+                                                         offer_id=row["offer_id"],
+                                                         supplier_price_usd=row["supplier_price_usd"])
+            if customer is not None:
+                _wait(task, customer, log, row["offer_id"])
 
 
 def _open_task(part):
-    task = WeightTask.objects.filter(part=part, status__in=WeightTask.OPEN_STATUSES).first()
+    """-> the part's open task, locked. The lock waits for a pricing run in progress (price_task holds it); a task that
+    run resolved no longer matches, so a new one opens and no customer is left on a resolved task."""
+    open_tasks = WeightTask.objects.select_for_update().filter(part=part, status__in=WeightTask.OPEN_STATUSES)
+    task = open_tasks.first()
     if task:
         return task
     try:
         with transaction.atomic():
             return WeightTask.objects.create(part=part)
     except IntegrityError:  # a concurrent search opened it first (one open task per part)
-        return WeightTask.objects.get(part=part, status__in=WeightTask.OPEN_STATUSES)
+        return open_tasks.get()
 
 
 def _wait(task, customer, log, offer_id):
-    """The customer's latest search of the part is the one priced; one entry per customer and task."""
-    updated = WeightTaskRequest.objects.filter(task=task, customer=customer, outcome=WeightTaskRequest.OUTCOME_WAITING
-                                               ).update(search_log=log, offer_id=offer_id, updated_at=timezone.now())
-    if updated or WeightTaskRequest.objects.filter(task=task, customer=customer).exists():
-        return
-    try:
-        with transaction.atomic():
-            WeightTaskRequest.objects.create(task=task, customer=customer, search_log=log, offer_id=offer_id)
-    except IntegrityError:  # the same customer's parallel search added it
-        pass
+    """One entry per customer and task, pointing at the customer's latest search of the part (the one priced). The
+    task is locked, so a repeat or parallel search by the same customer updates their entry; an open task only has
+    waiting entries (price_task sets the outcomes as it resolves the task)."""
+    WeightTaskRequest.objects.update_or_create(task=task, customer=customer,
+                                               defaults={"search_log": log, "offer_id": offer_id})
 
 
 def approve_task(task_id, actor, weight=None, source=PartWeight.SOURCE_OPERATOR, evidence=""):
@@ -62,7 +61,10 @@ def approve_task(task_id, actor, weight=None, source=PartWeight.SOURCE_OPERATOR,
 
     if source not in dict(WeightTask.PROPOSED_SOURCES):
         raise OperatorError("proposed_source", _("Choose operator or physically measured."))
+    part_id = WeightTask.objects.values_list("part_id", flat=True).get(pk=task_id)
     with transaction.atomic():
+        # The part before the task, the order a search takes them in (record_search, then the queue): no deadlock.
+        PartMaster.objects.select_for_update().filter(pk=part_id).first()
         task = WeightTask.objects.select_for_update(of=("self",)).select_related("part__current_weight").get(pk=task_id)
         _check_open(task)
         if task.status == WeightTask.STATUS_AWAITING_WEIGHT:
@@ -153,7 +155,11 @@ def _price_for(entry, task, weight, supplier_price):
     if customer.anonymized_at or not customer.user.is_active or not customer.is_phone_verified:
         return WeightTaskRequest.OUTCOME_NOT_ELIGIBLE, None  # the same rule as asking for a quote (IsPhoneVerified)
     requests = PartQuoteRequest.objects.filter(customer=customer, part=task.part)
-    ready = requests.filter(status=PartQuoteRequest.STATUS_RESOLVED, price_ready_at__gte=task.created_at).first()
+    # Priced after the task opened (by hand), or still holding a valid price with this very weight (an earlier task
+    # resolved while their repeat search was being queued): one price and one notification, not two.
+    ready = requests.filter(Q(price_ready_at__gte=task.created_at)
+                            | Q(prepared_weight_kg=weight, price_valid_until__gt=timezone.now()),
+                            status=PartQuoteRequest.STATUS_RESOLVED, price_ready_at__isnull=False).first()
     if ready:
         return WeightTaskRequest.OUTCOME_ALREADY_PRICED, ready
     quote = requests.filter(status__in=PartQuoteRequest.OPEN_STATUSES).first()

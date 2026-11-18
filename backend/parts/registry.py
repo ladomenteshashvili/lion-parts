@@ -84,8 +84,11 @@ def weight_for_row(part, supplier_weight, rejected=frozenset()):
     """-> (weight, public weight_source) to price a supplier row with, or (None, "") when no usable weight is known.
     A stronger approved weight (operator, physically measured) beats the supplier's; then the supplier's own plausible
     weight, unless an operator rejected that value for this part (`rejected`); then the part's approved weight on
-    record. Pending and rejected weights are never used."""
-    current = part.current_weight if part else None
+    record. Pending and rejected weights are never used. Without a part (registry unavailable) nothing can be checked
+    against rejections or approvals, so no weight is used: the offer is `checking`."""
+    if part is None:
+        return None, ""
+    current = part.current_weight
     if current and current.rank > PartWeight.RANK[PartWeight.SOURCE_AMT]:
         return current.weight_kg, PUBLIC_SOURCE[current.source]
     if supplier_weight is not None and is_plausible(supplier_weight) and _kg(supplier_weight) not in rejected:
@@ -97,7 +100,8 @@ def weight_for_row(part, supplier_weight, rejected=frozenset()):
 
 def with_known_weights(rows):
     """Before pricing a search: each row gets its registry part and the weight to price with (LPK-239). A registry
-    failure never fails the search: the rows are then priced as before, from the supplier weight alone."""
+    failure never fails the search, but its supplier weights cannot be checked against rejected values, so its offers
+    are `checking` (fail closed) rather than priced from a weight an operator may have rejected."""
     rejected = {}
     try:
         parts = get_parts((row.get("oem", ""), row["brand"], row["name"]) for row in rows)
@@ -126,16 +130,29 @@ def _supplier_weight(value):
 
 def record_search(log, rows):
     """After a successful search is saved: link its supplier rows to their parts, count the demand and keep the AMT
-    weights (LPK-238). Counts only, never who searched. Idempotent per log (one row per log and offer)."""
+    weights (LPK-238). Counts only, never who searched. Idempotent per log: the log row is locked and a log that already
+    has supplier offers was recorded before (a retry, a concurrent call or the backfill), so nothing is counted twice.
+    -> True when this call recorded the log, False when there was nothing (more) to record."""
     rows = [row for row in rows if row.get("part")]
     if not rows:
-        return
+        return False
+    with transaction.atomic():
+        PartSearchLog.objects.select_for_update().filter(pk=log.pk).first()
+        if PartSupplierOffer.objects.filter(search_log=log).exists():
+            return False
+        _record_search(log, rows)
+    return True
+
+
+def _record_search(log, rows):
+    parts = {row["part"].pk: row for row in rows}  # the first row per part
+    # Lock the parts in one order, so concurrent searches sharing several parts never deadlock on the counters.
+    list(PartMaster.objects.select_for_update().filter(pk__in=parts).order_by("pk").values_list("pk", flat=True))
     PartSupplierOffer.objects.bulk_create(
         [PartSupplierOffer(part=row["part"], search_log=log, offer_id=row["offer_id"], provider=log.provider,
                            supplier_price_usd=row["supplier_price_usd"],
                            supplier_weight_kg=_supplier_weight(row["supplier_weight_kg"]), observed_at=log.created_at)
          for row in rows], ignore_conflicts=True)
-    parts = {row["part"].pk: row for row in rows}  # the first row per part
     if log.kind == PartSearchLog.KIND_SEARCH:
         PartMaster.objects.filter(pk__in=parts).update(search_count=F("search_count") + 1,
                                                        vin_search_count=F("vin_search_count") + (1 if log.vin else 0),
