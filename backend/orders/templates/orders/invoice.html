@@ -3,80 +3,142 @@
 <head>
 <meta charset="utf-8">
 <meta name="robots" content="noindex">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% translate "Invoice" %} {{ order.order_number }}</title>
 <style>
-  body { font-family: Arial, sans-serif; font-size: 14px; color: #222; margin: 32px; }
-  h1 { font-size: 22px; margin: 0 0 4px; }
-  table { border-collapse: collapse; width: 100%; margin-top: 16px; }
-  th, td { border-bottom: 1px solid #ddd; padding: 6px 8px; text-align: left; vertical-align: top; }
-  .right { text-align: right; }
-  .parties { display: flex; gap: 48px; margin-top: 16px; }
-  .totals td { border: none; }
-  .muted { color: #666; font-size: 12px; }
-  @media print { body { margin: 0; } }
+  /* No webfont download: the backend's CSP (LPK-187) allows no other origin. FiraGO, Montserrat and JetBrains Mono are
+     used when installed; otherwise the system fonts below. */
+  :root { --ink: #1d1d1b; --muted: #6b6a66; --faint: #8a8985; --line: #e6e5e0; --panel: #f7f7f4; --red: #d71920;
+          --font: FiraGO, system-ui, -apple-system, "Segoe UI", sans-serif; --num: Montserrat, var(--font);
+          --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace; }
+  * { box-sizing: border-box; }
+  html { background: #ecebe7; }
+  body { max-width: 794px; margin: 32px auto; padding: 56px; background: #fff; color: var(--ink); font: 13px/1.5 var(--font);
+         box-shadow: 0 12px 32px rgba(0,0,0,.08); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  @page { size: A4; margin: 14mm; }
+  @media (max-width: 820px) { body { margin: 0; padding: 24px 16px; box-shadow: none; }
+                              .parties, .bottom { grid-template-columns: 1fr; } .table-wrap { overflow-x: auto; } }
+  .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; padding-bottom: 20px; border-bottom: 3px solid var(--red); }
+  .head svg { height: 78px; width: auto; display: block; }
+  .title { text-align: right; }
+  .title h1 { margin: 0; font: 900 28px/1.1 var(--font); }
+  .no { margin-top: 4px; font: 700 15px/1.3 var(--mono); color: var(--red); }
+  .meta { margin-top: 4px; color: var(--muted); font-size: 12px; }
+  section { margin-top: 28px; }
+  .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .panel { background: var(--panel); border-radius: 10px; padding: 16px 18px; color: #4a4a48; }
+  .cap { margin-bottom: 8px; font: 600 10.5px/1 var(--font); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
+  .name { font-weight: 700; font-size: 14px; color: var(--ink); }
+  .ship { padding: 12px 16px; border: 1px dashed #d6d5cf; border-radius: 10px; color: #4a4a48; }
+  .ship strong { color: var(--ink); }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th { padding: 0 8px 10px; border-bottom: 1px solid var(--ink); text-align: right; white-space: nowrap;
+       font: 600 10.5px/1.2 var(--font); letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+  td { padding: 14px 8px; border-bottom: 1px solid var(--line); text-align: right; vertical-align: top; white-space: nowrap; font: 600 12.5px/1.4 var(--num); }
+  th:first-child, td:first-child { text-align: left; padding-left: 0; white-space: normal; }
+  th:last-child, td:last-child { padding-right: 0; }
+  td:first-child { font: 400 12px/1.4 var(--font); color: var(--muted); }
+  tr { break-inside: avoid; }
+  .pn { display: block; font: 700 13px/1.3 var(--mono); color: var(--ink); }
+  .disc { color: var(--red); }
+  .bottom { display: grid; grid-template-columns: 1fr 300px; gap: 28px; align-items: start; }
+  .row { display: flex; justify-content: space-between; padding: 7px 0; color: #4a4a48; }
+  .row span:last-child { font: 600 13px/1.4 var(--num); color: var(--ink); }
+  .grand { margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--ink); font-weight: 700; color: var(--ink); }
+  .grand span:last-child { font: 800 16px/1.3 var(--num); }
+  .due { margin-top: 10px; padding: 14px 16px; border-radius: 10px; background: var(--red); color: #fff; display: flex; justify-content: space-between; align-items: baseline; font-weight: 700; }
+  .due span:last-child { font: 800 20px/1 var(--num); }
+  .ref { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+  .ref strong { font-family: var(--mono); color: var(--red); }
+  .note { color: var(--faint); font-size: 11.5px; }
+  footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--faint); font-size: 11.5px; }
+  /* Last, so print wins over the rules above and over the narrow-screen block (an A4 page is under 820px wide). */
+  @media print { html { background: #fff; } body { margin: 0; padding: 0; max-width: none; box-shadow: none; }
+                 .parties { grid-template-columns: 1fr 1fr; } .bottom { grid-template-columns: 1fr 300px; }
+                 .table-wrap { overflow: visible; } }
 </style>
 </head>
 <body>
-<h1>{% translate "Invoice" %} {{ order.order_number }}</h1>
-<div class="muted">{% translate "Date" %}: {{ order.created_at|date:"Y-m-d" }} · {% translate "Payment reference" %}: {{ order.order_number }}</div>
+<header class="head">
+  {% include "orders/_logo.svg" %}
+  <div class="title">
+    <h1>{% translate "Invoice" %}</h1>
+    <div class="no">{{ order.order_number }}</div>
+    <div class="meta">{% translate "Date" %}: {{ order.created_at|date:"Y-m-d" }}</div>
+  </div>
+</header>
 
-<div class="parties">
-  <div>
-    <strong>{% translate "Seller" %}</strong><br>
-    {{ seller.name }}<br>
-    {% if seller.code %}{% translate "Identification code" %}: {{ seller.code }}<br>{% endif %}
-    {% if seller.address %}{{ seller.address|linebreaksbr }}<br>{% endif %}
-    {% if seller.phone %}{{ seller.phone }}<br>{% endif %}
-    {% if seller.email %}{{ seller.email }}{% endif %}
+<section class="parties">
+  <div class="panel">
+    <div class="cap">{% translate "Seller" %}</div>
+    <div class="name">{{ seller.name }}</div>
+    {% if seller.code %}<div>{% translate "Identification code" %}: {{ seller.code }}</div>{% endif %}
+    {% if seller.address %}<div>{{ seller.address|linebreaksbr }}</div>{% endif %}
+    {% if seller.phone %}<div>{{ seller.phone }}</div>{% endif %}
+    {% if seller.email %}<div>{{ seller.email }}</div>{% endif %}
   </div>
-  <div>
-    <strong>{% translate "Buyer" %}</strong><br>
-    {% if buyer.company_official_name %}{{ buyer.company_official_name }}<br>
-    {% translate "Identification code" %}: {{ buyer.company_identification_code }}<br>
-    {% if buyer.legal_address %}{{ buyer.legal_address }}<br>{% endif %}
-    {% translate "Representative" %}: {{ buyer.first_name }} {{ buyer.last_name }}<br>
-    {% else %}{{ buyer.first_name }} {{ buyer.last_name }}<br>
-    {% if buyer.personal_id %}{% translate "Personal ID" %}: {{ buyer.personal_id }}<br>{% endif %}{% endif %}
-    {% if buyer.phone %}{{ buyer.phone }}<br>{% endif %}
-    {% if buyer.email %}{{ buyer.email }}{% endif %}
+  <div class="panel">
+    <div class="cap">{% translate "Buyer" %}</div>
+    {% if buyer.company_official_name %}
+      <div class="name">{{ buyer.company_official_name }}</div>
+      <div>{% translate "Identification code" %}: {{ buyer.company_identification_code }}</div>
+      {% if buyer.legal_address %}<div>{{ buyer.legal_address }}</div>{% endif %}
+      <div>{% translate "Representative" %}: {{ buyer.first_name }} {{ buyer.last_name }}</div>
+    {% else %}
+      <div class="name">{{ buyer.first_name }} {{ buyer.last_name }}</div>
+      {% if buyer.personal_id %}<div>{% translate "Personal ID" %}: {{ buyer.personal_id }}</div>{% endif %}
+    {% endif %}
+    {% if buyer.phone %}<div>{{ buyer.phone }}</div>{% endif %}
+    {% if buyer.email %}<div>{{ buyer.email }}</div>{% endif %}
   </div>
-</div>
+</section>
 
 {% if order.delivery_method == "delivery" %}
-<p><strong>{% translate "Delivery" %}:</strong> {{ delivery_place }}, {{ order.delivery_address }}{% if order.delivery_comment %} ({{ order.delivery_comment }}){% endif %}</p>
-{% elif pickup_point %}<p><strong>{% translate "Pickup point" %}:</strong> {{ pickup_point }}</p>{% endif %}
+<section class="ship"><strong>{% translate "Delivery" %}:</strong> {{ delivery_place }}, {{ order.delivery_address }}{% if order.delivery_comment %} ({{ order.delivery_comment }}){% endif %}</section>
+{% elif pickup_point %}<section class="ship"><strong>{% translate "Pickup point" %}:</strong> {{ pickup_point }}</section>{% endif %}
 
+<section class="table-wrap">
 <table>
   <thead><tr>
-    <th>{% translate "Part" %}</th><th class="right">{% translate "Quantity" %}</th>
-    <th class="right">{% translate "List price" %}</th><th class="right">{% translate "Discount" %}</th>
-    <th class="right">{% translate "Unit price" %}</th><th class="right">{% translate "Line total" %}</th>
+    <th>{% translate "Part" %}</th><th>{% translate "Quantity" %}</th><th>{% translate "List price" %}</th>
+    <th>{% translate "Discount" %}</th><th>{% translate "Unit price" %}</th><th>{% translate "Line total" %}</th>
   </tr></thead>
   <tbody>
   {% for line in lines %}<tr>
-    <td>{{ line.item.part_number }} · {{ line.item.name }}{% if line.item.brand %} · {{ line.item.brand }}{% endif %}{% if line.item.item_status == "cancelled" %} ({% translate "cancelled" %}){% endif %}</td>
-    <td class="right">{{ line.item.quantity }}</td>
-    <td class="right">{{ line.list }}</td><td class="right">{{ line.discount }}</td>
-    <td class="right">{{ line.unit }}</td><td class="right">{{ line.total }}</td>
+    <td><span class="pn">{{ line.item.part_number }}</span>{{ line.item.name }}{% if line.item.brand %} · {{ line.item.brand }}{% endif %}{% if line.item.item_status == "cancelled" %} ({% translate "cancelled" %}){% endif %}</td>
+    <td>{{ line.item.quantity }}</td>
+    <td>{{ line.list }}</td>
+    <td{% if line.item.discount_unit_amount %} class="disc"{% endif %}>{{ line.discount }}</td>
+    <td>{{ line.unit }}</td>
+    <td>{{ line.total }}</td>
   </tr>{% endfor %}
   </tbody>
 </table>
+</section>
 
-<table class="totals">
-  <tr><td class="right">{% translate "Items" %}</td><td class="right">{{ money.items_total }}</td></tr>
-  <tr><td class="right">{% translate "Discount" %}</td><td class="right">{{ money.discount_total }}</td></tr>
-  {% if order.courier_fee %}<tr><td class="right">{% translate "Delivery fee" %}</td><td class="right">{{ money.courier_fee }}</td></tr>{% endif %}
-  <tr><td class="right"><strong>{% translate "Total" %}</strong></td><td class="right"><strong>{{ money.total }}</strong></td></tr>
-  <tr><td class="right">{% translate "Paid" %}</td><td class="right">{{ money.amount_paid }}</td></tr>
-  <tr><td class="right"><strong>{% translate "Balance due" %}</strong></td><td class="right"><strong>{{ money.balance_due }}</strong></td></tr>
-  {% if order.amount_paid == 0 and order.payment_option == "split_70_30" %}<tr><td class="right">{% translate "Due now" %}</td><td class="right">{{ money.amount_due_now }}</td></tr>{% endif %}
-</table>
+<section class="bottom">
+  <div class="panel">
+    {% if seller.bank_details %}<div class="cap">{% translate "Bank details" %}</div>
+    <div>{{ seller.bank_details|linebreaksbr }}</div>{% endif %}
+    <div class="ref">{% translate "Payment reference" %}: <strong>{{ order.order_number }}</strong></div>
+    {% if seller.payment_due %}<div class="note" style="margin-top:6px">{{ seller.payment_due }}</div>{% endif %}
+  </div>
+  <div>
+    <div class="row"><span>{% translate "Items" %}</span><span>{{ money.items_total }}</span></div>
+    <div class="row"><span>{% translate "Discount" %}</span><span>{{ money.discount_total }}</span></div>
+    {% if order.courier_fee %}<div class="row"><span>{% translate "Delivery fee" %}</span><span>{{ money.courier_fee }}</span></div>{% endif %}
+    <div class="row grand"><span>{% translate "Total" %}</span><span>{{ money.total }}</span></div>
+    <div class="row"><span>{% translate "Paid" %}</span><span>{{ money.amount_paid }}</span></div>
+    <div class="due"><span>{% translate "Balance due" %}</span><span>{{ money.balance_due }}</span></div>
+    {% if order.amount_paid == 0 and order.payment_option == "split_70_30" %}<div class="row"><span>{% translate "Due now" %}</span><span>{{ money.amount_due_now }}</span></div>{% endif %}
+  </div>
+</section>
 
-{% if order.currency == "GEL" %}<p class="muted">{% blocktranslate with rate=order.exchange_rate %}Amounts in GEL, converted from USD at the NBG rate of the order date: {{ rate }} GEL per USD. VAT included.{% endblocktranslate %}</p>
-{% else %}<p class="muted">{% translate "Amounts in USD. VAT included." %}</p>{% endif %}
+<section>
+{% if order.currency == "GEL" %}<p class="note">{% blocktranslate with rate=order.exchange_rate %}Amounts in GEL, converted from USD at the NBG rate of the order date: {{ rate }} GEL per USD. VAT included.{% endblocktranslate %}</p>
+{% else %}<p class="note">{% translate "Amounts in USD. VAT included." %}</p>{% endif %}
+</section>
 
-{% if seller.bank_details %}<p><strong>{% translate "Bank details" %}</strong><br>{{ seller.bank_details|linebreaksbr }}</p>{% endif %}
-{% if seller.payment_due %}<p>{{ seller.payment_due }}</p>{% endif %}
-{% if seller.footer %}<p class="muted">{{ seller.footer }}</p>{% endif %}
+<footer>{% if seller.footer %}{{ seller.footer }}{% else %}Lion Parts{% endif %}</footer>
 </body>
 </html>

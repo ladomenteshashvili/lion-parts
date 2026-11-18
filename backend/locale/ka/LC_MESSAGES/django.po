@@ -1331,3 +1331,30 @@ msgstr "Instagram-ის გვერდი"
 
 msgid "Enter a phone number like +995 555 12 34 56."
 msgstr "შეიყვანეთ ტელეფონის ნომერი ასე: +995 555 12 34 56."
+
+msgid "Confirm email"
+msgstr "ელფოსტის დადასტურება"
+
+msgid "Set a new password"
+msgstr "ახალი პაროლის დაყენება"
+
+msgid "Confirm new email"
+msgstr "ახალი ელფოსტის დადასტურება"
+
+msgid "Button not working? Copy this link into your browser:"
+msgstr "ღილაკი არ მუშაობს? დააკოპირეთ ბმული ბრაუზერში:"
+
+msgid "View order"
+msgstr "შეკვეთის ნახვა"
+
+msgid "View details"
+msgstr "დეტალების ნახვა"
+
+msgid "Order"
+msgstr "შეკვეთა"
+
+msgid "Car parts from the USA, priced by part number"
+msgstr "ავტონაწილები აშშ-დან, ფასი ნაწილის ნომრით"
+
+msgid "You received this email because this address is on a Lion Parts account. It was sent automatically."
+msgstr "ეს წერილი მიიღეთ, რადგან ეს მისამართი მითითებულია Lion Parts-ის ანგარიშში. წერილი გამოგზავნილია ავტომატურად."

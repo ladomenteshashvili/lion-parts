@@ -162,7 +162,8 @@ def notify_contact(ticket, reply):
 
 
 def _content(notification):
-    """(language, sms recipient, email recipient, sms text, email subject, email body); None if nothing to send."""
+    """(language, sms recipient, email recipient, sms text, email subject, email body, html context); None if nothing
+    to send. The html context is what emails/notification.html needs besides the shared layout (LPK-246)."""
     from django.utils import translation
     from django.utils.translation import gettext as _
 
@@ -175,10 +176,10 @@ def _content(notification):
             return None
         with translation.override(ticket.language):
             title = notification_title(notification)
-            body = (f"{_('Lion Parts support replied to your request:')}\n\n{notification.message}\n\n"
-                    f"{transactional_footer()}")
+            message = f"{_('Lion Parts support replied to your request:')}\n\n{notification.message}"
             return (ticket.language, ticket.contact, ticket.contact, f"Lion Parts: {notification.message}",
-                    f"Lion Parts: {title}", body)
+                    f"Lion Parts: {title}", f"{message}\n\n{transactional_footer()}",
+                    {"heading": title, "body": message, "link": None, "order_number": None, "guest": True})
     language = customer_language(customer)
     template = pick_template(notification.event_type, language)
     if template is None:
@@ -187,10 +188,14 @@ def _content(notification):
     quote = notification.quote_request
     path = f"/q/{quote.notification_token}" if quote else f"/n/{notification.token}"
     with translation.override(language):
-        context = template_context(notification, f"{base}{path}?lang={language}", notification_title(notification))
-        return (language, customer.phone, customer.user.email, render_text(template.sms_template, context),
-                " ".join(render_text(template.email_subject, context).split()),
-                f"{render_text(template.email_template, context)}\n\n{transactional_footer()}")
+        link = f"{base}{path}?lang={language}"
+        context = template_context(notification, link, notification_title(notification))
+        subject = " ".join(render_text(template.email_subject, context).split())
+        message = render_text(template.email_template, context)
+        return (language, customer.phone, customer.user.email, render_text(template.sms_template, context), subject,
+                f"{message}\n\n{transactional_footer()}",
+                {"heading": _sentence(subject.removeprefix("Lion Parts: ")), "body": message, "link": link,
+                 "order_number": notification.order.order_number if notification.order_id else None})
 
 
 def send(notification, channels):
@@ -205,13 +210,37 @@ def send(notification, channels):
         content = None
     if content is None:
         return []
-    _language, phone, email, sms, subject, body = content
+    language, phone, email, sms, subject, body, html_context = content
     deliveries = []
     if "sms" in channels and phone and "@" not in phone:
         deliveries.append(deliver_sms(notification, phone, sms))
     if "email" in channels and email and "@" in email:
-        deliveries.append(deliver_email(notification, email, subject, body))
+        deliveries.append(deliver_email(notification, email, subject, body,
+                                        _email_html(notification, language, subject, html_context)))
     return deliveries
+
+
+def _sentence(text):
+    """The subject without its "Lion Parts: " prefix starts lower case ("the price … is ready"): capitalize it."""
+    return text[:1].upper() + text[1:]
+
+
+def _email_html(notification, language, subject, html_context):
+    """The HTML alternative in the shared email layout (LPK-246), or None: then the text alone is sent. The text is
+    autoescaped (admin-editable templates and operator replies are never marked safe) and never logged."""
+    from django.template.loader import render_to_string
+    from django.utils import translation
+
+    from api.mail import email_layout_context, transactional_footer
+
+    try:
+        with translation.override(language):
+            return render_to_string("emails/notification.html", {
+                **email_layout_context(), **html_context, "subject": subject, "footer": transactional_footer()})
+    except Exception as error:
+        logger.warning("HTML for notification %s failed, sending text only: %s", notification.pk,
+                       type(error).__name__)
+        return None
 
 
 def _delivery(notification, channel, recipient, status, *, message_id="", error=""):
@@ -251,10 +280,11 @@ NON_DELIVERING_EMAIL_BACKENDS = ("django.core.mail.backends.console.EmailBackend
                                  "django.core.mail.backends.dummy.EmailBackend")
 
 
-def deliver_email(notification, address, subject, body):
+def deliver_email(notification, address, subject, body, html=None):
     """sent: the backend accepted the message; skipped: a backend that delivers nothing (console, dummy; refused in
-    production); failed: an error, or no message accepted (send() returned 0)."""
-    from django.core.mail import EmailMessage
+    production); failed: an error, or no message accepted (send() returned 0). `html`: an optional HTML alternative
+    to the plain-text body."""
+    from django.core.mail import EmailMultiAlternatives
 
     from api.mail import reply_to
 
@@ -265,7 +295,10 @@ def deliver_email(notification, address, subject, body):
         return _delivery(notification, "email", address, NotificationDelivery.STATUS_SKIPPED,
                          error=f"email backend delivers nothing ({backend.rsplit('.', 2)[-2]})")
     try:
-        accepted = EmailMessage(subject, body, settings.DEFAULT_FROM_EMAIL, [address], reply_to=reply_to()).send()
+        message = EmailMultiAlternatives(subject, body, settings.DEFAULT_FROM_EMAIL, [address], reply_to=reply_to())
+        if html:
+            message.attach_alternative(html, "text/html")
+        accepted = message.send()
     except Exception as error:
         logger.warning("Email for notification %s failed: %s", notification.pk, type(error).__name__)
         return _delivery(notification, "email", address, NotificationDelivery.STATUS_FAILED, error=str(error))

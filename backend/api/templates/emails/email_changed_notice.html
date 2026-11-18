@@ -1,5 +1,5 @@
 {% extends "emails/_base.html" %}{% load i18n %}{% block content %}
-<p>{% blocktranslate %}Hello, {{ name }}!{% endblocktranslate %}</p>
-<p>{% blocktranslate %}The email address of your Lion Parts account was changed to {{ new_email }}.{% endblocktranslate %}</p>
-<p>{% translate "If you didn't make this change, contact Lion Parts support right away." %}</p>
+<p style="margin:0 0 14px;">{% blocktranslate %}Hello, {{ name }}!{% endblocktranslate %}</p>
+<p style="margin:0 0 14px;">{% blocktranslate %}The email address of your Lion Parts account was changed to {{ new_email }}.{% endblocktranslate %}</p>
+<p style="margin:0 0 14px;">{% translate "If you didn't make this change, contact Lion Parts support right away." %}</p>
 {% endblock %}

@@ -1,6 +1,6 @@
 {% extends "emails/_base.html" %}{% load i18n %}{% block content %}
-<p>{% blocktranslate %}Hello, {{ name }}!{% endblocktranslate %}</p>
-<p>{% translate "To use this address for your Lion Parts account, open this link:" %}</p>
-<p><a href="{{ link }}">{{ link }}</a></p>
-<p>{% translate "The link is valid for 48 hours. Until you confirm, your old address stays active." %}</p>
+<p style="margin:0 0 14px;">{% blocktranslate %}Hello, {{ name }}!{% endblocktranslate %}</p>
+<p style="margin:0 0 14px;">{% translate "To use this address for your Lion Parts account, open this link:" %}</p>
+{% translate "Confirm new email" as label %}{% include "emails/_button.html" with url=link label=label %}
+<p style="margin:0 0 14px;font-size:13px;color:#6b6a66;">{% translate "The link is valid for 48 hours. Until you confirm, your old address stays active." %}</p>
 {% endblock %}
