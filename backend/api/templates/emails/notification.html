@@ -1,0 +1,7 @@
+{% extends "emails/_base.html" %}{% load i18n %}{% block content %}
+{% if order_number %}<p style="margin:0 0 14px;font-size:13px;color:#6b6a66;">{% translate "Order" %}
+  <strong style="font-family:Menlo,Consolas,monospace;color:#111111;">{{ order_number }}</strong></p>{% endif %}
+<p style="margin:0 0 14px;">{{ body|linebreaksbr }}</p>
+{% if link %}{% if order_number %}{% translate "View order" as label %}{% else %}{% translate "View details" as label %}{% endif %}
+{% include "emails/_button.html" with url=link label=label %}{% endif %}
+{% endblock %}

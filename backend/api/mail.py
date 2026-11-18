@@ -44,13 +44,33 @@ def transactional_footer():
     return "\n".join(lines)
 
 
+def email_layout_context():
+    """Values the shared email layout needs: logo, site link, contacts from SiteSettings (empty ones are hidden)."""
+    from urllib.parse import urlparse
+
+    from django.utils import timezone
+
+    from pricing.models import SiteSettings  # local import: avoids an import cycle at startup
+
+    base = settings.FRONTEND_BASE_URL.rstrip("/")
+    context = {"site_url": base + "/", "site_host": urlparse(base).netloc, "logo_url": f"{base}/email/logo-on-dark.png",
+               "year": timezone.now().year}
+    try:
+        site = SiteSettings.get()
+    except Exception as error:  # the email still goes out, without the contacts line
+        logger.warning("Email layout without contacts: SiteSettings unavailable (%s)", type(error).__name__)
+        return context
+    return {**context, "contact_phone": site.contact_phone, "contact_email": site.contact_email,
+            "facebook_url": site.facebook_url, "instagram_url": site.instagram_url}
+
+
 def send_templated_email(to, template, context, language):
     """Render templates/emails/<template>.txt/.html in `language` and send. Never raises: a failed
     delivery must not break the action that triggered it; returns False and logs instead."""
     try:
         with translation.override(language):
             subject = str(SUBJECTS[template])
-            context = {**context, "footer": transactional_footer()}
+            context = {**email_layout_context(), **context, "subject": subject, "footer": transactional_footer()}
             text = render_to_string(f"emails/{template}.txt", context)
             html = render_to_string(f"emails/{template}.html", context)
         message = EmailMultiAlternatives(subject, text, settings.DEFAULT_FROM_EMAIL, [to], reply_to=reply_to())

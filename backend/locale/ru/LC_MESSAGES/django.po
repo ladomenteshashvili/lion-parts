@@ -1336,6 +1336,33 @@ msgstr "страница Instagram"
 msgid "Enter a phone number like +995 555 12 34 56."
 msgstr "Введите номер телефона в формате +995 555 12 34 56."
 
+msgid "Confirm email"
+msgstr "Подтвердить почту"
+
+msgid "Set a new password"
+msgstr "Задать новый пароль"
+
+msgid "Confirm new email"
+msgstr "Подтвердить новую почту"
+
+msgid "Button not working? Copy this link into your browser:"
+msgstr "Кнопка не работает? Скопируйте ссылку в браузер:"
+
+msgid "View order"
+msgstr "Посмотреть заказ"
+
+msgid "View details"
+msgstr "Подробнее"
+
+msgid "Order"
+msgstr "Заказ"
+
+msgid "Car parts from the USA, priced by part number"
+msgstr "Автозапчасти из США, цена по номеру детали"
+
+msgid "You received this email because this address is on a Lion Parts account. It was sent automatically."
+msgstr "Вы получили это письмо, потому что этот адрес указан в аккаунте Lion Parts. Оно отправлено автоматически."
+
 msgid "weight"
 msgstr "вес"
 

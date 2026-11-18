@@ -6,7 +6,7 @@ from unittest import mock
 
 from django.conf import settings
 from django.core import mail
-from django.test import SimpleTestCase, override_settings
+from django.test import TestCase, override_settings
 from django.utils import translation
 
 from api.mail import SUBJECTS, frontend_link, send_templated_email, transactional_footer
@@ -15,7 +15,7 @@ CONTEXT = {"name": "Nino", "new_email": "new@example.com"}
 
 
 @override_settings(FRONTEND_BASE_URL="https://lionparts.ge/")
-class SendTemplatedEmailTests(SimpleTestCase):
+class SendTemplatedEmailTests(TestCase):
     def test_frontend_link_carries_params_and_language(self):
         self.assertEqual(frontend_link("/reset-password", "ru", uid="MTI", token="a-b"),
                          "https://lionparts.ge/reset-password?uid=MTI&token=a-b&lang=ru")
@@ -64,7 +64,7 @@ class SendTemplatedEmailTests(SimpleTestCase):
                     self.assertNotEqual(rendered[lang][1], rendered["en"][1])
 
 
-class ReplyToTests(SimpleTestCase):
+class ReplyToTests(TestCase):
     """LPK-184: the header is added only when configured, on templated emails."""
 
     def send(self):
@@ -85,7 +85,7 @@ class ReplyToTests(SimpleTestCase):
         self.assertEqual(message.from_email, settings.DEFAULT_FROM_EMAIL)
 
 
-class FooterTests(SimpleTestCase):
+class FooterTests(TestCase):
     """LPK-185: identity, purpose, support route and reply guidance in every language, plain and HTML."""
 
     def rendered(self, language):
@@ -126,7 +126,7 @@ class FooterTests(SimpleTestCase):
 
 @override_settings(MAILERS={"default": {"BACKEND": "django.core.mail.backends.smtp.EmailBackend", "OPTIONS": {
     "host": "smtp.invalid", "port": 587, "username": "", "password": "", "use_tls": False, "timeout": 7}}})
-class SmtpTimeoutTests(SimpleTestCase):
+class SmtpTimeoutTests(TestCase):
     """LPK-181, through the real SMTP backend. smtplib and the DNS lookup are mocked: nothing touches the network."""
 
     TOKEN = "SECRET-TOKEN"
