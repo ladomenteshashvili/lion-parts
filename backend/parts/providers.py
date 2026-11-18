@@ -67,7 +67,7 @@ def _amt_rows(part_number):
             continue
         oem = _text(row.get("oem")) or part_number
         replacement = _text(row.get("replace"))
-        out.append({"offer_id": f"AMT-{index}-{oem}", "name": _text(row.get("descr")) or oem,
+        out.append({"offer_id": f"AMT-{index}-{oem}", "oem": oem, "name": _text(row.get("descr")) or oem,
                     "brand": _text(row.get("brand")), "supplier_price_usd": price,
                     "weight_kg": _decimal(row.get("weight")), "note": f"Replace: {replacement}" if replacement else ""})
     return rows, out
@@ -76,7 +76,8 @@ def _amt_rows(part_number):
 def _demo_rows(part_number):
     if part_number.upper().startswith("NF"):
         return [], []
-    return DEMO_ROWS, [{**row, "offer_id": f"DEMO-{i}-{part_number}", "supplier_price_usd": Decimal(row["supplier_price_usd"]),
+    return DEMO_ROWS, [{**row, "offer_id": f"DEMO-{i}-{part_number}", "oem": part_number,
+                        "supplier_price_usd": Decimal(row["supplier_price_usd"]),
                         "weight_kg": _decimal(row["weight_kg"])} for i, row in enumerate(DEMO_ROWS, start=1)]
 
 
@@ -90,7 +91,8 @@ def fetch_rows(part_number):
 def build_offers(rows, *, customer, part_number, weight_source="api", weight_override=None):
     """Price every row for `customer` (None = guest) in canonical USD. A row without a weight is
     `checking` with no price. `weight_override` (customer weight calculation) replaces the supplier
-    weight and sets `weight_source`. Customer-currency amounts are added when shown (public_offer)."""
+    weight and sets `weight_source`; otherwise a row may name its own (a registry weight, LPK-239).
+    Customer-currency amounts are added when shown (public_offer)."""
     carrier = CarrierService.get_default()
     shipping = default_shipping_usd_per_kg()
     eta_min, eta_max = (carrier.min_eta_days, carrier.max_eta_days) if carrier else (None, None)
@@ -106,7 +108,8 @@ def build_offers(rows, *, customer, part_number, weight_source="api", weight_ove
             snap = price_offer(PriceInput(row["supplier_price_usd"], weight, shipping), customer=customer,
                                part_number=part_number, brand=row["brand"])
             offer.update(status="ready", weight_kg=f"{weight:.2f}",
-                         weight_source=weight_source if weight_override is not None else "api",
+                         weight_source=(weight_source if weight_override is not None
+                                        else row.get("weight_source", "api")),
                          requires_weight=False, snapshot=snap.to_json())
         offers.append(offer)
     return offers

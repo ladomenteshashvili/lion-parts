@@ -212,7 +212,8 @@ either are not assessed and not guessed. Recommendations only: no Jira status wa
 | LPK-222 | atomic OTP cooldown | merged; redirect fix in this batch | none | Done once this PR is merged |
 | LPK-223 to 227 | React integration with the API | backend done; frontend on a local branch, not pushed | frontend review, nginx site root (LPK-225) | frontend owner |
 | LPK-228 | two staging superusers | runbook procedure merged | creating them is an owner action | awaiting owner |
-| LPK-237 to 242 | Parts Master Registry | not started, by instruction | | future batch |
+| LPK-238 to 240 | Parts Master Registry: registry, reusable weights, missing-weight queue | built on `feature/lpk-238-240-parts-registry`; `docs/parts-registry.md` | backfill on staging, owner review of the decisions in §8 there | awaiting review |
+| LPK-237, 241, 242 | Parts Master Registry, rest of the epic | not started, by instruction | | future batch |
 
 **Parts Master Registry (LPK-237 to 242), dependencies only.** Search results live in `PartSearchLog.normalized_response`,
 and cart lines copy their price snapshot from it (`cart/services.py`); a persistent part identity has to keep that snapshot

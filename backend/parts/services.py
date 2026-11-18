@@ -1,6 +1,9 @@
 """Parts services: part images and pricing a prepared quote (G§7.6)."""
 
+import logging
+
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 
 from accounts.validators import normalize_part_number
@@ -12,6 +15,9 @@ from pricing.validity import price_valid_until
 
 from .models import PartImage, PartQuoteRequest, PartSearchLog
 from .providers import build_offers, fetch_rows, public_offer
+from .registry import part_for_offer, record_search, with_known_weights
+
+logger = logging.getLogger(__name__)
 
 
 def image_urls(request, part_number, brand, images=None):
@@ -54,14 +60,14 @@ def _quote_state(qr):
     return qr.status, qr.offer_id, qr.supplier_price_usd, qr.prepared_weight_kg, qr.price_ready_at
 
 
-def mark_quote_ready(quote_request_id, weight_kg, message="", *, supplier_price_usd=None):
+def mark_quote_ready(quote_request_id, weight_kg, message="", *, supplier_price_usd=None, actor=None):
     """Operator "price ready" (G§7.6, LP-BE-1104), used by the admin and the demo endpoint. The supplier price
     S: `supplier_price_usd` when the operator enters it; for a request made from a search offer, the
     supplier is asked again (that offer must still exist); otherwise the price stored on the request.
     The supplier is asked with no lock or transaction open, then the row is locked and rechecked: if it changed
     meanwhile the answer is stale and nothing is applied (LPK-220).
+    The operator's weight also becomes the part's registry weight (LPK-239), approved by `actor`.
     Raises OperatorError (nothing changes) or RateUnavailable. -> the quote request."""
-    from django.db import transaction
     from django.utils.translation import gettext as _
 
     from orders.services import OperatorError
@@ -95,7 +101,27 @@ def mark_quote_ready(quote_request_id, weight_kg, message="", *, supplier_price_
         if supplier_price_usd is None or supplier_price_usd <= 0:
             raise OperatorError("supplier_price_usd", _("Enter the supplier price."))
         qr.prepared_weight_kg, qr.supplier_price_usd, qr.operator_message = weight_kg, supplier_price_usd, message
+        if qr.part_id:
+            _learn_operator_weight(qr, actor)
         return mark_quote_price_ready(qr)
+
+
+def _learn_operator_weight(qr, actor):
+    """A weight the operator priced a quote with is knowledge about the part: approved when plausible, else left for
+    review. Re-approving with the same weight adds nothing."""
+    from .models import PartWeight
+    from .registry import InvalidWeight, clean_weight, is_plausible, record_weight
+
+    try:
+        weight = clean_weight(qr.prepared_weight_kg)
+    except InvalidWeight:
+        return
+    current = qr.part.current_weight
+    if current is not None and current.weight_kg == weight:
+        return
+    status = PartWeight.STATUS_APPROVED if is_plausible(weight) else PartWeight.STATUS_PENDING
+    record_weight(qr.part, weight, PartWeight.SOURCE_OPERATOR, status=status, actor=actor,
+                  note=f"Quote request #{qr.pk}")
 
 
 # Search (G§7.6, G§8.4)
@@ -122,6 +148,7 @@ def run_search(request, *, part_number, vin, currency):
     try:
         rate = display_rate(currency)  # no outdated GEL: an unavailable rate fails before the supplier call
         provider, raw, rows = fetch_rows(part_number)
+        rows = with_known_weights(rows)
         offers = build_offers(rows, customer=customer, part_number=part_number)
     except ApiError as exc:
         log.status, log.error_message = PartSearchLog.STATUS_FAILED, exc.code
@@ -132,7 +159,21 @@ def run_search(request, *, part_number, vin, currency):
     log.exchange_rate = rate
     log.price_valid_until = price_valid_until()
     log.save()
+    _learn_from_search(log, rows, customer)
     return log
+
+
+def _learn_from_search(log, rows, customer):
+    """Registry and missing-weight queue (LPK-238 to 240), after the supplier call and outside any lock. A failure here
+    is logged and never fails the search: the customer already has the offers."""
+    from .weight_tasks import queue_missing_weights
+
+    try:
+        with transaction.atomic():
+            if record_search(log, rows):  # a retry of an already recorded log queues nothing again
+                queue_missing_weights(log, rows, customer)
+    except Exception:
+        logger.exception("Recording search %s in the parts registry failed", log.pk)
 
 
 def search_response(request, log):
@@ -206,7 +247,7 @@ def create_quote_request(customer, data, log=None):
                   "quote_id": f"LOG-{log.pk}", "name": offer["name"], "brand": offer["brand"],
                   "condition": offer["condition"], "eta_min_days": offer["eta_min_days"],
                   "eta_max_days": offer["eta_max_days"], "currency": log.currency,
-                  "supplier_price_usd": offer.get("supplier_price_usd")}
+                  "supplier_price_usd": offer.get("supplier_price_usd"), "part": part_for_offer(log, offer["offer_id"])}
     else:
         fields = {"part_number": data["part_number"], "vin": data.get("vin", ""), "offer_id": "",
                   "currency": default_currency()}
