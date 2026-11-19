@@ -399,6 +399,39 @@ class JobTests(ProviderTestCase):
         self.assertEqual(self.spent(), D("0.87"))  # what it really cost counts against the day
 
 
+    # PR #88 review: a call costing more than its reservation must not let a fallback run past the budgets
+    BIG = {"input_tokens": 200000, "output_tokens": 1000, "server_tool_use": {"web_search_requests": 5,
+                                                                             "web_fetch_requests": 0}}  # = $0.87
+
+    @override_settings(AI_WEIGHT_RESEARCH_FALLBACK_PROVIDERS=["openai"],
+                       AI_WEIGHT_RESEARCH_MAX_COST_PER_JOB_USD=D("1.25"))
+    def test_an_overrun_that_leaves_the_job_limit_short_skips_the_fallback(self):
+        self.replies["anthropic"].append(claude_message(stop="refusal", report=False, usage=self.BIG))
+        with self.assertLogs("parts.weight_research", "WARNING"):
+            self.assertEqual(run_job(self.job().pk), "queued")
+        self.assertEqual(self.sent["openai"], [])  # $0.87 + a $0.50 fallback would pass the job's $1.25
+        self.assertEqual([(c.provider, c.outcome, c.reserved_usd, c.cost_usd) for c in self.calls()],
+                         [("anthropic", "unusable", D("0.50"), D("0.87")), ("openai", "not_sent", D("0"), D("0"))])
+        self.assertEqual((self.job().cost_usd, self.spent()), (D("0.87"), D("0.87")))
+        self.assertIn("openai: skipped, budget used", self.job().last_error)
+        self.assertEqual(run_job(self.job().pk), "failed")  # no attempt fits the job any more
+
+    @override_settings(AI_WEIGHT_RESEARCH_FALLBACK_PROVIDERS=["openai"], AI_WEIGHT_RESEARCH_DAILY_BUDGET_USD=D("1.25"))
+    def test_an_overrun_that_leaves_the_day_short_skips_the_fallback(self):
+        self.replies["anthropic"].append(claude_message(stop="refusal", report=False, usage=self.BIG))
+        with self.assertLogs("parts.weight_research", "WARNING"):
+            run_job(self.job().pk)
+        self.assertEqual((self.sent["openai"], self.spent()), ([], D("0.87")))
+
+    @override_settings(AI_WEIGHT_RESEARCH_FALLBACK_PROVIDERS=["openai"])
+    def test_an_overrun_still_inside_both_budgets_lets_the_fallback_run(self):
+        self.replies["anthropic"].append(claude_message(stop="refusal", report=False, usage=self.BIG))
+        self.replies["openai"].append(openai_response())
+        with self.assertLogs("parts.weight_research", "WARNING"):
+            run_due_jobs()
+        self.assertEqual((self.job().status, self.job().cost_usd, self.spent()), ("done", D("0.918"), D("0.918")))
+
+
 class SettingsTests(SimpleTestCase):
     def test_provider_names_match_the_registry(self):
         from django.conf import settings
@@ -409,6 +442,12 @@ class SettingsTests(SimpleTestCase):
                             "s.AI_WEIGHT_RESEARCH_PRICES, s.AI_WEIGHT_RESEARCH_FALLBACK_PROVIDERS)",
                             {"AI_WEIGHT_RESEARCH_ENABLED": ""})
         self.assertEqual(result.stdout.strip(), "False {} []", result.stderr)
+
+    def test_the_lpk247_http_provider_stays_the_default_and_starts(self):
+        result = run_python("import django; django.setup(); from parts.weight_research import chain; print(chain())", {
+            "AI_WEIGHT_RESEARCH_PROVIDER": None, "AI_WEIGHT_RESEARCH_ENABLED": "True",
+            "AI_WEIGHT_RESEARCH_URL": "https://research.example/v1", "AI_WEIGHT_RESEARCH_API_KEY": "k"})
+        self.assertEqual(result.stdout.strip(), "['http']", result.stderr)  # no Claude/OpenAI key needed
 
     def test_native_providers_need_their_keys_and_valid_prices(self):
         result = run_python("import config.settings", {
@@ -468,6 +507,47 @@ class ConcurrentFallbackTests(TransactionTestCase):
         chains = sorted(len(r.chain) for r in results if isinstance(r, WeightResearchJob))
         self.assertEqual((chains, results.count(BUDGET)), ([1, 2], 2))  # $1.50 = one chain of 2 + one primary only
         self.assertEqual(WeightResearchSpend.objects.get().reserved_usd, D("1.50"))
+
+
+def _refused_over_limit(query):
+    return Answer([], D("0.90"), model="claude-opus-5-5", error="anthropic: refused")
+
+
+def _never_called(query):
+    raise AssertionError("a fallback ran beyond the budget")
+
+
+@skipUnless(connection.vendor == "postgresql", "row locks need PostgreSQL")
+@override_settings(**{**NATIVE, "AI_WEIGHT_RESEARCH_FALLBACK_PROVIDERS": ["openai"],
+                      "AI_WEIGHT_RESEARCH_DAILY_BUDGET_USD": D("2.00")})
+class ConcurrentOverrunTests(TransactionTestCase):
+    """Two jobs run at once; each primary costs more than its reservation. Settling is serialized on the day's row, so
+    neither fallback runs on budget the other's overrun has used."""
+
+    serialized_rollback = True
+
+    @mock.patch.dict(PROVIDERS, {"anthropic": f"{__name__}._refused_over_limit", "openai": f"{__name__}._never_called"})
+    def test_overruns_seen_by_parallel_jobs_stop_both_fallbacks(self):
+        ids = [WeightResearchJob.objects.create(part=PartMaster.objects.create(
+            part_number=f"P{i}", brand="Bosch")).pk for i in range(2)]
+        barrier, results, now = threading.Barrier(len(ids)), [], timezone.now()
+
+        def worker(job_id):
+            try:
+                barrier.wait()
+                results.append(run_job(job_id, now))
+            finally:
+                connection.close()
+        threads = [threading.Thread(target=worker, args=(job_id,)) for job_id in ids]
+        with self.assertLogs("parts.weight_research", "WARNING"):
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+        self.assertEqual(results, ["queued", "queued"])  # both claimed a full chain ($1.00 each)
+        self.assertEqual(sorted(WeightResearchCall.objects.values_list("provider", "outcome")),
+                         [("anthropic", "unusable")] * 2 + [("openai", "not_sent")] * 2)
+        self.assertEqual(WeightResearchSpend.objects.get().reserved_usd, D("1.80"))  # what was spent, nothing held
 
 
 class BenchmarkTests(ResearchTestCase):

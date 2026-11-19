@@ -284,7 +284,8 @@ if AMT_LOOKUP_BUDGET_SECONDS <= 0:  # no attempt could ever start, so every sear
 # job's and the day's budgets still cover a call each (docs/ai-weight-research.md).
 AI_RESEARCH_PROVIDERS = ("http", "anthropic", "openai")  # = parts.weight_research.PROVIDERS
 AI_WEIGHT_RESEARCH_ENABLED = config("AI_WEIGHT_RESEARCH_ENABLED", default=False, cast=bool)
-AI_WEIGHT_RESEARCH_PROVIDER = config("AI_WEIGHT_RESEARCH_PROVIDER", default="anthropic")
+# "http" stays the default (as in LPK-247); Claude or OpenAI are chosen explicitly in the environment.
+AI_WEIGHT_RESEARCH_PROVIDER = config("AI_WEIGHT_RESEARCH_PROVIDER", default="http")
 AI_WEIGHT_RESEARCH_FALLBACK_PROVIDERS = config("AI_WEIGHT_RESEARCH_FALLBACK_PROVIDERS", default="", cast=Csv())
 AI_WEIGHT_RESEARCH_URL = config("AI_WEIGHT_RESEARCH_URL", default="")
 AI_WEIGHT_RESEARCH_API_KEY = config("AI_WEIGHT_RESEARCH_API_KEY", default="")

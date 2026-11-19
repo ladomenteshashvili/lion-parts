@@ -296,10 +296,19 @@ def _claim(job_id, now):
 
 
 def _settle(job, day, delta):
-    """Correct the job's and the day's spending by `delta`: actual costs minus the reservations."""
-    if delta:
-        WeightResearchJob.objects.filter(pk=job.pk).update(cost_usd=F("cost_usd") + delta)
-        WeightResearchSpend.objects.filter(day=day).update(reserved_usd=F("reserved_usd") + delta)
+    """Correct the job's and the day's spending by `delta` (actual or estimated costs minus reservations), serialized on
+    the day's budget row like _claim. -> True while both still hold within their limits (estimates only: the providers'
+    own spend caps are the only hard limit)."""
+    with transaction.atomic():
+        spend = WeightResearchSpend.objects.select_for_update().get(day=day)
+        job_row = WeightResearchJob.objects.select_for_update().only("cost_usd").get(pk=job.pk)
+        if delta:
+            spend.reserved_usd += delta
+            job_row.cost_usd += delta
+            spend.save(update_fields=["reserved_usd", "updated_at"])
+            WeightResearchJob.objects.filter(pk=job.pk).update(cost_usd=job_row.cost_usd)
+    return (spend.reserved_usd <= settings.AI_WEIGHT_RESEARCH_DAILY_BUDGET_USD
+            and job_row.cost_usd <= settings.AI_WEIGHT_RESEARCH_MAX_COST_PER_JOB_USD)
 
 
 def run_job(job_id, now=None):
@@ -309,8 +318,14 @@ def run_job(job_id, now=None):
     if not isinstance(job, WeightResearchJob):
         return job
     limit = settings.AI_WEIGHT_RESEARCH_MAX_COST_PER_ATTEMPT_USD
-    query, spent, used, errors = research_query(job.part), Decimal("0"), None, []
+    query, day, used, errors = research_query(job.part), timezone.localdate(now), None, []
+    held, within = limit * len(job.chain), True  # reservations not yet replaced by a cost
     for name in job.chain:
+        if not within:  # an earlier call cost more than its reservation: the next one might not be covered
+            _record_call(job, name, Answer([], Decimal("0"), error="skipped: budget used by the calls before",
+                                           cost_note="not sent, not billed"), "not_sent", Decimal("0"), now)
+            errors.append(f"{name}: skipped, budget used")
+            break
         try:
             answer = import_string(PROVIDERS[name])(query)
             outcome = "unusable" if answer.error else "answered"
@@ -321,14 +336,15 @@ def run_job(job_id, now=None):
                             cost_note="" if error.sent else "not sent, not billed")
         except Exception as error:  # an answer no parser foresaw: one failed call, not a crashed cron run
             outcome, answer = "failed", Answer([], error=f"{name}: unexpected {type(error).__name__}")
-        spent += limit if answer.cost is None else answer.cost
         _record_call(job, name, answer, outcome, limit, now)
+        held -= limit
+        within = _settle(job, day, (limit if answer.cost is None else answer.cost) - limit)
         if not answer.error:
             used = (name, answer)
             break
         logger.warning("AI weight research job %s: provider %s failed: %s", job.pk, name, answer.error)
         errors.append(answer.error)
-    _settle(job, timezone.localdate(now), spent - limit * len(job.chain))  # calls not needed give their share back
+    _settle(job, day, -held)  # calls not made give their share back
     if used is None:
         return _failed_attempt(job, "; ".join(errors)[:200], now)
     name, answer = used
@@ -344,7 +360,8 @@ def _record_call(job, name, answer, outcome, reserved, now):
     WeightResearchCall.objects.create(
         job=job, attempt=job.attempts, provider=name, model=answer.model[:100], request_id=answer.request_id[:200],
         outcome=outcome, error=answer.error[:200], searches=answer.searches, usage=answer.usage,
-        citations=answer.citations, unsourced=answer.unsourced, reserved_usd=reserved, cost_usd=answer.cost, cost_note=answer.cost_note[:300],
+        citations=answer.citations, unsourced=answer.unsourced, reserved_usd=reserved, cost_usd=answer.cost,
+        cost_note=answer.cost_note[:300],
         created_at=now)
 
 

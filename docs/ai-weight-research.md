@@ -176,7 +176,7 @@ lowest (AI < AMT < operator < physically measured, LPK-239), so approving it nev
 | Setting | Default | Meaning |
 |---|---|---|
 | `AI_WEIGHT_RESEARCH_ENABLED` | `False` | The feature flag. Off: nothing is queued and the command does nothing. |
-| `AI_WEIGHT_RESEARCH_PROVIDER` | `anthropic` | The primary provider: `anthropic`, `openai` or `http` (§4). |
+| `AI_WEIGHT_RESEARCH_PROVIDER` | `http` | The primary provider: `http` (the LPK-247 default), `anthropic` or `openai` (§4). Claude and OpenAI are opted into explicitly. |
 | `AI_WEIGHT_RESEARCH_FALLBACK_PROVIDERS` | empty | Comma-separated, tried in order when the one before fails (§3.1). |
 | `AI_WEIGHT_RESEARCH_ANTHROPIC_API_KEY` | empty | Claude key. Required when `anthropic` is in use. `.env` only. |
 | `AI_WEIGHT_RESEARCH_ANTHROPIC_MODEL` | `claude-opus-5-5` | Claude model id. |
@@ -223,7 +223,18 @@ or malformed, or web search unavailable. A provider that answers, even with noth
 A fallback runs **only if the budget covers every call that could happen**: at the claim, the attempt reserves one
 per-call limit per provider, but only as far as both the job's remaining limit and the day's remaining budget allow. If
 only the primary fits, the attempt has no fallback; if not even that fits, the job waits for the next day (daily) or
-fails ("job cost limit reached"). The SDKs do not retry by themselves (`max_retries=0`): a failed attempt is retried by
+fails ("job cost limit reached").
+
+Each call's reservation is replaced by its cost as soon as the call returns. That update and the check behind it run in
+the same transaction, locked on the day's budget row like the claim. A fallback is sent only if the job's total and the
+day's total, with the earlier calls' actual costs and the fallback's own reservation included, still fit their limits.
+So when an earlier call cost more than its reservation (its estimate came out above the per-call limit), the fallback
+is skipped, recorded as `not_sent` ("skipped: budget used by the calls before") and costs nothing. A concurrent job's
+overrun counts the same way. The calls already made keep their audit records and their costs.
+
+These limits are enforced on **estimates** (or, for an unknown cost, on the per-call limit). An estimate can be below
+the bill (§3.2), and a single call can cost more than its reservation before Django sees its usage. Only the spend
+limits set in the providers' consoles are guaranteed billing limits. The SDKs do not retry by themselves (`max_retries=0`): a failed attempt is retried by
 the job's own backoff, which keeps every request inside a reservation.
 
 ### 3.2 Cost estimate and reconciliation
@@ -366,7 +377,8 @@ Optional customer weight input (calculate-price), carts, orders and payments are
    - Put keys only into the server's `.env` (mode 600, owned by the app user), never into Git, tickets or chat.
      Rotate by replacing the value and restarting; revoke the old key in the console.
 3. **Staging first.** In the staging `.env`:
-   - `AI_WEIGHT_RESEARCH_ENABLED=True`, `AI_WEIGHT_RESEARCH_PROVIDER=anthropic` (or `openai`), optionally
+   - `AI_WEIGHT_RESEARCH_ENABLED=True`, `AI_WEIGHT_RESEARCH_PROVIDER=anthropic` (or `openai`; it must be set, the
+     default is `http`), optionally
      `AI_WEIGHT_RESEARCH_FALLBACK_PROVIDERS=openai`;
    - the key(s), and `AI_WEIGHT_RESEARCH_PRICES` from the current price lists;
    - a small budget at first, for example `AI_WEIGHT_RESEARCH_DAILY_BUDGET_USD=2.00` and `_JOBS_PER_RUN=2`.
@@ -386,9 +398,9 @@ Optional customer weight input (calculate-price), carts, orders and payments are
   unused. To leave one provider, change `AI_WEIGHT_RESEARCH_PROVIDER` / `_FALLBACK_PROVIDERS` and restart.
 - **Keys:** revoke them in the providers' consoles; the app fails no request because of it (calls fail and are retried,
   or the feature is off).
-- **Code:** LPK-247 code ignores the `WeightResearchCall` table. Its `http` provider still works, but its default
-  provider was `http`: set `AI_WEIGHT_RESEARCH_PROVIDER=http` explicitly before rolling the code back with the feature
-  on.
+- **Code:** LPK-247 code ignores the `WeightResearchCall` table and knows only the `http` provider (the default in both
+  versions): set `AI_WEIGHT_RESEARCH_PROVIDER=http` (or remove it) and clear `_FALLBACK_PROVIDERS` before rolling back
+  with the feature on.
 - **Schema** (only if needed, and after a backup): `manage.py migrate parts 0010` drops the call audit;
   `manage.py migrate parts 0009` drops all research tables. AI weights already recorded stay in `PartWeight`.
 
