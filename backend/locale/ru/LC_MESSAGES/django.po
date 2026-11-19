@@ -1667,3 +1667,129 @@ msgstr "Поставщик недоступен; повторите расчёт
 
 msgid "The supplier no longer offers this part; cancel the task."
 msgstr "Поставщик больше не предлагает эту деталь; отмените задачу."
+
+msgid "AI suggestion"
+msgstr "Предложение ИИ"
+
+msgid "confidence"
+msgstr "уверенность"
+
+msgid "proposed weight"
+msgstr "предложенный вес"
+
+msgid "Approve the AI weight and price the waiting customers"
+msgstr "Утвердить вес от ИИ и рассчитать цену для ожидающих клиентов"
+
+msgid "#%(id)s: approved; the part's weight in use is %(current)s."
+msgstr "#%(id)s: утверждено; используемый вес детали: %(current)s."
+
+msgid "Missing weight task #%(task)s resolved."
+msgstr "Задача без веса #%(task)s решена."
+
+msgid "Reject the AI weight"
+msgstr "Отклонить вес от ИИ"
+
+msgid "#%(id)s: rejected."
+msgstr "#%(id)s: отклонено."
+
+msgid "#%(id)s: nothing to reject."
+msgstr "#%(id)s: нечего отклонять."
+
+msgid "Research again"
+msgstr "Искать снова"
+
+msgid "#%(id)s: research for this part is already queued."
+msgstr "#%(id)s: поиск для этой детали уже в очереди."
+
+msgid "#%(id)s: queued again."
+msgstr "#%(id)s: снова поставлено в очередь."
+
+msgid "queued"
+msgstr "в очереди"
+
+msgid "running"
+msgstr "выполняется"
+
+msgid "weight proposed"
+msgstr "вес предложен"
+
+msgid "not enough evidence"
+msgstr "недостаточно подтверждений"
+
+msgid "skipped"
+msgstr "пропущено"
+
+msgid "failed"
+msgstr "ошибка"
+
+msgid "attempts"
+msgstr "попытки"
+
+msgid "next attempt"
+msgstr "следующая попытка"
+
+msgid "started"
+msgstr "начато"
+
+msgid "finished"
+msgstr "завершено"
+
+msgid "cost (USD)"
+msgstr "стоимость (USD)"
+
+msgid "measurement"
+msgstr "тип измерения"
+
+msgid "explanation"
+msgstr "объяснение"
+
+msgid "AI weight research"
+msgstr "Поиск веса с помощью ИИ"
+
+msgid "URL"
+msgstr "URL"
+
+msgid "site"
+msgstr "сайт"
+
+msgid "title"
+msgstr "заголовок"
+
+msgid "part number on the page"
+msgstr "номер детали на странице"
+
+msgid "manufacturer on the page"
+msgstr "производитель на странице"
+
+msgid "stated weight"
+msgstr "указанный вес"
+
+msgid "unit"
+msgstr "единица"
+
+msgid "excerpt"
+msgstr "фрагмент"
+
+msgid "valid"
+msgstr "действительно"
+
+msgid "agrees with the proposal"
+msgstr "совпадает с предложением"
+
+msgid "assessment"
+msgstr "оценка"
+
+msgid "research source"
+msgstr "источник поиска"
+
+msgid "research sources"
+msgstr "источники поиска"
+
+msgid "This research proposed no weight."
+msgstr "Этот поиск не предложил вес."
+
+msgid "This weight was rejected."
+msgstr "Этот вес отклонён."
+
+msgid "This AI weight is already approved; nothing changed."
+msgstr "Этот вес от ИИ уже утверждён; ничего не изменилось."

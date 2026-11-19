@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 Every variable read here is listed in backend/.env.example (G§12).
 """
 
+from decimal import Decimal
 from email.utils import parseaddr
 from pathlib import Path
 from decouple import config, Csv
@@ -274,6 +275,30 @@ AMT_TIMEOUT_SECONDS = config("AMT_TIMEOUT_SECONDS", default=15, cast=int)
 AMT_LOOKUP_BUDGET_SECONDS = config("AMT_LOOKUP_BUDGET_SECONDS", default=30, cast=int)
 if AMT_LOOKUP_BUDGET_SECONDS <= 0:  # no attempt could ever start, so every search would fail
     raise ImproperlyConfigured("AMT_LOOKUP_BUDGET_SECONDS must be a positive whole number of seconds.")
+
+# AI part-weight research (LPK-247). Off by default. The service behind the URL does the AI search; Django sends it only
+# a part number, manufacturer and part name, never a customer or a VIN. Results wait for an operator's approval.
+AI_WEIGHT_RESEARCH_ENABLED = config("AI_WEIGHT_RESEARCH_ENABLED", default=False, cast=bool)
+AI_WEIGHT_RESEARCH_URL = config("AI_WEIGHT_RESEARCH_URL", default="")
+AI_WEIGHT_RESEARCH_API_KEY = config("AI_WEIGHT_RESEARCH_API_KEY", default="")
+AI_WEIGHT_RESEARCH_TIMEOUT_SECONDS = config("AI_WEIGHT_RESEARCH_TIMEOUT_SECONDS", default=60, cast=int)
+AI_WEIGHT_RESEARCH_MAX_ATTEMPTS = config("AI_WEIGHT_RESEARCH_MAX_ATTEMPTS", default=3, cast=int)
+AI_WEIGHT_RESEARCH_JOBS_PER_RUN = config("AI_WEIGHT_RESEARCH_JOBS_PER_RUN", default=10, cast=int)
+AI_WEIGHT_RESEARCH_MAX_COST_PER_JOB_USD = config("AI_WEIGHT_RESEARCH_MAX_COST_PER_JOB_USD", default="0.50",
+                                                 cast=Decimal)
+AI_WEIGHT_RESEARCH_DAILY_BUDGET_USD = config("AI_WEIGHT_RESEARCH_DAILY_BUDGET_USD", default="5.00", cast=Decimal)
+if AI_WEIGHT_RESEARCH_ENABLED:
+    _ai_problems = [name for name, bad in (
+        ("AI_WEIGHT_RESEARCH_URL must be an https:// URL", not AI_WEIGHT_RESEARCH_URL.startswith("https://")),
+        ("AI_WEIGHT_RESEARCH_API_KEY must be set", not AI_WEIGHT_RESEARCH_API_KEY),
+        ("AI_WEIGHT_RESEARCH_TIMEOUT_SECONDS must be 1 to 300", not 0 < AI_WEIGHT_RESEARCH_TIMEOUT_SECONDS <= 300),
+        ("AI_WEIGHT_RESEARCH_MAX_ATTEMPTS must be 1 to 10", not 0 < AI_WEIGHT_RESEARCH_MAX_ATTEMPTS <= 10),
+        ("AI_WEIGHT_RESEARCH_JOBS_PER_RUN must be 1 to 100", not 0 < AI_WEIGHT_RESEARCH_JOBS_PER_RUN <= 100),
+        ("AI_WEIGHT_RESEARCH_MAX_COST_PER_JOB_USD must be positive", not AI_WEIGHT_RESEARCH_MAX_COST_PER_JOB_USD > 0),
+        ("AI_WEIGHT_RESEARCH_DAILY_BUDGET_USD must be positive", not AI_WEIGHT_RESEARCH_DAILY_BUDGET_USD > 0),
+    ) if bad]
+    if _ai_problems:
+        raise ImproperlyConfigured("; ".join(_ai_problems) + ".")
 
 
 

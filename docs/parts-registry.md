@@ -155,4 +155,5 @@ and deletes nothing.
 3. **Customers are priced and notified without asking**, if they searched the part while logged in and their phone is
    verified. The alternative is to price only those who sent a quote request.
 4. **The backfill opens no tasks** for old `checking` searches, so nobody is notified about old searches.
-5. **AI estimates have no generator yet.** The source exists and an operator can record one; no AI service is called.
+5. **AI estimates** come from the AI weight research (LPK-247, `docs/ai-weight-research.md`), off by default. They are
+   always pending until an operator approves them.

@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.contrib import admin, messages
+from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
+from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
@@ -8,9 +10,10 @@ from api.errors import ApiError
 from orders.services import OperatorError
 
 from .models import (CarrierService, PartImage, PartMaster, PartQuoteRequest, PartSearchLog, PartWeight,
-                     PartWeightEvent, WeightTask, WeightTaskRequest)
+                     PartWeightEvent, WeightResearchJob, WeightResearchSource, WeightTask, WeightTaskRequest)
 from .registry import is_plausible, record_weight, review_weight
 from .services import mark_quote_ready
+from .weight_research import approve_proposal
 from .weight_tasks import approve_task, cancel_task
 
 
@@ -286,17 +289,19 @@ class WeightTaskAdmin(admin.ModelAdmin):
     """The missing-weight queue: one row per part the supplier prices without a usable weight."""
 
     list_display = ("id", "part", "status", "waiting_customers", "request_count", "supplier_price_usd",
-                    "proposed_weight_kg", "approved_weight", "last_error", "created_at", "resolved_at")
+                    "ai_suggestion", "proposed_weight_kg", "approved_weight", "last_error", "created_at",
+                    "resolved_at")
     list_filter = (OpenTaskFilter, "status", "created_at")
     search_fields = ("part__part_number", "part__part_number_key", "part__brand")
     list_select_related = ("part", "approved_weight")
     inlines = (WeightTaskRequestInline,)
     actions = ("approve_and_price", "cancel")
     readonly_fields = ("part", "status", "supplier_price_usd", "last_search_log", "offer_id", "request_count",
-                       "known_weight", "approved_weight", "last_error", "created_at", "resolved_at", "resolved_by")
+                       "known_weight", "ai_suggestion", "approved_weight", "last_error", "created_at", "resolved_at",
+                       "resolved_by")
     fieldsets = (
-        (_("Part"), {"fields": ("part", "status", "known_weight", "supplier_price_usd", "last_search_log", "offer_id",
-                                "request_count", "last_error")}),
+        (_("Part"), {"fields": ("part", "status", "known_weight", "ai_suggestion", "supplier_price_usd",
+                                "last_search_log", "offer_id", "request_count", "last_error")}),
         (_("Weight"), {
             "description": _("Enter the weight and its source, save, then run “Approve the weight and price the "
                              "waiting customers”. Every waiting customer is priced with their own tariff and the "
@@ -326,6 +331,17 @@ class WeightTaskAdmin(admin.ModelAdmin):
         w = obj.part.current_weight
         return f"{w.weight_kg} kg · {w.get_source_display()}" if w else "—"
 
+    @admin.display(description=_("AI suggestion"))
+    def ai_suggestion(self, obj):
+        job = obj.part.research_jobs.order_by("-created_at", "-id").first()
+        if job is None:
+            return "—"
+        url = reverse("admin:parts_weightresearchjob_change", args=[job.pk])
+        if job.proposed_weight is None:
+            return format_html('<a href="{}">{}</a>', url, job.get_status_display())
+        return format_html('<a href="{}">{} kg · {} {} · {}</a>', url, job.proposed_weight.weight_kg,
+                           _("confidence"), job.confidence, job.proposed_weight.get_status_display())
+
     @admin.action(description=_("Approve the weight and price the waiting customers"))
     def approve_and_price(self, request, queryset):
         for task in queryset:
@@ -349,3 +365,87 @@ class WeightTaskAdmin(admin.ModelAdmin):
                 self.message_user(request, _("#%(id)s: cancelled.") % {"id": task.pk}, messages.SUCCESS)
             else:
                 self.message_user(request, _("#%(id)s: not open; nothing changed.") % {"id": task.pk}, messages.INFO)
+
+
+class WeightResearchSourceInline(ReadOnlyInline):
+    model = WeightResearchSource
+    fields = ("link", "stated_part_number", "stated_manufacturer", "stated_value", "stated_unit", "measurement",
+              "weight_kg", "accepted", "agrees", "reason", "excerpt")
+    readonly_fields = fields
+    show_change_link = False
+
+    @admin.display(description=_("source"))
+    def link(self, obj):
+        return format_html('<a href="{}" target="_blank" rel="noopener noreferrer">{}</a><br>{}', obj.url, obj.domain,
+                           obj.title)
+
+
+@admin.register(WeightResearchJob)
+class WeightResearchJobAdmin(admin.ModelAdmin):
+    """LPK-247: what the AI research found for a part, each source with why it counted or not, and the confidence
+    with its explanation. A proposed weight waits here (and under Part weights) for the operator."""
+
+    list_display = ("id", "part", "status", "proposal", "confidence", "measurement", "attempts", "cost_usd",
+                    "last_error", "created_at", "finished_at")
+    list_filter = ("status", "measurement", "created_at")
+    search_fields = ("part__part_number", "part__part_number_key", "part__brand")
+    list_select_related = ("part", "proposed_weight")
+    inlines = (WeightResearchSourceInline,)
+    actions = ("approve_and_price", "reject", "retry")
+    fields = ("part", "status", "proposal", "confidence", "measurement", "explanation", "attempts",
+              "next_attempt_at", "started_at", "finished_at", "cost_usd", "last_error", "created_at")
+    readonly_fields = fields
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False  # read only: the operator acts through the actions below
+
+    def has_delete_permission(self, request, obj=None):
+        return False  # the evidence behind every AI weight stays on record
+
+    @admin.display(description=_("proposed weight"))
+    def proposal(self, obj):
+        w = obj.proposed_weight
+        if w is None:
+            return "—"
+        url = reverse("admin:parts_partweight_change", args=[w.pk])
+        return format_html('<a href="{}">{} kg · {}</a>', url, w.weight_kg, w.get_status_display())
+
+    @admin.action(description=_("Approve the AI weight and price the waiting customers"))
+    def approve_and_price(self, request, queryset):
+        for job in queryset:
+            try:
+                task = approve_proposal(job.pk, request.user)
+            except OperatorError as error:
+                self.message_user(request, f"#{job.pk}: {error.message}", messages.WARNING)
+                continue
+            part = PartMaster.objects.select_related("current_weight").get(pk=job.part_id)
+            text = _("#%(id)s: approved; the part's weight in use is %(current)s.") % {
+                "id": job.pk, "current": part.current_weight or "—"}
+            if task is not None:
+                text += " " + _("Missing weight task #%(task)s resolved.") % {"task": task.pk}
+            self.message_user(request, text, messages.SUCCESS)
+
+    @admin.action(description=_("Reject the AI weight"))
+    def reject(self, request, queryset):
+        for job in queryset.select_related("proposed_weight"):
+            if job.proposed_weight and review_weight(job.proposed_weight.pk, PartWeight.STATUS_REJECTED, request.user,
+                                                     note=f"AI weight research #{job.pk}"):
+                self.message_user(request, _("#%(id)s: rejected.") % {"id": job.pk}, messages.SUCCESS)
+            else:
+                self.message_user(request, _("#%(id)s: nothing to reject.") % {"id": job.pk}, messages.INFO)
+
+    @admin.action(description=_("Research again"))
+    def retry(self, request, queryset):
+        """A new job for each selected part (a paid search), unless one is already queued or running."""
+        for job in queryset:
+            try:
+                with transaction.atomic():
+                    WeightResearchJob.objects.create(part_id=job.part_id)
+            except IntegrityError:
+                self.message_user(request, _("#%(id)s: research for this part is already queued.") % {"id": job.pk},
+                                  messages.INFO)
+                continue
+            self.message_user(request, _("#%(id)s: queued again.") % {"id": job.pk}, messages.SUCCESS)

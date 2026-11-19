@@ -1663,3 +1663,129 @@ msgstr "მომწოდებელი მიუწვდომელია; 
 
 msgid "The supplier no longer offers this part; cancel the task."
 msgstr "მომწოდებელი ამ ნაწილს აღარ სთავაზობს; გააუქმეთ ამოცანა."
+
+msgid "AI suggestion"
+msgstr "AI-ის შემოთავაზება"
+
+msgid "confidence"
+msgstr "სანდოობა"
+
+msgid "proposed weight"
+msgstr "შემოთავაზებული წონა"
+
+msgid "Approve the AI weight and price the waiting customers"
+msgstr "AI-ის წონის დამტკიცება და მომლოდინე მომხმარებლების ფასის გამოთვლა"
+
+msgid "#%(id)s: approved; the part's weight in use is %(current)s."
+msgstr "#%(id)s: დამტკიცდა; ნაწილის გამოყენებული წონაა %(current)s."
+
+msgid "Missing weight task #%(task)s resolved."
+msgstr "წონის მოლოდინის ამოცანა #%(task)s გადაწყდა."
+
+msgid "Reject the AI weight"
+msgstr "AI-ის წონის უარყოფა"
+
+msgid "#%(id)s: rejected."
+msgstr "#%(id)s: უარყოფილია."
+
+msgid "#%(id)s: nothing to reject."
+msgstr "#%(id)s: უარსაყოფი არაფერია."
+
+msgid "Research again"
+msgstr "ხელახლა მოძიება"
+
+msgid "#%(id)s: research for this part is already queued."
+msgstr "#%(id)s: ამ ნაწილის მოძიება უკვე რიგშია."
+
+msgid "#%(id)s: queued again."
+msgstr "#%(id)s: ხელახლა ჩაეწერა რიგში."
+
+msgid "queued"
+msgstr "რიგშია"
+
+msgid "running"
+msgstr "მიმდინარეობს"
+
+msgid "weight proposed"
+msgstr "წონა შემოთავაზებულია"
+
+msgid "not enough evidence"
+msgstr "მტკიცებულება არასაკმარისია"
+
+msgid "skipped"
+msgstr "გამოტოვებულია"
+
+msgid "failed"
+msgstr "ვერ შესრულდა"
+
+msgid "attempts"
+msgstr "მცდელობები"
+
+msgid "next attempt"
+msgstr "შემდეგი მცდელობა"
+
+msgid "started"
+msgstr "დაიწყო"
+
+msgid "finished"
+msgstr "დასრულდა"
+
+msgid "cost (USD)"
+msgstr "ღირებულება (USD)"
+
+msgid "measurement"
+msgstr "გაზომვის ტიპი"
+
+msgid "explanation"
+msgstr "ახსნა"
+
+msgid "AI weight research"
+msgstr "წონის მოძიება AI-ით"
+
+msgid "URL"
+msgstr "URL"
+
+msgid "site"
+msgstr "საიტი"
+
+msgid "title"
+msgstr "სათაური"
+
+msgid "part number on the page"
+msgstr "ნაწილის ნომერი გვერდზე"
+
+msgid "manufacturer on the page"
+msgstr "მწარმოებელი გვერდზე"
+
+msgid "stated weight"
+msgstr "მითითებული წონა"
+
+msgid "unit"
+msgstr "ერთეული"
+
+msgid "excerpt"
+msgstr "ამონარიდი"
+
+msgid "valid"
+msgstr "ვალიდური"
+
+msgid "agrees with the proposal"
+msgstr "ემთხვევა შემოთავაზებას"
+
+msgid "assessment"
+msgstr "შეფასება"
+
+msgid "research source"
+msgstr "მოძიების წყარო"
+
+msgid "research sources"
+msgstr "მოძიების წყაროები"
+
+msgid "This research proposed no weight."
+msgstr "ამ მოძიებამ წონა არ შემოგვთავაზა."
+
+msgid "This weight was rejected."
+msgstr "ეს წონა უარყოფილია."
+
+msgid "This AI weight is already approved; nothing changed."
+msgstr "AI-ის ეს წონა უკვე დამტკიცებულია; არაფერი შეცვლილა."
