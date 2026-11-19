@@ -30,7 +30,7 @@ from parts.models import (PartMaster, PartQuoteRequest, PartWeight, WeightResear
                           WeightResearchSpend, WeightTask)
 from parts.registry import record_weight
 from parts.test_registry import PART, RegistryTestCase, amt_row
-from parts.weight_research import (BUDGET, MAX_OBSERVATIONS, Observation, ResearchError, Rules, _claim,
+from parts.weight_research import (BUDGET, Answer, MAX_OBSERVATIONS, Observation, ResearchError, Rules, _claim,
                                    approve_and_price, approve_proposal, call_research_service, check, credibility,
                                    research_query, rules, run_due_jobs, run_job, score, site)
 from parts.weight_tasks import approve_task
@@ -55,7 +55,7 @@ def obs(url="https://shop-a.example/p", value="0.40", unit="kg", measurement="sh
 
 
 def answer(*observations, cost="0.04"):
-    return [Observation(**o) for o in observations], (None if cost is None else D(cost))
+    return Answer([Observation(**o) for o in observations], None if cost is None else D(cost))
 
 
 EN = {"accept-language": "en"}
@@ -130,11 +130,13 @@ class QueueingTests(ResearchTestCase):
     def test_enabled_without_https_or_key_or_with_unclear_limits_is_refused(self):
         result = run_python("import config.settings", {"AI_WEIGHT_RESEARCH_ENABLED": "True",
                                                        "AI_WEIGHT_RESEARCH_URL": "http://research.example",
-                                                       "AI_WEIGHT_RESEARCH_PROVIDER": "openai",
+                                                       "AI_WEIGHT_RESEARCH_PROVIDER": "http",
+                                                       "AI_WEIGHT_RESEARCH_FALLBACK_PROVIDERS": "openai,gemini",
                                                        "AI_WEIGHT_RESEARCH_MAX_COST_PER_ATTEMPT_USD": "2.00",
                                                        "AI_WEIGHT_RESEARCH_MAX_COST_PER_JOB_USD": "1.00"})
         self.assertNotEqual(result.returncode, 0)
-        for text in ("https://", "AI_WEIGHT_RESEARCH_API_KEY must be set", "AI_WEIGHT_RESEARCH_PROVIDER must be http",
+        for text in ("https://", "AI_WEIGHT_RESEARCH_API_KEY must be set", "must name different providers out of "
+                     "http, anthropic, openai", "AI_WEIGHT_RESEARCH_OPENAI_API_KEY and _MODEL must be set",
                      "at most the per-job limit"):
             self.assertIn(text, result.stderr)
 
@@ -187,7 +189,8 @@ class AdapterTests(ResearchTestCase):
         claimed = {**obs(), "verified": True}
         body = json.dumps({"cost_usd": "0.03", "observations": [claimed, "junk", {"no_url": 1}]}).encode()
         with self.post(FakeResponse(body=body)) as post:
-            found, cost = call_research_service({"part_number": "X"})
+            got = call_research_service({"part_number": "X"})
+        found, cost = got.observations, got.cost
         args, kwargs = post.call_args
         self.assertEqual(args, ("https://research.example/v1/weight",))
         self.assertEqual(kwargs["json"], {"part_number": "X"})
@@ -211,8 +214,9 @@ class AdapterTests(ResearchTestCase):
     def test_observations_are_capped_and_cost_may_be_missing(self):
         body = json.dumps({"observations": [obs()] * 50, "cost_usd": "NaN"}).encode()
         with self.post(FakeResponse(body=body)):
-            found, cost = call_research_service({})
-        self.assertEqual((len(found), cost), (MAX_OBSERVATIONS, None))
+            got = call_research_service({})
+        self.assertEqual((len(got.observations), got.cost, got.cost_note),
+                         (MAX_OBSERVATIONS, None, "cost not reported"))
 
 
 # --- parts.evidence: no database, no network --------------------------------------------------------------------------
@@ -818,7 +822,7 @@ class LimitTests(ResearchTestCase):
 
     def test_a_crashed_run_is_recovered_and_its_reservation_counted_once(self):
         now = timezone.now()
-        with self.service(error=RuntimeError("worker killed")), self.assertRaises(RuntimeError):
+        with self.service(error=SystemExit("worker killed")), self.assertRaises(SystemExit):  # killed mid-call
             run_job(self.job().pk, now)
         self.assertEqual((self.job().status, self.job().cost_usd, self.spent()), ("running", D("0.50"), D("0.50")))
         later = now + timedelta(minutes=31)

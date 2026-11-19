@@ -1881,3 +1881,54 @@ msgstr "წონა გვერდზე (კგ)"
 
 msgid "not allowed by robots.txt"
 msgstr "არ არის ნებადართული robots.txt-ით"
+
+msgid "AI research call"
+msgstr "AI-ით მოძიების გამოძახება"
+
+msgid "AI research calls"
+msgstr "AI-ით მოძიების გამოძახებები"
+
+msgid "answered"
+msgstr "პასუხი მიღებულია"
+
+msgid "answered, unusable"
+msgstr "პასუხი მიღებულია, გამოუსადეგარია"
+
+msgid "not sent"
+msgstr "არ გაიგზავნა"
+
+msgid "attempt"
+msgstr "მცდელობა"
+
+msgid "model"
+msgstr "მოდელი"
+
+msgid "provider request ID"
+msgstr "პროვაიდერის მოთხოვნის ID"
+
+msgid "error"
+msgstr "შეცდომა"
+
+msgid "web searches"
+msgstr "ვებ-ძიებები"
+
+msgid "usage reported"
+msgstr "მოხსენებული მოხმარება"
+
+msgid "citations"
+msgstr "ციტატები"
+
+msgid "dropped: URL not from the search"
+msgstr "გამორიცხულია: URL ძიებიდან არ არის"
+
+msgid "reserved (USD)"
+msgstr "დარეზერვებული (USD)"
+
+msgid "estimated cost (USD)"
+msgstr "სავარაუდო ღირებულება (USD)"
+
+msgid "cost note"
+msgstr "შენიშვნა ღირებულებაზე"
+
+msgid "time"
+msgstr "დრო"

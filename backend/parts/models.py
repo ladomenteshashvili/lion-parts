@@ -483,6 +483,39 @@ class WeightResearchSource(models.Model):
         return self.domain
 
 
+class WeightResearchCall(models.Model):
+    """LPK-248: one call to a research provider, for audit and billing reconciliation: who answered with which model,
+    the usage and search calls it reported, the citations it gave, and the estimated cost. Never the prompt, a key or
+    a provider's error body."""
+
+    OUTCOMES = [("answered", _("answered")), ("unusable", _("answered, unusable")), ("failed", _("failed")),
+                ("not_sent", _("not sent"))]
+
+    job = models.ForeignKey(WeightResearchJob, on_delete=models.CASCADE, related_name="calls")
+    attempt = models.PositiveSmallIntegerField(_("attempt"))
+    provider = models.CharField(_("provider"), max_length=30)
+    model = models.CharField(_("model"), max_length=100, blank=True)
+    request_id = models.CharField(_("provider request ID"), max_length=200, blank=True)
+    outcome = models.CharField(_("outcome"), max_length=20, choices=OUTCOMES)
+    error = models.CharField(_("error"), max_length=200, blank=True)
+    searches = models.PositiveIntegerField(_("web searches"), null=True, blank=True)  # None: not reported
+    usage = models.JSONField(_("usage reported"), default=dict, blank=True)
+    citations = models.JSONField(_("citations"), default=list, blank=True)
+    unsourced = models.PositiveSmallIntegerField(_("dropped: URL not from the search"), default=0)
+    reserved_usd = models.DecimalField(_("reserved (USD)"), max_digits=8, decimal_places=4)
+    cost_usd = models.DecimalField(_("estimated cost (USD)"), max_digits=8, decimal_places=4, null=True, blank=True)
+    cost_note = models.CharField(_("cost note"), max_length=300, blank=True)
+    created_at = models.DateTimeField(_("time"), default=timezone.now)
+
+    class Meta:
+        verbose_name = _("AI research call")
+        verbose_name_plural = _("AI research calls")
+        ordering = ["job", "id"]
+
+    def __str__(self):
+        return f"#{self.job_id}/{self.attempt} {self.provider} {self.outcome}"
+
+
 class WeightResearchSpend(models.Model):
     """LPK-247: research spending per local day: every attempt reserves its limit before the paid call, so overlapping
     runs never exceed the daily budget; a reported cost then replaces the reservation."""

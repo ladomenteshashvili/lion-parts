@@ -12,7 +12,8 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 Every variable read here is listed in backend/.env.example (G§12).
 """
 
-from decimal import Decimal
+import json
+from decimal import Decimal, InvalidOperation
 from email.utils import parseaddr
 from pathlib import Path
 from decouple import config, Csv
@@ -278,30 +279,85 @@ if AMT_LOOKUP_BUDGET_SECONDS <= 0:  # no attempt could ever start, so every sear
 
 # AI part-weight research (LPK-247). Off by default. The provider does the AI search; Django sends it only a part number,
 # manufacturer and part name, never a customer or a VIN, checks every cited page itself, and every result waits for an
-# operator's approval. Provider "http" is the one provider-neutral HTTPS service (Claude and OpenAI come in LPK-248).
+# operator's approval. Providers (LPK-248): "anthropic" (Claude) and "openai", each with its own web search, or "http",
+# a provider-neutral HTTPS service. FALLBACK_PROVIDERS are tried in order when the one before fails, and only when the
+# job's and the day's budgets still cover a call each (docs/ai-weight-research.md).
+AI_RESEARCH_PROVIDERS = ("http", "anthropic", "openai")  # = parts.weight_research.PROVIDERS
 AI_WEIGHT_RESEARCH_ENABLED = config("AI_WEIGHT_RESEARCH_ENABLED", default=False, cast=bool)
+# "http" stays the default (as in LPK-247); Claude or OpenAI are chosen explicitly in the environment.
 AI_WEIGHT_RESEARCH_PROVIDER = config("AI_WEIGHT_RESEARCH_PROVIDER", default="http")
+AI_WEIGHT_RESEARCH_FALLBACK_PROVIDERS = config("AI_WEIGHT_RESEARCH_FALLBACK_PROVIDERS", default="", cast=Csv())
 AI_WEIGHT_RESEARCH_URL = config("AI_WEIGHT_RESEARCH_URL", default="")
 AI_WEIGHT_RESEARCH_API_KEY = config("AI_WEIGHT_RESEARCH_API_KEY", default="")
 AI_WEIGHT_RESEARCH_TIMEOUT_SECONDS = config("AI_WEIGHT_RESEARCH_TIMEOUT_SECONDS", default=60, cast=int)
 AI_WEIGHT_RESEARCH_MAX_ATTEMPTS = config("AI_WEIGHT_RESEARCH_MAX_ATTEMPTS", default=3, cast=int)
 AI_WEIGHT_RESEARCH_JOBS_PER_RUN = config("AI_WEIGHT_RESEARCH_JOBS_PER_RUN", default=10, cast=int)
-# One paid call may cost at most PER_ATTEMPT (sent to the provider, reserved before the call); all attempts of one job
-# together at most PER_JOB; all calls of one local day at most DAILY_BUDGET.
+# Claude and OpenAI: own key, model and search tool each; keys only from the environment, never the shared
+# ANTHROPIC_API_KEY / OPENAI_API_KEY a developer's shell may hold.
+AI_WEIGHT_RESEARCH_ANTHROPIC_API_KEY = config("AI_WEIGHT_RESEARCH_ANTHROPIC_API_KEY", default="")
+AI_WEIGHT_RESEARCH_ANTHROPIC_MODEL = config("AI_WEIGHT_RESEARCH_ANTHROPIC_MODEL", default="claude-opus-5-5")
+AI_WEIGHT_RESEARCH_ANTHROPIC_SEARCH_TOOL = config("AI_WEIGHT_RESEARCH_ANTHROPIC_SEARCH_TOOL",
+                                                  default="web_search_20260209")
+AI_WEIGHT_RESEARCH_ANTHROPIC_TIMEOUT_SECONDS = config("AI_WEIGHT_RESEARCH_ANTHROPIC_TIMEOUT_SECONDS", default=180,
+                                                      cast=int)
+AI_WEIGHT_RESEARCH_OPENAI_API_KEY = config("AI_WEIGHT_RESEARCH_OPENAI_API_KEY", default="")
+AI_WEIGHT_RESEARCH_OPENAI_MODEL = config("AI_WEIGHT_RESEARCH_OPENAI_MODEL", default="gpt-6.2-astra")
+AI_WEIGHT_RESEARCH_OPENAI_SEARCH_TOOL = config("AI_WEIGHT_RESEARCH_OPENAI_SEARCH_TOOL", default="web_search")
+AI_WEIGHT_RESEARCH_OPENAI_TIMEOUT_SECONDS = config("AI_WEIGHT_RESEARCH_OPENAI_TIMEOUT_SECONDS", default=180, cast=int)
+# Per call: at most this many web searches and output tokens (both bound what one call can cost).
+AI_WEIGHT_RESEARCH_MAX_SEARCHES = config("AI_WEIGHT_RESEARCH_MAX_SEARCHES", default=5, cast=int)
+AI_WEIGHT_RESEARCH_MAX_OUTPUT_TOKENS = config("AI_WEIGHT_RESEARCH_MAX_OUTPUT_TOKENS", default=8000, cast=int)
+# USD prices per model id, copied from the providers' price lists by the owner; none is built in. A model without
+# prices: its cost is unknown and its reservation stands. {"model": {"input_per_mtok": "4", "output_per_mtok": "20",
+# "search_per_1k": "10"}}
+_PRICE_KEYS = {"input_per_mtok", "output_per_mtok", "search_per_1k"}
+
+
+def _research_prices(text):
+    prices = json.loads(text)
+    if not isinstance(prices, dict) or any(not isinstance(p, dict) or set(p) != _PRICE_KEYS for p in prices.values()):
+        raise ValueError(f"each model needs exactly {', '.join(sorted(_PRICE_KEYS))}")
+    prices = {model: {key: Decimal(str(value)) for key, value in p.items()} for model, p in prices.items()}
+    if any(not v.is_finite() or v < 0 for p in prices.values() for v in p.values()):
+        raise ValueError("prices must be non-negative numbers")
+    return prices
+
+
+try:
+    AI_WEIGHT_RESEARCH_PRICES = _research_prices(config("AI_WEIGHT_RESEARCH_PRICES", default="{}"))
+    _ai_price_problem = ""
+except (ValueError, InvalidOperation) as error:
+    AI_WEIGHT_RESEARCH_PRICES, _ai_price_problem = {}, f"AI_WEIGHT_RESEARCH_PRICES is not valid: {error}"
+# One provider call may cost at most PER_ATTEMPT (reserved before the call; an attempt reserves one per provider it may
+# call); all calls of one job together at most PER_JOB; all calls of one local day at most DAILY_BUDGET.
 AI_WEIGHT_RESEARCH_MAX_COST_PER_ATTEMPT_USD = config("AI_WEIGHT_RESEARCH_MAX_COST_PER_ATTEMPT_USD", default="0.50",
                                                      cast=Decimal)
 AI_WEIGHT_RESEARCH_MAX_COST_PER_JOB_USD = config("AI_WEIGHT_RESEARCH_MAX_COST_PER_JOB_USD", default="1.50",
                                                  cast=Decimal)
 AI_WEIGHT_RESEARCH_DAILY_BUDGET_USD = config("AI_WEIGHT_RESEARCH_DAILY_BUDGET_USD", default="5.00", cast=Decimal)
 if AI_WEIGHT_RESEARCH_ENABLED:
+    _ai_chain = [AI_WEIGHT_RESEARCH_PROVIDER, *AI_WEIGHT_RESEARCH_FALLBACK_PROVIDERS]
     _ai_problems = [name for name, bad in (
-        ("AI_WEIGHT_RESEARCH_URL must be an https:// URL", not AI_WEIGHT_RESEARCH_URL.startswith("https://")),
-        ("AI_WEIGHT_RESEARCH_API_KEY must be set", not AI_WEIGHT_RESEARCH_API_KEY),
+        (_ai_price_problem, _ai_price_problem),
+        ("AI_WEIGHT_RESEARCH_PROVIDER and FALLBACK_PROVIDERS must name different providers out of "
+         + ", ".join(AI_RESEARCH_PROVIDERS),
+         set(_ai_chain) - set(AI_RESEARCH_PROVIDERS) or len(set(_ai_chain)) != len(_ai_chain)),
+        ("AI_WEIGHT_RESEARCH_URL must be an https:// URL",
+         "http" in _ai_chain and not AI_WEIGHT_RESEARCH_URL.startswith("https://")),
+        ("AI_WEIGHT_RESEARCH_API_KEY must be set", "http" in _ai_chain and not AI_WEIGHT_RESEARCH_API_KEY),
+        ("AI_WEIGHT_RESEARCH_ANTHROPIC_API_KEY and _MODEL must be set", "anthropic" in _ai_chain and not (
+            AI_WEIGHT_RESEARCH_ANTHROPIC_API_KEY and AI_WEIGHT_RESEARCH_ANTHROPIC_MODEL)),
+        ("AI_WEIGHT_RESEARCH_OPENAI_API_KEY and _MODEL must be set", "openai" in _ai_chain and not (
+            AI_WEIGHT_RESEARCH_OPENAI_API_KEY and AI_WEIGHT_RESEARCH_OPENAI_MODEL)),
+        ("AI_WEIGHT_RESEARCH_ANTHROPIC_TIMEOUT_SECONDS and _OPENAI_TIMEOUT_SECONDS must be 1 to 600",
+         not (0 < AI_WEIGHT_RESEARCH_ANTHROPIC_TIMEOUT_SECONDS <= 600 and 0 < AI_WEIGHT_RESEARCH_OPENAI_TIMEOUT_SECONDS
+              <= 600)),
+        ("AI_WEIGHT_RESEARCH_MAX_SEARCHES must be 1 to 20", not 0 < AI_WEIGHT_RESEARCH_MAX_SEARCHES <= 20),
+        ("AI_WEIGHT_RESEARCH_MAX_OUTPUT_TOKENS must be 1000 to 64000",
+         not 1000 <= AI_WEIGHT_RESEARCH_MAX_OUTPUT_TOKENS <= 64000),
         ("AI_WEIGHT_RESEARCH_TIMEOUT_SECONDS must be 1 to 300", not 0 < AI_WEIGHT_RESEARCH_TIMEOUT_SECONDS <= 300),
         ("AI_WEIGHT_RESEARCH_MAX_ATTEMPTS must be 1 to 10", not 0 < AI_WEIGHT_RESEARCH_MAX_ATTEMPTS <= 10),
         ("AI_WEIGHT_RESEARCH_JOBS_PER_RUN must be 1 to 100", not 0 < AI_WEIGHT_RESEARCH_JOBS_PER_RUN <= 100),
-        ("AI_WEIGHT_RESEARCH_PROVIDER must be http (more providers come with LPK-248)",
-         AI_WEIGHT_RESEARCH_PROVIDER != "http"),
         ("AI_WEIGHT_RESEARCH_MAX_COST_PER_ATTEMPT_USD must be positive and at most the per-job limit, which must be "
          "at most the daily budget", not 0 < AI_WEIGHT_RESEARCH_MAX_COST_PER_ATTEMPT_USD
          <= AI_WEIGHT_RESEARCH_MAX_COST_PER_JOB_USD <= AI_WEIGHT_RESEARCH_DAILY_BUDGET_USD),
