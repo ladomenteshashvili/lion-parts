@@ -1885,3 +1885,54 @@ msgstr "вес на странице (кг)"
 
 msgid "not allowed by robots.txt"
 msgstr "запрещено файлом robots.txt"
+
+msgid "AI research call"
+msgstr "Вызов поиска с ИИ"
+
+msgid "AI research calls"
+msgstr "Вызовы поиска с ИИ"
+
+msgid "answered"
+msgstr "ответ получен"
+
+msgid "answered, unusable"
+msgstr "ответ получен, непригоден"
+
+msgid "not sent"
+msgstr "не отправлен"
+
+msgid "attempt"
+msgstr "попытка"
+
+msgid "model"
+msgstr "модель"
+
+msgid "provider request ID"
+msgstr "ID запроса у провайдера"
+
+msgid "error"
+msgstr "ошибка"
+
+msgid "web searches"
+msgstr "веб-поиски"
+
+msgid "usage reported"
+msgstr "использование по отчёту"
+
+msgid "citations"
+msgstr "цитаты"
+
+msgid "dropped: URL not from the search"
+msgstr "отброшено: URL не из поиска"
+
+msgid "reserved (USD)"
+msgstr "зарезервировано (USD)"
+
+msgid "estimated cost (USD)"
+msgstr "оценка стоимости (USD)"
+
+msgid "cost note"
+msgstr "примечание о стоимости"
+
+msgid "time"
+msgstr "время"

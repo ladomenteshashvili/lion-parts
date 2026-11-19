@@ -12,8 +12,8 @@ from orders.admin_actions import form_action
 from orders.services import OperatorError
 
 from .models import (CarrierService, PartImage, PartMaster, PartQuoteRequest, PartSearchLog, PartWeight,
-                     PartWeightEvent, WeightResearchJob, WeightResearchSource, WeightResearchSpend, WeightTask,
-                     WeightTaskRequest)
+                     PartWeightEvent, WeightResearchCall, WeightResearchJob, WeightResearchSource, WeightResearchSpend,
+                     WeightTask, WeightTaskRequest)
 from .registry import is_plausible, record_weight, review_weight
 from .services import mark_quote_ready
 from .weight_research import approve_and_price, approve_proposal, waiting_customers
@@ -387,6 +387,16 @@ class WeightResearchSourceInline(ReadOnlyInline):
                            obj.domain or obj.url[:80], obj.title)
 
 
+class WeightResearchCallInline(ReadOnlyInline):
+    """LPK-248: every provider call, for audit and billing reconciliation."""
+
+    model = WeightResearchCall
+    fields = ("attempt", "provider", "model", "outcome", "error", "searches", "unsourced", "reserved_usd", "cost_usd",
+              "cost_note", "request_id", "usage", "citations", "created_at")
+    readonly_fields = fields
+    show_change_link = False
+
+
 class ConfirmPricingForm(forms.Form):
     confirm = forms.BooleanField(required=True, label=_(
         "I understand: every customer waiting for these parts is priced with their own tariff and notified once. "
@@ -404,7 +414,7 @@ class WeightResearchJobAdmin(admin.ModelAdmin):
     list_filter = ("status", "conflicting", "measurement", "provider", "created_at")
     search_fields = ("part__part_number", "part__part_number_key", "part__brand")
     list_select_related = ("part", "proposed_weight")
-    inlines = (WeightResearchSourceInline,)
+    inlines = (WeightResearchCallInline, WeightResearchSourceInline)
     actions = ("approve_only", "approve_and_price", "reject", "retry")
     fields = ("part", "status", "proposal", "confidence", "conflicting", "measurement", "explanation",
               "waiting", "attempts", "next_attempt_at", "started_at", "finished_at", "cost_usd", "provider",

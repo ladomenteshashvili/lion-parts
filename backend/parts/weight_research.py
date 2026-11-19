@@ -1,8 +1,9 @@
 """AI part-weight research (LPK-247).
 
 When an AMT part has no usable weight, a research job is queued (once per part, see COOLDOWN). The cron command
-`run_weight_research` asks a research provider (PROVIDERS: today one provider-neutral HTTPS service; Claude, OpenAI and
-structured catalogs come in LPK-248) where the part's weight is published. Nothing the provider says is trusted:
+`run_weight_research` asks a research provider (PROVIDERS: Claude or OpenAI with web search, parts.ai_providers,
+LPK-248; or a provider-neutral HTTPS service), then the configured fallbacks if it fails and the budget covers them,
+where the part's weight is published. Every call is recorded (WeightResearchCall). Nothing a provider says is trusted:
 
 1. each observation must name exactly this part number and manufacturer, a known unit and a plausible weight;
 2. this server then fetches every cited page itself (parts.evidence, SSRF-safe) and checks that the page shows the part
@@ -20,7 +21,7 @@ log or a price. Logs name the job and an error type only."""
 import json
 import logging
 import time
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 from statistics import median
@@ -36,8 +37,8 @@ from accounts.validators import normalize_part_number
 
 from . import evidence
 from .evidence import Unverifiable, fetch_page, site, to_kg
-from .models import (PartWeight, WeightResearchJob, WeightResearchSource, WeightResearchSpend, WeightTask,
-                     WeightTaskRequest, normalize_brand)
+from .models import (PartWeight, WeightResearchCall, WeightResearchJob, WeightResearchSource, WeightResearchSpend,
+                     WeightTask, WeightTaskRequest, normalize_brand)
 from .registry import is_plausible, record_weight
 
 logger = logging.getLogger(__name__)
@@ -105,7 +106,12 @@ def _domain(value):
 
 
 class ResearchError(Exception):
-    """The research provider failed or answered something unusable; the job is retried."""
+    """The provider gave no answer (timeout, rate limit, HTTP error, missing key). `sent` False: no request left this
+    server, so nothing can have been billed and the call's reservation is released."""
+
+    def __init__(self, message, sent=True):
+        super().__init__(message)
+        self.sent = sent
 
 
 @dataclass
@@ -122,6 +128,23 @@ class Observation:
     excerpt: str = ""
 
 
+@dataclass
+class Answer:
+    """One provider call: its observations and what the audit records. `error` set: the call was answered (and may be
+    billed) but is unusable (refused, cut off, malformed); the next provider in the chain is tried."""
+
+    observations: list
+    cost: Decimal | None = None  # USD, reported or estimated; None = unknown, the reservation stands
+    model: str = ""
+    request_id: str = ""
+    usage: dict = field(default_factory=dict)  # as the provider reported it, for reconciliation
+    searches: int | None = None
+    citations: list = field(default_factory=list)
+    unsourced: int = 0  # observations dropped because the search never returned their URL
+    cost_note: str = ""
+    error: str = ""
+
+
 # --- research providers (the only code that talks to them) ----------------------------------------------------------
 
 def research_query(part):
@@ -133,8 +156,8 @@ def research_query(part):
 
 def call_research_service(query):
     """The "http" provider: POST the query as JSON; the service answers {"cost_usd": "0.04", "observations": [{url,
-    title, part_number, manufacturer, value, unit, measurement, excerpt}, ...]}. -> (observations, cost or None).
-    Raises ResearchError. Any other key (for example "verified": true) is ignored."""
+    title, part_number, manufacturer, value, unit, measurement, excerpt}, ...]}. -> Answer. Raises ResearchError. Any
+    other key (for example "verified": true) is ignored."""
     try:
         with requests.post(settings.AI_WEIGHT_RESEARCH_URL, json=query, stream=True, allow_redirects=False,
                            timeout=(10, settings.AI_WEIGHT_RESEARCH_TIMEOUT_SECONDS),
@@ -151,7 +174,9 @@ def call_research_service(query):
         raise ResearchError(type(error).__name__) from None
     if not isinstance(data, dict) or not isinstance(data.get("observations"), list):
         raise ResearchError("unexpected response shape")
-    return parse_observations(data["observations"]), _money(data.get("cost_usd"))
+    cost = _money(data.get("cost_usd"))
+    return Answer(parse_observations(data["observations"]), cost,
+                  cost_note="reported by the research service" if cost is not None else "cost not reported")
 
 
 def parse_observations(items):
@@ -162,9 +187,11 @@ def parse_observations(items):
         for item in items[:MAX_OBSERVATIONS] if isinstance(item, dict) and isinstance(item.get("url"), str)]
 
 
-# LPK-248 adds "anthropic" and "openai": each a function query -> (observations, cost or None), raising ResearchError.
-# Dotted paths, imported at call time: a provider may live in its own module, and a test's mock is the one called.
-PROVIDERS = {"http": "parts.weight_research.call_research_service"}
+# Each a function query -> Answer, raising ResearchError when nothing was answered. Dotted paths, imported at call time:
+# a test's mock is the one called. config.settings.AI_RESEARCH_PROVIDERS lists the same names.
+PROVIDERS = {"http": "parts.weight_research.call_research_service",
+             "anthropic": "parts.ai_providers.anthropic_research",
+             "openai": "parts.ai_providers.openai_research"}
 
 
 def _text(value, size):
@@ -227,10 +254,17 @@ def _requeue_stale(now):
         _failed_attempt(job, "interrupted", now)
 
 
+def chain():
+    """The providers one attempt may call, in order: the primary, then the fallbacks."""
+    return [settings.AI_WEIGHT_RESEARCH_PROVIDER, *settings.AI_WEIGHT_RESEARCH_FALLBACK_PROVIDERS]
+
+
 def _claim(job_id, now):
-    """Reserve one attempt's cost and claim the job in one transaction, serialized on the day's budget row: overlapping
-    runs never reserve beyond the daily budget nor run one job twice. -> the running job, a final status (finished
-    without a paid call), BUDGET, or None (claimed elsewhere)."""
+    """Reserve the attempt's calls and claim the job in one transaction, serialized on the day's budget row: overlapping
+    runs never reserve beyond the daily budget nor run one job twice. Each call reserves the per-call limit; fallbacks
+    are reserved (and so may run) only as far as the job's and the day's budgets still cover them. -> the running job
+    (job.chain: the providers reserved), a final status (finished without a paid call), BUDGET, or None (claimed
+    elsewhere)."""
     per_attempt = settings.AI_WEIGHT_RESEARCH_MAX_COST_PER_ATTEMPT_USD
     with transaction.atomic():
         spend = WeightResearchSpend.objects.get_or_create(day=timezone.localdate(now))[0]
@@ -249,20 +283,20 @@ def _claim(job_id, now):
                                        f"${job.cost_usd} of its ${job_limit}.")
         if spend.reserved_usd + per_attempt > settings.AI_WEIGHT_RESEARCH_DAILY_BUDGET_USD:
             return BUDGET
-        spend.reserved_usd += per_attempt
+        calls = min(len(chain()), int((job_limit - job.cost_usd) // per_attempt),
+                    int((settings.AI_WEIGHT_RESEARCH_DAILY_BUDGET_USD - spend.reserved_usd) // per_attempt))
+        spend.reserved_usd += per_attempt * calls
         spend.save(update_fields=["reserved_usd", "updated_at"])
         job.status, job.started_at, job.attempts = WeightResearchJob.STATUS_RUNNING, now, job.attempts + 1
-        job.cost_usd += per_attempt
-        job.provider = settings.AI_WEIGHT_RESEARCH_PROVIDER
+        job.cost_usd += per_attempt * calls
+        job.chain = chain()[:calls]
+        job.provider = job.chain[0]
         job.save(update_fields=["status", "started_at", "attempts", "cost_usd", "provider"])
     return job
 
 
-def _settle(job, day, cost):
-    """Replace the attempt's reservation with the cost the provider reported. Unknown cost: the reservation stands."""
-    if cost is None:
-        return
-    delta = cost - settings.AI_WEIGHT_RESEARCH_MAX_COST_PER_ATTEMPT_USD
+def _settle(job, day, delta):
+    """Correct the job's and the day's spending by `delta`: actual costs minus the reservations."""
     if delta:
         WeightResearchJob.objects.filter(pk=job.pk).update(cost_usd=F("cost_usd") + delta)
         WeightResearchSpend.objects.filter(day=day).update(reserved_usd=F("reserved_usd") + delta)
@@ -275,18 +309,43 @@ def run_job(job_id, now=None):
     if not isinstance(job, WeightResearchJob):
         return job
     limit = settings.AI_WEIGHT_RESEARCH_MAX_COST_PER_ATTEMPT_USD
-    try:
-        observations, cost = import_string(PROVIDERS[job.provider])(research_query(job.part))
-    except ResearchError as error:
-        # A failed attempt may still have been billed: its reservation (the per-attempt limit) stands.
-        logger.warning("AI weight research job %s failed: %s", job.pk, error)
-        return _failed_attempt(job, str(error)[:200], now)
-    _settle(job, timezone.localdate(now), cost)
-    if cost is not None and cost > limit:
+    query, spent, used, errors = research_query(job.part), Decimal("0"), None, []
+    for name in job.chain:
+        try:
+            answer = import_string(PROVIDERS[name])(query)
+            outcome = "unusable" if answer.error else "answered"
+        except ResearchError as error:
+            outcome = "failed" if error.sent else "not_sent"
+            # sent: it may still have been billed, so the reservation (the per-call limit) stands
+            answer = Answer([], None if error.sent else Decimal("0"), error=str(error)[:200],
+                            cost_note="" if error.sent else "not sent, not billed")
+        except Exception as error:  # an answer no parser foresaw: one failed call, not a crashed cron run
+            outcome, answer = "failed", Answer([], error=f"{name}: unexpected {type(error).__name__}")
+        spent += limit if answer.cost is None else answer.cost
+        _record_call(job, name, answer, outcome, limit, now)
+        if not answer.error:
+            used = (name, answer)
+            break
+        logger.warning("AI weight research job %s: provider %s failed: %s", job.pk, name, answer.error)
+        errors.append(answer.error)
+    _settle(job, timezone.localdate(now), spent - limit * len(job.chain))  # calls not needed give their share back
+    if used is None:
+        return _failed_attempt(job, "; ".join(errors)[:200], now)
+    name, answer = used
+    WeightResearchJob.objects.filter(pk=job.pk).update(provider=name)
+    if answer.cost is not None and answer.cost > limit:
         return _finish(job, WeightResearchJob.STATUS_FAILED, now, error="cost limit exceeded",
-                       explanation=f"The provider reported ${cost}, over the ${limit} limit per attempt; its answer "
-                                   "was not used.")
-    return _assess(job, observations, now)
+                       explanation=f"{name} cost ${answer.cost}, over the ${limit} limit per call; its answer was not "
+                                   "used.")
+    return _assess(job, answer.observations, now, answer.unsourced)
+
+
+def _record_call(job, name, answer, outcome, reserved, now):
+    WeightResearchCall.objects.create(
+        job=job, attempt=job.attempts, provider=name, model=answer.model[:100], request_id=answer.request_id[:200],
+        outcome=outcome, error=answer.error[:200], searches=answer.searches, usage=answer.usage,
+        citations=answer.citations, unsourced=answer.unsourced, reserved_usd=reserved, cost_usd=answer.cost, cost_note=answer.cost_note[:300],
+        created_at=now)
 
 
 def _failed_attempt(job, error, now):
@@ -423,8 +482,11 @@ def verify(part, claimed_kg, claimed_measurement, url, deadline, robots):
     return outcome, kg, measurement, domain, note, snippet
 
 
-def _assess(job, observations, now):
-    part, r = job.part, rules()
+def evaluate(part, observations, unsourced=0):
+    """Check every observation on its page and score the verified sites; saves nothing (the benchmark uses it too).
+    -> (rows, best measurement, proposal, score, agreeing domains, disagreeing domains, explanation lines,
+    misquoted count). `unsourced`: observations a provider cited without its search returning the URL."""
+    r = rules()
     deadline = time.monotonic() + r.verify_seconds
     rows, fetched, robots = [], {}, {}  # robots: each host's robots.txt, read once per job
     for obs in observations:
@@ -441,7 +503,8 @@ def _assess(job, observations, now):
         row["credibility"] = credibility(row["domain"], part, r) if row["domain"] else ""
         rows.append(row)
     verified = [row for row in rows if row["outcome"] == evidence.VERIFIED]
-    misquoted = sum(row["outcome"] == evidence.CONTRADICTED for row in rows)
+    # a page that shows another weight and a URL the search never returned both say the provider is unreliable here
+    misquoted = sum(row["outcome"] == evidence.CONTRADICTED for row in rows) + unsourced
     groups = {}
     for row in verified:
         kgs = groups.setdefault(row["measurement"], {}).setdefault(row["domain"], ([], row["credibility"]))[0]
@@ -459,9 +522,18 @@ def _assess(job, observations, now):
     summary = (f"{len(rows)} observation(s) from the provider, checked on their pages: "  # stored: English always
                + ", ".join(f"{n} {o.replace('_', ' ')}" for o, n in sorted(counts.items())) + "."
                if rows else "The provider found no observation.")
+    dropped = ([f"{unsourced} more observation(s) dropped: their URL was never returned by the provider's search."]
+               if unsourced else [])
     other = [f"Also verified, not proposed: {m or 'unspecified'} weight." for m in results if m != best]
-    lines = [summary, *lines, *other,
+    lines = [summary, *dropped, *lines, *other,
              "The evidence score is a rule-based summary of the evidence above, not a probability."]
+    return rows, best, proposal, value, agreeing, disagreeing, lines, misquoted
+
+
+def _assess(job, observations, now, unsourced=0):
+    part = job.part
+    rows, best, proposal, value, agreeing, disagreeing, lines, misquoted = evaluate(part, observations, unsourced)
+    verified = [row for row in rows if row["outcome"] == evidence.VERIFIED]
     with transaction.atomic():
         WeightResearchSource.objects.bulk_create([WeightResearchSource(
             job=job, url=row["obs"].url, domain=row["domain"], title=row["obs"].title,
