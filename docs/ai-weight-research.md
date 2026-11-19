@@ -298,7 +298,25 @@ Nothing in the answer is trusted:
 2. the rest go through the same claim checks and **independent page verification** as every provider (§2);
 3. a refusal, an answer cut off at the token limit, a server-side search that did not finish (`pause_turn`), a missing
    or malformed `report_weights` call, or a search that only returned errors makes the call "unusable", and the next
-   provider is tried.
+   provider is tried;
+4. **an answer without a single web search** (`anthropic: no web search performed` / `openai: …`) is unusable too.
+   A real test (Ford `LJ9Z-7P086-A`, `claude-haiku-5-5`) returned HTTP 200 with `searches=0`, no observations and
+   about $0.003 of tokens, which previously looked like an ordinary "nothing found". Now:
+   - Its usage, request id and estimated cost are recorded like any billed call.
+   - The configured fallback (already reserved) is tried.
+   - If no provider answers usably, the job **fails without an automatic retry**, because the same prompt would
+     likely skip the search again at more cost. An operator can queue it again with the admin "retry" action.
+   - A search that ran and found nothing is still a valid, empty answer.
+
+**Why the prompt, not `tool_choice`, makes the model search.** The instructions require searching for the exact
+manufacturer and part number before reporting, and the user message names the search. Forcing a tool would be
+unreliable:
+- `tool_choice` `any` / `tool` returns HTTP 400 on Claude Opus 5.5 and Sonnet 5.5 (the default model is
+  `claude-opus-5-5`).
+- Forcing a call through `any` could be satisfied by `report_weights` alone.
+- Anthropic documents no `tool_choice` for the server-side web search tool: Claude "determines when to search based
+  on the prompt".
+So no `tool_choice` is sent (`auto`, the default), and the code checks that a search happened.
 
 Failures (timeouts, HTTP 429 and other errors, connection errors) are recorded by type and status only: the provider's
 error body is never stored or logged, since it may echo the request.
