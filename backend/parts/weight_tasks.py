@@ -8,13 +8,15 @@ from django.db.models import F, Q
 from django.utils import timezone
 from django.utils.translation import gettext as _
 
-from .models import PartMaster, PartQuoteRequest, PartWeight, WeightTask, WeightTaskRequest
+from .models import PartMaster, PartQuoteRequest, PartSearchLog, PartWeight, WeightTask, WeightTaskRequest
 from .registry import InvalidWeight, clean_weight, identity, is_plausible, record_weight
+from .weight_research import enqueue_research
 
 
 def queue_missing_weights(log, rows, customer):
     """After a search: an open task per part the supplier priced but no usable weight is known for, and the logged-in
-    customer on it (guests are counted only: there is nobody to send a price to)."""
+    customer on it (guests are counted only: there is nobody to send a price to). An AMT part also gets AI weight
+    research queued when that is switched on (LPK-247); demo rows are invented, so they never do."""
     done = set()
     for row in rows:
         part = row.get("part")
@@ -28,6 +30,8 @@ def queue_missing_weights(log, rows, customer):
                                                          supplier_price_usd=row["supplier_price_usd"])
             if customer is not None:
                 _wait(task, customer, log, row["offer_id"])
+            if log.provider == PartSearchLog.PROVIDER_AMT:
+                enqueue_research(part)
 
 
 def _open_task(part):

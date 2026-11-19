@@ -1311,7 +1311,6 @@ msgstr "Запрос изменился, пока мы ждали ответ п�
 msgid "contact phone"
 msgstr "контактный телефон"
 
-
 msgid "contact email"
 msgstr "контактная эл. почта"
 
@@ -1667,3 +1666,222 @@ msgstr "Поставщик недоступен; повторите расчёт
 
 msgid "The supplier no longer offers this part; cancel the task."
 msgstr "Поставщик больше не предлагает эту деталь; отмените задачу."
+
+msgid "AI suggestion"
+msgstr "Предложение ИИ"
+
+msgid "proposed weight"
+msgstr "предложенный вес"
+
+msgid "Reject the AI weight"
+msgstr "Отклонить вес от ИИ"
+
+msgid "#%(id)s: rejected."
+msgstr "#%(id)s: отклонено."
+
+msgid "#%(id)s: nothing to reject."
+msgstr "#%(id)s: нечего отклонять."
+
+msgid "Research again"
+msgstr "Искать снова"
+
+msgid "#%(id)s: research for this part is already queued."
+msgstr "#%(id)s: поиск для этой детали уже в очереди."
+
+msgid "#%(id)s: queued again."
+msgstr "#%(id)s: снова поставлено в очередь."
+
+msgid "queued"
+msgstr "в очереди"
+
+msgid "running"
+msgstr "выполняется"
+
+msgid "weight proposed"
+msgstr "вес предложен"
+
+msgid "skipped"
+msgstr "пропущено"
+
+msgid "failed"
+msgstr "ошибка"
+
+msgid "attempts"
+msgstr "попытки"
+
+msgid "next attempt"
+msgstr "следующая попытка"
+
+msgid "started"
+msgstr "начато"
+
+msgid "finished"
+msgstr "завершено"
+
+msgid "cost (USD)"
+msgstr "стоимость (USD)"
+
+msgid "measurement"
+msgstr "тип измерения"
+
+msgid "explanation"
+msgstr "объяснение"
+
+msgid "AI weight research"
+msgstr "Поиск веса с помощью ИИ"
+
+msgid "URL"
+msgstr "URL"
+
+msgid "site"
+msgstr "сайт"
+
+msgid "title"
+msgstr "заголовок"
+
+msgid "part number on the page"
+msgstr "номер детали на странице"
+
+msgid "manufacturer on the page"
+msgstr "производитель на странице"
+
+msgid "stated weight"
+msgstr "указанный вес"
+
+msgid "unit"
+msgstr "единица"
+
+msgid "agrees with the proposal"
+msgstr "совпадает с предложением"
+
+msgid "assessment"
+msgstr "оценка"
+
+msgid "research source"
+msgstr "источник поиска"
+
+msgid "research sources"
+msgstr "источники поиска"
+
+msgid "This research proposed no weight."
+msgstr "Этот поиск не предложил вес."
+
+msgid "This weight was rejected."
+msgstr "Этот вес отклонён."
+
+msgid "This AI weight is already approved; nothing changed."
+msgstr "Этот вес от ИИ уже утверждён; ничего не изменилось."
+
+msgid "%(waiting)s waiting customer(s) are not priced yet: price them from the missing weight queue or with “Approve the AI weight and price the waiting customers”."
+msgstr "%(waiting)s ожидающим клиентам цена ещё не рассчитана: рассчитайте её из очереди без веса или действием «Утвердить вес от ИИ и рассчитать цену для ожидающих клиентов»."
+
+msgid "AI research spending"
+msgstr "Расходы на поиск с ИИ"
+
+msgid "Approve the AI weight and price %(waiting)s waiting customer(s)"
+msgstr "Утвердить вес от ИИ и рассчитать цену для ожидающих клиентов: %(waiting)s"
+
+msgid "Approve the AI weight and price the waiting customers…"
+msgstr "Утвердить вес от ИИ и рассчитать цену для ожидающих клиентов…"
+
+msgid "Approve the AI weight only (nobody is priced or notified)"
+msgstr "Только утвердить вес от ИИ (без расчёта цен и уведомлений)"
+
+msgid "I understand: every customer waiting for these parts is priced with their own tariff and notified once. This cannot be undone."
+msgstr "Я понимаю: всем клиентам, ожидающим эти детали, будет рассчитана цена по их тарифу и отправлено одно уведомление. Это нельзя отменить."
+
+msgid "Missing weight task #%(task)s resolved; %(priced)s customer(s) priced and notified."
+msgstr "Задача без веса #%(task)s решена; цена рассчитана и отправлено уведомление клиентам: %(priced)s."
+
+msgid "No missing weight task was open: nobody was priced."
+msgstr "Открытой задачи без веса не было: цены не рассчитывались."
+
+msgid "ambiguous page"
+msgstr "неоднозначная страница"
+
+msgid "approved; the part's weight in use is %(current)s."
+msgstr "утверждено; используемый вес детали: %(current)s."
+
+msgid "blocked by the site"
+msgstr "заблокировано сайтом"
+
+msgid "conflicting evidence"
+msgstr "противоречивые данные"
+
+msgid "counted"
+msgstr "учтено"
+
+msgid "day"
+msgstr "день"
+
+msgid "evidence score"
+msgstr "оценка доказательств"
+
+msgid "excerpt quoted by the provider"
+msgstr "фрагмент, процитированный провайдером"
+
+msgid "manufacturer's site"
+msgstr "сайт производителя"
+
+msgid "marketplace (not counted)"
+msgstr "маркетплейс (не учитывается)"
+
+msgid "measurement on the page"
+msgstr "тип измерения на странице"
+
+msgid "needs review: no reliable evidence"
+msgstr "требует проверки: нет надёжных подтверждений"
+
+msgid "no readable text"
+msgstr "нет читаемого текста"
+
+msgid "not checked"
+msgstr "не проверено"
+
+msgid "not shown on the page"
+msgstr "нет на странице"
+
+msgid "other site"
+msgstr "другой сайт"
+
+msgid "page check"
+msgstr "проверка страницы"
+
+msgid "page not reachable"
+msgstr "страница недоступна"
+
+msgid "provider"
+msgstr "провайдер"
+
+msgid "source type"
+msgstr "тип источника"
+
+msgid "spent or reserved (USD)"
+msgstr "потрачено или зарезервировано (USD)"
+
+msgid "stated measurement"
+msgstr "заявленный тип измерения"
+
+msgid "text found on the page"
+msgstr "текст, найденный на странице"
+
+msgid "the page shows a different weight"
+msgstr "на странице указан другой вес"
+
+msgid "trusted catalog"
+msgstr "надёжный каталог"
+
+msgid "unsafe address, not fetched"
+msgstr "небезопасный адрес, не загружено"
+
+msgid "updated"
+msgstr "обновлено"
+
+msgid "verified on the page"
+msgstr "подтверждено на странице"
+
+msgid "weight on the page (kg)"
+msgstr "вес на странице (кг)"
+
+msgid "not allowed by robots.txt"
+msgstr "запрещено файлом robots.txt"

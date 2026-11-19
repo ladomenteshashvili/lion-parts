@@ -391,3 +391,111 @@ class WeightTaskRequest(models.Model):
         verbose_name_plural = _("waiting customers")
         ordering = ["created_at", "id"]
         constraints = [models.UniqueConstraint(fields=["task", "customer"], name="parts_weighttaskrequest_once")]
+
+
+class WeightResearchJob(models.Model):
+    """LPK-247: an AI search for a part's weight, run in the background (`run_weight_research`). Its result is a
+    pending AI weight that only an operator can approve; it never prices anything by itself."""
+
+    STATUS_QUEUED = "queued"
+    STATUS_RUNNING = "running"
+    STATUS_DONE = "done"
+    STATUS_NO_RESULT = "no_result"
+    STATUS_SKIPPED = "skipped"
+    STATUS_FAILED = "failed"
+    STATUSES = [(STATUS_QUEUED, _("queued")), (STATUS_RUNNING, _("running")),
+                (STATUS_DONE, _("weight proposed")), (STATUS_NO_RESULT, _("needs review: no reliable evidence")),
+                (STATUS_SKIPPED, _("skipped")), (STATUS_FAILED, _("failed"))]
+    ACTIVE_STATUSES = (STATUS_QUEUED, STATUS_RUNNING)
+
+    part = models.ForeignKey(PartMaster, on_delete=models.CASCADE, related_name="research_jobs",
+                             verbose_name=_("part"))
+    status = models.CharField(_("status"), max_length=20, choices=STATUSES, default=STATUS_QUEUED, db_index=True)
+    attempts = models.PositiveSmallIntegerField(_("attempts"), default=0)
+    next_attempt_at = models.DateTimeField(_("next attempt"), default=timezone.now, db_index=True)
+    started_at = models.DateTimeField(_("started"), null=True, blank=True)
+    finished_at = models.DateTimeField(_("finished"), null=True, blank=True)
+    cost_usd = models.DecimalField(_("cost (USD)"), max_digits=8, decimal_places=4, default=Decimal("0"))
+    provider = models.CharField(_("provider"), max_length=30, blank=True)
+    # A rule-based summary of the evidence (parts.weight_research.Rules), not a calibrated probability.
+    confidence = models.DecimalField(_("evidence score"), max_digits=3, decimal_places=2, null=True, blank=True)
+    measurement = models.CharField(_("measurement"), max_length=20, blank=True)
+    conflicting = models.BooleanField(_("conflicting evidence"), default=False)
+    explanation = models.TextField(_("explanation"), blank=True)
+    proposed_weight = models.ForeignKey(PartWeight, on_delete=models.SET_NULL, null=True, blank=True,
+                                        related_name="research_jobs", verbose_name=_("proposed weight"))
+    last_error = models.CharField(_("last error"), max_length=200, blank=True)  # an error type, never a body
+    created_at = models.DateTimeField(_("created"), auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("AI weight research")
+        verbose_name_plural = _("AI weight research")
+        ordering = ["-created_at", "-id"]
+        constraints = [models.UniqueConstraint(fields=["part"], condition=models.Q(status__in=("queued", "running")),
+                                               name="parts_weightresearchjob_one_active_per_part")]
+
+    def __str__(self):
+        return f"#{self.pk} · {self.part} · {self.get_status_display()}"
+
+
+class WeightResearchSource(models.Model):
+    """One observation the provider claimed, what this server found on the page itself, and whether it counted and
+    why (parts.evidence)."""
+
+    VERIFICATIONS = [("verified", _("verified on the page")),
+                     ("contradicted", _("the page shows a different weight")),
+                     ("ambiguous", _("ambiguous page")), ("not_confirmed", _("not shown on the page")),
+                     ("unreadable", _("no readable text")), ("inaccessible", _("page not reachable")),
+                     ("blocked", _("blocked by the site")), ("disallowed", _("not allowed by robots.txt")),
+                     ("refused", _("unsafe address, not fetched")),
+                     ("not_checked", _("not checked"))]
+    CREDIBILITY_MANUFACTURER, CREDIBILITY_TRUSTED = "manufacturer", "trusted"
+    CREDIBILITY_STANDARD, CREDIBILITY_MARKETPLACE = "standard", "marketplace"
+    CREDIBILITIES = [(CREDIBILITY_MANUFACTURER, _("manufacturer's site")), (CREDIBILITY_TRUSTED, _("trusted catalog")),
+                     (CREDIBILITY_STANDARD, _("other site")), (CREDIBILITY_MARKETPLACE, _("marketplace (not counted)"))]
+
+    job = models.ForeignKey(WeightResearchJob, on_delete=models.CASCADE, related_name="sources")
+    url = models.URLField(_("URL"), max_length=1000)
+    domain = models.CharField(_("site"), max_length=255)
+    title = models.CharField(_("title"), max_length=300, blank=True)
+    stated_part_number = models.CharField(_("part number on the page"), max_length=120, blank=True)
+    stated_manufacturer = models.CharField(_("manufacturer on the page"), max_length=120, blank=True)
+    stated_value = models.CharField(_("stated weight"), max_length=40, blank=True)
+    stated_unit = models.CharField(_("unit"), max_length=20, blank=True)
+    stated_measurement = models.CharField(_("stated measurement"), max_length=20, blank=True)
+    excerpt = models.TextField(_("excerpt quoted by the provider"), blank=True)
+    verification = models.CharField(_("page check"), max_length=20, choices=VERIFICATIONS, default="not_checked")
+    measurement = models.CharField(_("measurement on the page"), max_length=20, blank=True)
+    weight_kg = models.DecimalField(_("weight on the page (kg)"), max_digits=9, decimal_places=3, null=True,
+                                    blank=True)
+    page_excerpt = models.TextField(_("text found on the page"), blank=True)
+    credibility = models.CharField(_("source type"), max_length=20, choices=CREDIBILITIES, blank=True)
+    accepted = models.BooleanField(_("counted"), default=False)
+    agrees = models.BooleanField(_("agrees with the proposal"), default=False)
+    reason = models.CharField(_("assessment"), max_length=200, blank=True)
+
+    class Meta:
+        verbose_name = _("research source")
+        verbose_name_plural = _("research sources")
+        ordering = ["id"]
+
+    def __str__(self):
+        return self.domain
+
+
+class WeightResearchSpend(models.Model):
+    """LPK-247: research spending per local day: every attempt reserves its limit before the paid call, so overlapping
+    runs never exceed the daily budget; a reported cost then replaces the reservation."""
+
+    day = models.DateField(_("day"), unique=True)
+    reserved_usd = models.DecimalField(_("spent or reserved (USD)"), max_digits=10, decimal_places=4,
+                                       default=Decimal("0"))
+    updated_at = models.DateTimeField(_("updated"), auto_now=True)
+
+    class Meta:
+        verbose_name = _("AI research spending")
+        verbose_name_plural = _("AI research spending")
+        ordering = ["-day"]
+
+    def __str__(self):
+        return f"{self.day}: ${self.reserved_usd}"
