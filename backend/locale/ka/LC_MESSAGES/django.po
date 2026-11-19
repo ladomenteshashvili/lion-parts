@@ -1307,7 +1307,6 @@ msgstr "მოთხოვნა შეიცვალა მომწოდე�
 msgid "contact phone"
 msgstr "საკონტაქტო ტელეფონი"
 
-
 msgid "contact email"
 msgstr "საკონტაქტო ელფოსტა"
 
@@ -1667,20 +1666,8 @@ msgstr "მომწოდებელი ამ ნაწილს აღარ
 msgid "AI suggestion"
 msgstr "AI-ის შემოთავაზება"
 
-msgid "confidence"
-msgstr "სანდოობა"
-
 msgid "proposed weight"
 msgstr "შემოთავაზებული წონა"
-
-msgid "Approve the AI weight and price the waiting customers"
-msgstr "AI-ის წონის დამტკიცება და მომლოდინე მომხმარებლების ფასის გამოთვლა"
-
-msgid "#%(id)s: approved; the part's weight in use is %(current)s."
-msgstr "#%(id)s: დამტკიცდა; ნაწილის გამოყენებული წონაა %(current)s."
-
-msgid "Missing weight task #%(task)s resolved."
-msgstr "წონის მოლოდინის ამოცანა #%(task)s გადაწყდა."
 
 msgid "Reject the AI weight"
 msgstr "AI-ის წონის უარყოფა"
@@ -1708,9 +1695,6 @@ msgstr "მიმდინარეობს"
 
 msgid "weight proposed"
 msgstr "წონა შემოთავაზებულია"
-
-msgid "not enough evidence"
-msgstr "მტკიცებულება არასაკმარისია"
 
 msgid "skipped"
 msgstr "გამოტოვებულია"
@@ -1763,12 +1747,6 @@ msgstr "მითითებული წონა"
 msgid "unit"
 msgstr "ერთეული"
 
-msgid "excerpt"
-msgstr "ამონარიდი"
-
-msgid "valid"
-msgstr "ვალიდური"
-
 msgid "agrees with the proposal"
 msgstr "ემთხვევა შემოთავაზებას"
 
@@ -1789,3 +1767,114 @@ msgstr "ეს წონა უარყოფილია."
 
 msgid "This AI weight is already approved; nothing changed."
 msgstr "AI-ის ეს წონა უკვე დამტკიცებულია; არაფერი შეცვლილა."
+
+msgid "%(waiting)s waiting customer(s) are not priced yet: price them from the missing weight queue or with “Approve the AI weight and price the waiting customers”."
+msgstr "%(waiting)s მომლოდინე მომხმარებელს ფასი ჯერ არ გამოეთვალა: გამოთვალეთ წონის მოლოდინის რიგიდან ან ქმედებით „AI-ის წონის დამტკიცება და მომლოდინე მომხმარებლების ფასის გამოთვლა“."
+
+msgid "AI research spending"
+msgstr "AI-ით მოძიების ხარჯი"
+
+msgid "Approve the AI weight and price %(waiting)s waiting customer(s)"
+msgstr "AI-ის წონის დამტკიცება და %(waiting)s მომლოდინე მომხმარებლის ფასის გამოთვლა"
+
+msgid "Approve the AI weight and price the waiting customers…"
+msgstr "AI-ის წონის დამტკიცება და მომლოდინე მომხმარებლების ფასის გამოთვლა…"
+
+msgid "Approve the AI weight only (nobody is priced or notified)"
+msgstr "მხოლოდ AI-ის წონის დამტკიცება (ფასი არავის გამოეთვლება და შეტყობინება არავის გაეგზავნება)"
+
+msgid "I understand: every customer waiting for these parts is priced with their own tariff and notified once. This cannot be undone."
+msgstr "მესმის: ამ ნაწილების ყველა მომლოდინე მომხმარებელს ფასი გამოეთვლება საკუთარი ტარიფით და ერთხელ ეცნობება. ამის გაუქმება შეუძლებელია."
+
+msgid "Missing weight task #%(task)s resolved; %(priced)s customer(s) priced and notified."
+msgstr "წონის მოლოდინის ამოცანა #%(task)s გადაწყდა; %(priced)s მომხმარებელს ფასი გამოეთვალა და ეცნობა."
+
+msgid "No missing weight task was open: nobody was priced."
+msgstr "წონის მოლოდინის ღია ამოცანა არ იყო: ფასი არავის გამოეთვალა."
+
+msgid "ambiguous page"
+msgstr "გაურკვეველი გვერდი"
+
+msgid "approved; the part's weight in use is %(current)s."
+msgstr "დამტკიცდა; ნაწილის გამოყენებული წონაა %(current)s."
+
+msgid "blocked by the site"
+msgstr "საიტმა დაბლოკა"
+
+msgid "conflicting evidence"
+msgstr "ურთიერთსაწინააღმდეგო მტკიცებულება"
+
+msgid "counted"
+msgstr "ჩაითვალა"
+
+msgid "day"
+msgstr "დღე"
+
+msgid "evidence score"
+msgstr "მტკიცებულების ქულა"
+
+msgid "excerpt quoted by the provider"
+msgstr "პროვაიდერის მიერ ციტირებული ამონარიდი"
+
+msgid "manufacturer's site"
+msgstr "მწარმოებლის საიტი"
+
+msgid "marketplace (not counted)"
+msgstr "მარკეტპლეისი (არ ითვლება)"
+
+msgid "measurement on the page"
+msgstr "გაზომვის ტიპი გვერდზე"
+
+msgid "needs review: no reliable evidence"
+msgstr "საჭიროებს განხილვას: სანდო მტკიცებულება არ არის"
+
+msgid "no readable text"
+msgstr "წასაკითხი ტექსტი არ არის"
+
+msgid "not checked"
+msgstr "არ შემოწმებულა"
+
+msgid "not shown on the page"
+msgstr "გვერდზე არ ჩანს"
+
+msgid "other site"
+msgstr "სხვა საიტი"
+
+msgid "page check"
+msgstr "გვერდის შემოწმება"
+
+msgid "page not reachable"
+msgstr "გვერდი მიუწვდომელია"
+
+msgid "provider"
+msgstr "პროვაიდერი"
+
+msgid "source type"
+msgstr "წყაროს ტიპი"
+
+msgid "spent or reserved (USD)"
+msgstr "დახარჯული ან დაჯავშნილი (USD)"
+
+msgid "stated measurement"
+msgstr "მითითებული გაზომვის ტიპი"
+
+msgid "text found on the page"
+msgstr "გვერდზე ნაპოვნი ტექსტი"
+
+msgid "the page shows a different weight"
+msgstr "გვერდზე სხვა წონაა მითითებული"
+
+msgid "trusted catalog"
+msgstr "სანდო კატალოგი"
+
+msgid "unsafe address, not fetched"
+msgstr "სახიფათო მისამართი, არ ჩამოიტვირთა"
+
+msgid "updated"
+msgstr "განახლდა"
+
+msgid "verified on the page"
+msgstr "დადასტურდა გვერდზე"
+
+msgid "weight on the page (kg)"
+msgstr "წონა გვერდზე (კგ)"

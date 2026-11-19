@@ -276,15 +276,21 @@ AMT_LOOKUP_BUDGET_SECONDS = config("AMT_LOOKUP_BUDGET_SECONDS", default=30, cast
 if AMT_LOOKUP_BUDGET_SECONDS <= 0:  # no attempt could ever start, so every search would fail
     raise ImproperlyConfigured("AMT_LOOKUP_BUDGET_SECONDS must be a positive whole number of seconds.")
 
-# AI part-weight research (LPK-247). Off by default. The service behind the URL does the AI search; Django sends it only
-# a part number, manufacturer and part name, never a customer or a VIN. Results wait for an operator's approval.
+# AI part-weight research (LPK-247). Off by default. The provider does the AI search; Django sends it only a part number,
+# manufacturer and part name, never a customer or a VIN, checks every cited page itself, and every result waits for an
+# operator's approval. Provider "http" is the one provider-neutral HTTPS service (Claude and OpenAI come in LPK-248).
 AI_WEIGHT_RESEARCH_ENABLED = config("AI_WEIGHT_RESEARCH_ENABLED", default=False, cast=bool)
+AI_WEIGHT_RESEARCH_PROVIDER = config("AI_WEIGHT_RESEARCH_PROVIDER", default="http")
 AI_WEIGHT_RESEARCH_URL = config("AI_WEIGHT_RESEARCH_URL", default="")
 AI_WEIGHT_RESEARCH_API_KEY = config("AI_WEIGHT_RESEARCH_API_KEY", default="")
 AI_WEIGHT_RESEARCH_TIMEOUT_SECONDS = config("AI_WEIGHT_RESEARCH_TIMEOUT_SECONDS", default=60, cast=int)
 AI_WEIGHT_RESEARCH_MAX_ATTEMPTS = config("AI_WEIGHT_RESEARCH_MAX_ATTEMPTS", default=3, cast=int)
 AI_WEIGHT_RESEARCH_JOBS_PER_RUN = config("AI_WEIGHT_RESEARCH_JOBS_PER_RUN", default=10, cast=int)
-AI_WEIGHT_RESEARCH_MAX_COST_PER_JOB_USD = config("AI_WEIGHT_RESEARCH_MAX_COST_PER_JOB_USD", default="0.50",
+# One paid call may cost at most PER_ATTEMPT (sent to the provider, reserved before the call); all attempts of one job
+# together at most PER_JOB; all calls of one local day at most DAILY_BUDGET.
+AI_WEIGHT_RESEARCH_MAX_COST_PER_ATTEMPT_USD = config("AI_WEIGHT_RESEARCH_MAX_COST_PER_ATTEMPT_USD", default="0.50",
+                                                     cast=Decimal)
+AI_WEIGHT_RESEARCH_MAX_COST_PER_JOB_USD = config("AI_WEIGHT_RESEARCH_MAX_COST_PER_JOB_USD", default="1.50",
                                                  cast=Decimal)
 AI_WEIGHT_RESEARCH_DAILY_BUDGET_USD = config("AI_WEIGHT_RESEARCH_DAILY_BUDGET_USD", default="5.00", cast=Decimal)
 if AI_WEIGHT_RESEARCH_ENABLED:
@@ -294,8 +300,11 @@ if AI_WEIGHT_RESEARCH_ENABLED:
         ("AI_WEIGHT_RESEARCH_TIMEOUT_SECONDS must be 1 to 300", not 0 < AI_WEIGHT_RESEARCH_TIMEOUT_SECONDS <= 300),
         ("AI_WEIGHT_RESEARCH_MAX_ATTEMPTS must be 1 to 10", not 0 < AI_WEIGHT_RESEARCH_MAX_ATTEMPTS <= 10),
         ("AI_WEIGHT_RESEARCH_JOBS_PER_RUN must be 1 to 100", not 0 < AI_WEIGHT_RESEARCH_JOBS_PER_RUN <= 100),
-        ("AI_WEIGHT_RESEARCH_MAX_COST_PER_JOB_USD must be positive", not AI_WEIGHT_RESEARCH_MAX_COST_PER_JOB_USD > 0),
-        ("AI_WEIGHT_RESEARCH_DAILY_BUDGET_USD must be positive", not AI_WEIGHT_RESEARCH_DAILY_BUDGET_USD > 0),
+        ("AI_WEIGHT_RESEARCH_PROVIDER must be http (more providers come with LPK-248)",
+         AI_WEIGHT_RESEARCH_PROVIDER != "http"),
+        ("AI_WEIGHT_RESEARCH_MAX_COST_PER_ATTEMPT_USD must be positive and at most the per-job limit, which must be "
+         "at most the daily budget", not 0 < AI_WEIGHT_RESEARCH_MAX_COST_PER_ATTEMPT_USD
+         <= AI_WEIGHT_RESEARCH_MAX_COST_PER_JOB_USD <= AI_WEIGHT_RESEARCH_DAILY_BUDGET_USD),
     ) if bad]
     if _ai_problems:
         raise ImproperlyConfigured("; ".join(_ai_problems) + ".")
