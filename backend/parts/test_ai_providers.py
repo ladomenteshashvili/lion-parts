@@ -7,6 +7,7 @@ import csv
 import json
 import logging
 import threading
+from datetime import timedelta
 from decimal import Decimal
 from io import StringIO
 from unittest import mock, skipUnless
@@ -509,45 +510,102 @@ class ConcurrentFallbackTests(TransactionTestCase):
         self.assertEqual(WeightResearchSpend.objects.get().reserved_usd, D("1.50"))
 
 
+_GATE = {"barrier": None}  # set: every primary call waits here until all jobs' primaries are running
+FALLBACKS = []  # (part number, the day's reserved total, the job's cost) seen as each fallback starts
+
+
 def _refused_over_limit(query):
+    if _GATE["barrier"]:
+        _GATE["barrier"].wait(timeout=30)  # every job has claimed (claims precede calls) before any call settles
     return Answer([], D("0.90"), model="claude-opus-5-5", error="anthropic: refused")
 
 
-def _never_called(query):
-    raise AssertionError("a fallback ran beyond the budget")
+def _fallback(query):
+    job = WeightResearchJob.objects.get(part__part_number=query["part_number"])
+    day = WeightResearchSpend.objects.order_by("-day").first()  # the latest day is the one being run
+    FALLBACKS.append((query["part_number"], day.reserved_usd, job.cost_usd))
+    return Answer([], D("0.05"), model="gpt-6.2-astra", error="openai: refused")
 
 
 @skipUnless(connection.vendor == "postgresql", "row locks need PostgreSQL")
 @override_settings(**{**NATIVE, "AI_WEIGHT_RESEARCH_FALLBACK_PROVIDERS": ["openai"],
                       "AI_WEIGHT_RESEARCH_DAILY_BUDGET_USD": D("2.00")})
+@mock.patch.dict(PROVIDERS, {"anthropic": f"{__name__}._refused_over_limit", "openai": f"{__name__}._fallback"})
 class ConcurrentOverrunTests(TransactionTestCase):
-    """Two jobs run at once; each primary costs more than its reservation. Settling is serialized on the day's row, so
-    neither fallback runs on budget the other's overrun has used."""
+    """Two jobs; each primary ($0.90) costs more than its $0.50 reservation, with a $2.00 day. Settling is serialized
+    on the day's row, so a fallback starts only while the day's and the job's totals (its own reservation included)
+    fit. Each test fixes one interleaving, so the outcome never depends on thread scheduling."""
 
     serialized_rollback = True
 
-    @mock.patch.dict(PROVIDERS, {"anthropic": f"{__name__}._refused_over_limit", "openai": f"{__name__}._never_called"})
-    def test_overruns_seen_by_parallel_jobs_stop_both_fallbacks(self):
-        ids = [WeightResearchJob.objects.create(part=PartMaster.objects.create(
+    def setUp(self):
+        FALLBACKS.clear()
+        self.addCleanup(_GATE.update, barrier=None)
+        self.ids = [WeightResearchJob.objects.create(part=PartMaster.objects.create(
             part_number=f"P{i}", brand="Bosch")).pk for i in range(2)]
-        barrier, results, now = threading.Barrier(len(ids)), [], timezone.now()
+
+    def assert_every_fallback_started_within_budget(self):
+        for part_number, day_total, job_cost in FALLBACKS:
+            self.assertLessEqual(day_total, D("2.00"), part_number)
+            self.assertLessEqual(job_cost, D("1.50"), part_number)
+
+    def test_overruns_seen_by_parallel_jobs_stop_both_fallbacks(self):
+        """Both jobs claim a full chain ($2.00 reserved) before either call returns: each overrun is then over the
+        day, so neither fallback may start."""
+        _GATE["barrier"] = threading.Barrier(len(self.ids))
+        start, results, now = threading.Barrier(len(self.ids)), [], timezone.now()
 
         def worker(job_id):
             try:
-                barrier.wait()
+                start.wait(timeout=30)
                 results.append(run_job(job_id, now))
             finally:
                 connection.close()
-        threads = [threading.Thread(target=worker, args=(job_id,)) for job_id in ids]
+        threads = [threading.Thread(target=worker, args=(job_id,)) for job_id in self.ids]
         with self.assertLogs("parts.weight_research", "WARNING"):
             for thread in threads:
                 thread.start()
             for thread in threads:
-                thread.join()
-        self.assertEqual(results, ["queued", "queued"])  # both claimed a full chain ($1.00 each)
-        self.assertEqual(sorted(WeightResearchCall.objects.values_list("provider", "outcome")),
-                         [("anthropic", "unusable")] * 2 + [("openai", "not_sent")] * 2)
+                thread.join(timeout=60)
+        self.assertFalse(_GATE["barrier"].broken)  # both primaries really were in flight together
+        self.assertEqual(results, ["queued", "queued"])
+        self.assertEqual(FALLBACKS, [])
+        self.assertEqual(sorted(WeightResearchCall.objects.values_list("provider", "outcome", "reserved_usd")),
+                         [("anthropic", "unusable", D("0.50"))] * 2 + [("openai", "not_sent", D("0"))] * 2)
         self.assertEqual(WeightResearchSpend.objects.get().reserved_usd, D("1.80"))  # what was spent, nothing held
+
+    def test_a_job_finishing_before_the_other_claims_may_fall_back_within_budget(self):
+        """The interleaving CI hit: the first job runs whole before the second claims. Its overrun ($1.40 with its
+        fallback's reservation) fits the day, so its fallback runs ($0.95 spent). The second job then claims a full
+        chain, but its own overrun takes the day to $2.35, so its fallback is skipped."""
+        now = timezone.now()
+        with self.assertLogs("parts.weight_research", "WARNING"):
+            self.assertEqual([run_job(job_id, now) for job_id in self.ids], ["queued", "queued"])
+        self.assertEqual(FALLBACKS, [("P0", D("1.40"), D("1.40"))])
+        self.assert_every_fallback_started_within_budget()
+        self.assertEqual(list(WeightResearchCall.objects.order_by("id").values_list("job_id", "provider", "outcome")),
+                         [(self.ids[0], "anthropic", "unusable"), (self.ids[0], "openai", "unusable"),
+                          (self.ids[1], "anthropic", "unusable"), (self.ids[1], "openai", "not_sent")])
+        self.assertEqual(WeightResearchSpend.objects.get().reserved_usd, D("1.85"))  # 0.90 + 0.05 + 0.90
+
+    def test_unsynchronized_runs_never_start_a_fallback_over_budget(self):
+        """Any interleaving: whatever the threads do, a fallback starts only inside both budgets, and the day ends at
+        exactly what was spent."""
+        for round_ in range(5):
+            now = timezone.now() + timedelta(days=round_)  # a fresh day each round
+            if round_:
+                WeightResearchJob.objects.filter(pk__in=self.ids).update(status="queued", next_attempt_at=now,
+                                                                         cost_usd=0, attempts=0)
+            threads = [threading.Thread(target=lambda job_id=job_id: (run_job(job_id, now), connection.close()))
+                       for job_id in self.ids]
+            with self.assertLogs("parts.weight_research", "WARNING"):
+                for thread in threads:
+                    thread.start()
+                for thread in threads:
+                    thread.join(timeout=60)
+            spent = WeightResearchSpend.objects.get(day=timezone.localdate(now)).reserved_usd
+            self.assertIn(spent, (D("1.80"), D("1.85")), round_)  # no fallback, or exactly one
+        self.assert_every_fallback_started_within_budget()
 
 
 class BenchmarkTests(ResearchTestCase):
