@@ -24,14 +24,15 @@ from config.tests import run_python
 from orders.models import Notification
 from orders.services import OperatorError
 from parts import evidence
-from parts.evidence import Unverifiable, check_page, fetch_page, page_text, public_address, registrable_domain
+from parts.evidence import (Unverifiable, check_page, fetch_page, page_text, parse_page, public_address,
+                            registrable_domain)
 from parts.models import (PartMaster, PartQuoteRequest, PartWeight, WeightResearchJob, WeightResearchSource,
                           WeightResearchSpend, WeightTask)
 from parts.registry import record_weight
 from parts.test_registry import PART, RegistryTestCase, amt_row
 from parts.weight_research import (BUDGET, MAX_OBSERVATIONS, Observation, ResearchError, Rules, _claim,
-                                   approve_and_price, approve_proposal, call_research_service, check, research_query,
-                                   rules, run_due_jobs, run_job, score, site)
+                                   approve_and_price, approve_proposal, call_research_service, check, credibility,
+                                   research_query, rules, run_due_jobs, run_job, score, site)
 from parts.weight_tasks import approve_task
 
 D = Decimal
@@ -43,8 +44,8 @@ FILLER = "Genuine part. Fits many models; check the fitment table before orderin
 
 
 def page(weight_text="Shipping weight: 0.40 kg", number="90915-YZZE1", brand="Toyota"):
-    """A product page's visible text, long enough to count as readable."""
-    return f"{brand} oil filter {number}. {weight_text}. {FILLER}"
+    """A single-product page whose one heading names the part, long enough to count as readable."""
+    return f"<h1>{brand} oil filter {number}</h1><p>{weight_text}.</p><p>{FILLER}</p>"
 
 
 def obs(url="https://shop-a.example/p", value="0.40", unit="kg", measurement="shipping", part_number="90915-YZZE1",
@@ -88,11 +89,12 @@ class ResearchTestCase(RegistryTestCase):
         no_network.start()  # a test that forgets to mock the provider fails instead of calling anything
         self.addCleanup(no_network.stop)
 
-    def fetch(self, url, deadline):
+    def fetch(self, url, deadline, robots=None):
         found = self.web.get(url, Unverifiable(evidence.INACCESSIBLE, "the page does not exist (HTTP 404)"))
         if isinstance(found, Exception):
             raise found
-        return found if isinstance(found, tuple) else (url, found)
+        final, html = found if isinstance(found, tuple) else (url, found)
+        return final, parse_page(html)
 
     def service(self, *observations, cost="0.04", error=None):
         if error:
@@ -246,20 +248,25 @@ class PublicSuffixTests(SimpleTestCase):
 
 
 class SafeFetchTests(SimpleTestCase):
-    def fetch(self, url="https://shop.example.com/p?id=1", responses=(), dns=None, deadline=60):
-        dns = dns or {}
-        pools = []
+    def fetch(self, url="https://shop.example.com/p?id=1", responses=(), dns=None, deadline=60, robots=None,
+              cache=None):
+        """responses: the page hops in order; robots: host -> robots.txt response (default 404: no robots.txt)."""
+        dns, robots, calls, pages = dns or {}, robots or {}, [], iter(responses)
 
         def pool(address, **kwargs):
+            def urlopen(method, path, **options):
+                calls.append((address, kwargs, method, path, options))
+                if path == "/robots.txt":
+                    return robots.get(kwargs["server_hostname"], FakeHTTP(404))
+                return next(pages)
             fake = mock.Mock()
-            fake.urlopen.side_effect = lambda *a, **k: responses[len(pools) - 1]
-            pools.append((address, kwargs, fake))
+            fake.urlopen.side_effect = urlopen
             return fake
         with mock.patch("parts.evidence.socket.getaddrinfo",
                         side_effect=lambda host, *a, **k: addrinfo(*dns.get(host, ["93.184.215.14"]))) as resolver, \
                 mock.patch("parts.evidence.urllib3.HTTPSConnectionPool", side_effect=pool):
-            result = fetch_page(url, time.monotonic() + deadline)
-        return result, pools, resolver
+            result = fetch_page(url, time.monotonic() + deadline, cache)
+        return result, [c for c in calls if c[3] != "/robots.txt"], resolver, calls
 
     def refused(self, status, note, **kwargs):
         with self.assertRaises(Unverifiable) as raised:
@@ -268,19 +275,58 @@ class SafeFetchTests(SimpleTestCase):
 
     def test_connects_to_the_checked_address_with_tls_for_the_name(self):
         body = f"<html><head><title>x</title><script>var w='9 kg'</script></head><body>{page()}</body></html>"
-        (url, text), pools, resolver = self.fetch(responses=[FakeHTTP(body=body.encode())])
-        self.assertEqual(resolver.call_count, 1)  # resolved once; that very address is used (no DNS rebinding)
-        address, kwargs, fake = pools[0]
+        (url, found), pages, resolver, calls = self.fetch(responses=[FakeHTTP(body=body.encode())])
+        self.assertEqual([c[3] for c in calls], ["/robots.txt", "/p?id=1"])  # robots.txt first
+        self.assertEqual(resolver.call_count, 2)  # once per request; each request uses the address it checked
+        address, kwargs, method, path, options = pages[0]
         self.assertEqual(address, "93.184.215.14")
         self.assertEqual((kwargs["port"], kwargs["server_hostname"], kwargs["assert_hostname"], kwargs["cert_reqs"],
                           kwargs["retries"]), (443, "shop.example.com", "shop.example.com", "CERT_REQUIRED", False))
-        method, path = fake.urlopen.call_args.args
-        options = fake.urlopen.call_args.kwargs
         self.assertEqual((method, path, options["headers"]["Host"], options["redirect"]),
                          ("GET", "/p?id=1", "shop.example.com", False))
         self.assertEqual(url, "https://shop.example.com/p?id=1")
-        self.assertIn("Shipping weight: 0.40 kg", text)
-        self.assertNotIn("9 kg", text)  # scripts are not page text
+        self.assertIn("Shipping weight: 0.40 kg", found.text)
+        self.assertNotIn("9 kg", found.text)  # scripts are not page text
+
+    def test_robots_txt_is_respected(self):
+        ok = [FakeHTTP(body=page().encode())]
+        for robots, status, note in (
+                ("User-agent: LionPartsWeightCheck\nDisallow: /p", evidence.DISALLOWED,
+                 "robots.txt does not allow checking this page; not fetched"),
+                ("User-agent: *\nDisallow: /", evidence.DISALLOWED,
+                 "robots.txt does not allow checking this page; not fetched")):
+            with self.subTest(robots=robots):
+                self.refused(status, note, responses=ok,
+                             robots={"shop.example.com": FakeHTTP(body=robots.encode(), content_type="text/plain")})
+        for response, status, note in (
+                (FakeHTTP(403), evidence.DISALLOWED,
+                 "the site refuses access to its robots.txt (HTTP 403); not fetched"),
+                (FakeHTTP(401), evidence.DISALLOWED,
+                 "the site refuses access to its robots.txt (HTTP 401); not fetched"),
+                (FakeHTTP(500), evidence.INACCESSIBLE, "robots.txt could not be checked (HTTP 500); not fetched"),
+                (FakeHTTP(chunks=[b"x" * 600 * 1024], content_type="text/plain"), evidence.INACCESSIBLE,
+                 "robots.txt could not be checked: the page is too large")):
+            with self.subTest(note=note):
+                self.refused(status, note, responses=ok, robots={"shop.example.com": response})
+        allowed = FakeHTTP(body=b"User-agent: *\nDisallow: /private\n", content_type="text/plain")
+        (_url, found), pages, _r, _c = self.fetch(responses=ok, robots={"shop.example.com": allowed})
+        self.assertEqual(len(pages), 1)
+
+    def test_a_disallowed_page_is_never_requested_and_robots_is_read_once_per_host(self):
+        robots = {"shop.example.com": FakeHTTP(body=b"User-agent: *\nDisallow: /p", content_type="text/plain")}
+        with self.assertRaises(Unverifiable):
+            _result, pages, _r, calls = self.fetch(robots=robots)
+        cache = {}
+        self.fetch("https://shop.example.com/a", responses=[FakeHTTP(body=page().encode())], cache=cache)
+        _res, _p, _r, calls = self.fetch("https://shop.example.com/b", responses=[FakeHTTP(body=page().encode())],
+                                         cache=cache)
+        self.assertEqual([c[3] for c in calls], ["/b"])  # robots.txt came from this job's cache
+
+    def test_redirects_are_checked_against_the_new_hosts_robots_txt(self):
+        hop = FakeHTTP(302, location="https://other.example.org/p")
+        self.refused(evidence.DISALLOWED, "robots.txt does not allow checking this page; not fetched",
+                     responses=[hop], robots={"other.example.org": FakeHTTP(body=b"User-agent: *\nDisallow: /",
+                                                                            content_type="text/plain")})
 
     def test_unsafe_addresses_are_never_requested(self):
         for url, note in (("http://shop.example.com/", "not an https URL"),
@@ -313,9 +359,9 @@ class SafeFetchTests(SimpleTestCase):
         self.refused(evidence.REFUSED, "not an https URL", responses=[downgrade])
         loop = FakeHTTP(302, location="/again")
         self.refused(evidence.INACCESSIBLE, "too many redirects", responses=[loop] * 5)
-        (url, _text), pools, _r = self.fetch(responses=[FakeHTTP(301, location="https://www.other.example.org/q"),
-                                                        FakeHTTP(body=page().encode())])
-        self.assertEqual((url, pools[1][1]["server_hostname"]), ("https://www.other.example.org/q",
+        (url, _page), pages, _r, _c = self.fetch(responses=[FakeHTTP(301, location="https://www.other.example.org/q"),
+                                                            FakeHTTP(body=page().encode())])
+        self.assertEqual((url, pages[1][1]["server_hostname"]), ("https://www.other.example.org/q",
                                                                   "www.other.example.org"))
 
     def test_status_type_size_and_time_limits(self):
@@ -332,15 +378,15 @@ class SafeFetchTests(SimpleTestCase):
         slow.urlopen.side_effect = urllib3.exceptions.ReadTimeoutError(None, "/", "slow")
         with mock.patch("parts.evidence.socket.getaddrinfo", return_value=addrinfo("93.184.215.14")), \
                 mock.patch("parts.evidence.urllib3.HTTPSConnectionPool", return_value=slow), \
-                self.assertRaisesMessage(Unverifiable, "ReadTimeoutError"):
+                self.assertRaisesMessage(Unverifiable, "ReadTimeoutError"):  # robots.txt cannot be read: no page
             fetch_page("https://shop.example.com/", time.monotonic() + 60)
         self.refused(evidence.NOT_CHECKED, "time limit for checking pages reached", deadline=-1,
                      responses=[FakeHTTP()])
 
 
 class PageCheckTests(SimpleTestCase):
-    def check(self, text, claimed="0.400", measurement="shipping"):
-        return check_page(text, "90915YZZE1", "TOYOTA", D(claimed), measurement)
+    def check(self, html, claimed="0.400", measurement="shipping"):
+        return check_page(parse_page(html), "90915YZZE1", "TOYOTA", D(claimed), measurement)
 
     def test_verified_only_when_the_page_shows_part_manufacturer_and_weight(self):
         self.assertEqual(self.check(page())[:3], (evidence.VERIFIED, D("0.400"), "shipping"))
@@ -357,7 +403,7 @@ class PageCheckTests(SimpleTestCase):
                 (page(brand="Denso"), evidence.NOT_CONFIRMED, "the page does not name the manufacturer"),
                 (page("Ships fast"), evidence.NOT_CONFIRMED, "the page states no weight"),
                 (page("Shipping weight: 0.80 kg"), evidence.CONTRADICTED, "the page states 0.800 kg, not the claimed"),
-                ("Loading…", evidence.UNREADABLE, "no readable text on the page")):
+                ("<p>Loading…</p>", evidence.UNREADABLE, "no readable text on the page")):
             with self.subTest(note=note):
                 got = self.check(text)
                 self.assertEqual((got[0], got[1]), (outcome, None))
@@ -377,7 +423,42 @@ class PageCheckTests(SimpleTestCase):
         html = "<p>Weight <b>0.4</b> kg</p><script>weight 9 kg</script><style>p{}</style><noscript>x</noscript>"
         self.assertEqual(page_text(html), "Weight 0.4 kg")
         js_only = f"<html><body><div id=root></div><script>render({json.dumps(page())})</script></body></html>"
-        self.assertEqual(self.check(page_text(js_only))[0], evidence.UNREADABLE)
+        self.assertEqual(self.check(js_only)[0], evidence.UNREADABLE)
+
+    def test_the_weight_must_belong_to_the_same_product_record(self):
+        cases = {
+            "a spec table under the product's heading": (evidence.VERIFIED, f"<h1>Toyota oil filter 90915-YZZE1</h1>"
+                f"<table><tr><th>Brand</th><td>Toyota</td></tr><tr><th>Shipping weight</th><td>0.40 kg</td></tr>"
+                f"</table><p>{FILLER}</p>"),
+            "a spec list with the labelled part number": (evidence.VERIFIED, "<h1>Toyota oil filter</h1><ul>"
+                "<li>Part number: 90915-YZZE1</li><li>Brand: Toyota</li><li>Shipping weight: 0.40 kg</li></ul>"
+                f"{FILLER}"),
+            "its own card on a listing": (evidence.VERIFIED, "<h1>Oil filters</h1><ul><li>Toyota 90915-YZZE1. "
+                "Shipping weight 0.40 kg. In stock</li><li>Bosch 0451103316. Shipping weight 0.60 kg.</li>"
+                f"</ul><p>{FILLER}</p>"),
+            "a schema.org Product": (evidence.VERIFIED, "<div itemscope itemtype='https://schema.org/Product'>Toyota "
+                "<b>90915-YZZE1</b><div itemprop=weight itemscope itemtype='https://schema.org/QuantitativeValue'>"
+                "Shipping weight 0.40 kg</div></div><div itemscope itemtype='https://schema.org/Product'>Bosch "
+                f"0451103316</div><p>{FILLER}</p>"),
+            "another card's weight on a listing": (evidence.AMBIGUOUS, "<h1>Oil filters</h1><ul><li>Toyota "
+                "90915-YZZE1 oil filter, in stock, 12.50 GEL</li><li>Bosch 0451103316 oil filter. Shipping weight "
+                f"0.40 kg. In stock</li></ul><p>{FILLER}</p>"),
+            "another row's weight in a category table": (evidence.AMBIGUOUS, "<h1>Filters</h1><table><tr><td>Toyota"
+                "</td><td>90915-YZZE1</td><td>12 GEL</td></tr><tr><td>Bosch</td><td>0451103316</td><td>Weight 0.40 kg"
+                f"</td></tr></table><p>{FILLER}</p>"),
+            "the manufacturer only in another product's card": (evidence.AMBIGUOUS, "<h1>Filters</h1><p>Part "
+                "90915-YZZE1. Shipping weight 0.40 kg</p><ul><li>Toyota 04152-YZZA1 air filter, in stock, 9 GEL, "
+                f"delivery tomorrow</li><li>Denso 123, in stock</li></ul><p>{FILLER}</p>"),
+            "a page with two product headings": (evidence.AMBIGUOUS, "<h1>Toyota 90915-YZZE1</h1><h1>Bosch "
+                f"0451103316</h1><p>Shipping weight 0.40 kg</p><p>{FILLER}</p>"),
+        }
+        for name, (outcome, html) in cases.items():
+            with self.subTest(name):
+                self.assertEqual(self.check(html)[0], outcome, self.check(html)[3])
+        plain = check_page(f"Toyota 90915-YZZE1 Shipping weight 0.40 kg {FILLER}", "90915YZZE1", "TOYOTA", D("0.4"),
+                           "shipping")
+        self.assertEqual(plain[0], evidence.AMBIGUOUS)
+        self.assertIn("a plain-text page: the weight cannot be tied to the part", plain[3])
 
 
 # --- scoring and runs -------------------------------------------------------------------------------------------------
@@ -432,6 +513,21 @@ class EvidenceTests(ResearchTestCase):
         proposal, _v, _a, _d, lines = score(market)
         self.assertIsNone(proposal)  # a marketplace listing is shown, never counted
         self.assertIn("Marketplace listings shown but not counted: ebay.com.", lines)
+
+    def test_manufacturer_credibility_only_from_the_reviewed_allowlist(self):
+        self.assertEqual(credibility("toyota.com", self.p, rules()), "standard")  # looking like the brand is not enough
+        with override_settings(AI_WEIGHT_RESEARCH_RULES={"manufacturer_sites": {"Toyota": ["toyota.com"]},
+                                                         "trusted_sites": ["rockauto.com"]}):
+            r = rules()
+            self.assertEqual((credibility("toyota.com", self.p, r), credibility("toyota-parts.com", self.p, r),
+                              credibility("rockauto.com", self.p, r), credibility("ebay.co.uk", self.p, r)),
+                             ("manufacturer", "standard", "trusted", "marketplace"))
+            denso = PartMaster(part_number="X", brand="Denso", part_number_key="X", brand_key="DENSO")
+            self.assertEqual(credibility("toyota.com", denso, r), "standard")  # Toyota's site, not Denso's
+        for bad in ({"manufacturer_sites": {"Toyota": ["www.toyota.com"]}}, {"trusted_sites": ["co.uk"]}):
+            with self.subTest(bad=bad), override_settings(AI_WEIGHT_RESEARCH_RULES=bad), \
+                    self.assertRaisesMessage(ValueError, "is not a registrable domain"):
+                rules()
 
     def test_rules_are_configurable(self):
         self.assertEqual(rules(), Rules())
@@ -502,16 +598,23 @@ class RunTests(ResearchTestCase):
         self.web = {"https://shop-a.example/p": page(number="12345-ABCDE"),  # the page is about another part
                     "https://www.shop-b.example/x": page("Shipping weight 0.80 kg"),  # a different weight
                     "https://js.example/app": "Loading…",  # JavaScript-only
-                    "https://blocked.example/p": Unverifiable(evidence.BLOCKED, "the site refused the request")}
+                    "https://blocked.example/p": Unverifiable(evidence.BLOCKED, "the site refused the request"),
+                    "https://robots.example/p": Unverifiable(evidence.DISALLOWED, "robots.txt does not allow it"),
+                    "https://listing.example/c": "<h1>Oil filters</h1><ul><li>Toyota 90915-YZZE1, in stock, 12 GEL"
+                                                 "</li><li>Bosch 0451103316. Shipping weight 0.40 kg</li></ul>"
+                                                 f"<p>{FILLER}</p>"}  # the weight is another product's
         with self.service(obs(), obs("https://www.shop-b.example/x"), obs("https://js.example/app"),
-                          obs("https://blocked.example/p"), obs("https://invented.example/p")):
+                          obs("https://blocked.example/p"), obs("https://invented.example/p"),
+                          obs("https://robots.example/p"), obs("https://listing.example/c")):
             self.assertEqual(run_job(self.job().pk), "no_result")
         job = self.job()
         outcomes = {url: s.verification for url, s in self.sources().items()}
         self.assertEqual(outcomes, {"https://shop-a.example/p": "not_confirmed",
                                     "https://www.shop-b.example/x": "contradicted",
                                     "https://js.example/app": "unreadable", "https://blocked.example/p": "blocked",
-                                    "https://invented.example/p": "inaccessible"})
+                                    "https://invented.example/p": "inaccessible",
+                                    "https://robots.example/p": "disallowed",
+                                    "https://listing.example/c": "ambiguous"})
         self.assertFalse(WeightResearchSource.objects.filter(accepted=True).exists())
         self.assertTrue(job.conflicting)  # a misquoted page is shown as conflicting evidence
         self.assertIn("No observation was verified on its page: needs review.", job.explanation)

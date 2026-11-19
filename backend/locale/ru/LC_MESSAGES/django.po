@@ -1882,3 +1882,6 @@ msgstr "подтверждено на странице"
 
 msgid "weight on the page (kg)"
 msgstr "вес на странице (кг)"
+
+msgid "not allowed by robots.txt"
+msgstr "запрещено файлом robots.txt"

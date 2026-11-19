@@ -446,7 +446,8 @@ class WeightResearchSource(models.Model):
                      ("contradicted", _("the page shows a different weight")),
                      ("ambiguous", _("ambiguous page")), ("not_confirmed", _("not shown on the page")),
                      ("unreadable", _("no readable text")), ("inaccessible", _("page not reachable")),
-                     ("blocked", _("blocked by the site")), ("refused", _("unsafe address, not fetched")),
+                     ("blocked", _("blocked by the site")), ("disallowed", _("not allowed by robots.txt")),
+                     ("refused", _("unsafe address, not fetched")),
                      ("not_checked", _("not checked"))]
     CREDIBILITY_MANUFACTURER, CREDIBILITY_TRUSTED = "manufacturer", "trusted"
     CREDIBILITY_STANDARD, CREDIBILITY_MARKETPLACE = "standard", "marketplace"

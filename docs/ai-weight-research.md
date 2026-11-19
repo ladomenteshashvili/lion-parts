@@ -63,7 +63,24 @@ visible text (scripts and styles ignored) shows:
 - the exact part number, not as part of a longer code (`90915-YZZE12` does not match `90915YZZE1`);
 - the manufacturer's name;
 - a weight next to a weight word (weight, gewicht, poids, peso, вес, масса, წონა) that matches the claim within 3 % or
-  10 g, read from the page itself.
+  10 g, read from the page itself;
+- and the three **belong together**.
+
+**Belonging together** is checked against the page's HTML structure. Being present somewhere on a category or listing
+page is not enough. The weight counts only when one of these holds:
+
+| The weight is … | together with |
+|---|---|
+| in the same table row or list item | the part number and the manufacturer |
+| in the same product record: an `<article>`, a schema.org `Product`, or a list item or table row that is a product card (not a specification line) | the part number and the manufacturer |
+| in a specification block (a two-column table, a definition list, a list of short "label: value" lines) | the part number, labelled as such ("Part number:", "OEM", "Артикул" …); the manufacturer is named outside other products' records |
+| outside every product record, on a page with exactly one `<h1>` | that `<h1>` naming the part number; the manufacturer is named outside other products' records |
+
+Anything else is **ambiguous**, for example:
+- a listing card or table row of another product;
+- a page with two product headings;
+- a manufacturer named only in another product's card;
+- a plain-text page, which has no structure to tie the weight to the part.
 
 The weight used is the one read from the page, never the provider's number. The measurement used is the one the page
 labels (shipping/package/gross, or net). An unlabelled weight counts as "net or shipping not stated" and scores lower.
@@ -77,6 +94,7 @@ labels (shipping/package/gross, or net). An unlabelled weight counts as "net or 
 | no readable text | under 200 visible characters: JavaScript-only, empty or a challenge page | no |
 | page not reachable | DNS failure, timeout, 404, 5xx, too large, too many redirects | no |
 | blocked by the site | 401, 403, 429, 451 | no |
+| not allowed by robots.txt | robots.txt disallows the page for `LionPartsWeightCheck`, or refuses access to itself (401, 403, other 4xx except 404/410) | no; the page is never requested |
 | unsafe address, not fetched | see below | no |
 | not checked | the claim failed 2.1, or the job's 90 s page-checking time was used up | no |
 
@@ -89,6 +107,12 @@ labels (shipping/package/gross, or net). An unlabelled weight counts as "net or 
   change between the check and the connection, which blocks DNS rebinding;
 - follows at most 3 redirects, each checked again in full (scheme, port, name, addresses);
 - has a 5 s connect and 10 s read timeout, an overall deadline per job, a 2 MB size limit, and HTML or plain text only;
+- respects **robots.txt** (RFC 9309), checked before every request, redirect hops included, with the product token
+  `LionPartsWeightCheck`:
+  - a missing robots.txt (404, 410) allows everything;
+  - a robots.txt that refuses access is treated as "disallowed";
+  - one that cannot be read safely (5xx, timeout, over 512 KB, unsafe address) leaves the page unverified and unfetched;
+  - each host's robots.txt is read once per job;
 - ignores proxy environment variables (urllib3 directly) and verifies certificates against certifi.
 
 **Independence.** Sites are grouped by registrable domain using the Public Suffix List (`backend/parts/data/
@@ -96,7 +120,13 @@ public_suffix_list.dat`, Mozilla, MPL 2.0, vendored, never fetched at run time).
 `parts.shop.co.uk` are one site; `a.github.io` and `b.github.io` are two. A redirected page counts for the site it
 landed on. A site counts once, with the median of its values; the same page cited twice is fetched once.
 
-**Credibility.** A domain named like the manufacturer (`toyota.com` for Toyota) or listed in `trusted_sites` adds a
+**Credibility** comes only from reviewed allowlists. A domain that merely looks like a brand (`toyota.com`, or
+`toyota-parts.com`) is a standard source.
+- `manufacturer_sites`: official manufacturer domains per brand, for example
+  `{"Toyota": ["toyota.com"]}`. A domain counts for that brand only.
+- `trusted_sites`: trusted catalogs.
+
+Both are empty by default. Every entry must be exactly a registrable domain, or the rules fail to load. Either adds the
 bonus. Marketplace listings (eBay, Amazon, AliExpress and similar, `marketplaces`) are shown to the operator but never
 counted.
 
@@ -113,13 +143,14 @@ strong ≥ 0.80, moderate ≥ 0.60, weak below.
 | Base for `min_sources` agreeing sites (`base`) | 0.50 |
 | Each further agreeing site (`per_extra_site`, at most `max_extra`) | +0.10, at most +0.20 |
 | Agreeing sites within `tight_ratio` of each other (`tight_bonus`) | 2 %: +0.10 |
-| The manufacturer's site or a trusted catalog agrees (`trusted_bonus`) | +0.10 |
+| An allowlisted manufacturer site or trusted catalog agrees (`trusted_bonus`) | +0.10 |
 | Pages do not say net or shipping (`unspecified_penalty`) | −0.10 |
 | Each verified site that disagrees (`disagree_penalty`) | −0.20 |
 | Each page the provider misquoted (`misquote_penalty`) | −0.05 |
 | Cap (`cap`) | 0.90 |
 | Below `min_score`: no proposal, needs review | 0.60 |
 | Trusted catalogs (`trusted_sites`) | none (owner decision) |
+| Official manufacturer sites per brand (`manufacturer_sites`) | none (owner decision) |
 | Page checks per job (`verify_seconds`) | 90 s |
 
 Override any rule with `AI_WEIGHT_RESEARCH_RULES = {"min_sources": 3, "trusted_sites": ["rockauto.com"]}` in settings;
@@ -260,15 +291,26 @@ Optional customer weight input (calculate-price), carts, orders and payments are
 ## 8. Decisions for the owner
 
 1. **Providers.** LPK-248 integrates Anthropic Claude and OpenAI; this PR builds neither and calls no paid API.
-2. **Trusted catalogs** (`trusted_sites`) are empty by default. Which catalogs earn the +0.10 is a business decision.
+2. **Allowlists** are empty by default. Which catalogs (`trusted_sites`) and which official manufacturer domains
+   (`manufacturer_sites`) earn the +0.10 is a business decision, and each entry needs review.
 3. **Thresholds** in `Rules` and the limits in §3. They are deliberately conservative:
    - 2 verified sites;
    - score at least 0.60;
    - $0.50 per attempt, $1.50 per job, $5 per day.
 4. **Shipping weight wins a tie with net weight**, because the courier fee is per shipped kg. A part with only
    net-weight evidence gets a net weight, marked as such.
-5. **Pages that need JavaScript, block robots, or are PDFs never verify.** That may leave some parts at "needs review",
-   which is the intended conservative outcome. robots.txt is not consulted. Each cited page is fetched once per job and
-   identified as `LionPartsWeightCheck/1.0`.
+5. **Some pages never verify**, which may leave some parts at "needs review". This is the intended conservative
+   outcome. They are pages that:
+   - need JavaScript;
+   - are PDFs;
+   - are disallowed by robots.txt;
+   - are unreachable when robots.txt can't be read;
+   - don't tie the weight to the part in their HTML structure, for example a product page whose `<h1>` lacks the part
+     number and has no labelled part number in its specification block.
+
+   Each cited page is fetched once per job and identified as `LionPartsWeightCheck/1.0`. Limitations:
+   - `Crawl-delay` is not applied. At most a few pages per site are fetched per job.
+   - Terms of service, login walls and `X-Robots-Tag` / meta robots indexing directives are not interpreted. Logins and
+     refusals end as "blocked".
 6. **Jira LPK-247 was not readable from the build environment.** This was built from the owner's written briefs.
    Compare it with the Jira acceptance criteria before merging.

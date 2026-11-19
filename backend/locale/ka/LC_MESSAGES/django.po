@@ -1878,3 +1878,6 @@ msgstr "დადასტურდა გვერდზე"
 
 msgid "weight on the page (kg)"
 msgstr "წონა გვერდზე (კგ)"
+
+msgid "not allowed by robots.txt"
+msgstr "არ არის ნებადართული robots.txt-ით"

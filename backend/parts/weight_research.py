@@ -71,6 +71,9 @@ class Rules:
     misquote_penalty: Decimal = Decimal("0.05")  # per page the provider misquoted (it shows a different weight)
     cap: Decimal = Decimal("0.90")
     trusted_sites: tuple = ()  # registrable domains, e.g. ("rockauto.com",); an owner decision
+    # Reviewed official manufacturer sites: ((brand key, registrable domain), ...), set in settings as
+    # {"Toyota": ["toyota.com"]}. Empty by default: a domain that merely looks like a brand stays a standard source.
+    manufacturer_sites: tuple = ()
     marketplaces: tuple = ("ebay", "amazon", "aliexpress", "alibaba", "temu", "wish", "etsy", "allegro", "avito")
     verify_seconds: int = 90  # all page checks of one job together
 
@@ -82,8 +85,23 @@ def rules():
     unknown = set(overrides) - set(kinds)
     if unknown:
         raise ValueError(f"Unknown AI_WEIGHT_RESEARCH_RULES: {', '.join(sorted(unknown))}")
-    return Rules(**{key: Decimal(str(value)) if kinds[key] is Decimal else kinds[key](value)
-                    for key, value in overrides.items()})
+    values = {key: Decimal(str(value)) if kinds[key] is Decimal else kinds[key](value)
+              for key, value in overrides.items() if key not in ("trusted_sites", "manufacturer_sites")}
+    if "trusted_sites" in overrides:
+        values["trusted_sites"] = tuple(_domain(d) for d in overrides["trusted_sites"])
+    if "manufacturer_sites" in overrides:
+        values["manufacturer_sites"] = tuple(sorted(
+            (normalize_brand(brand), _domain(d)) for brand, domains in dict(overrides["manufacturer_sites"]).items()
+            for d in domains))
+    return Rules(**values)
+
+
+def _domain(value):
+    """An allowlist entry must be exactly a registrable domain ("toyota.com", not "www.toyota.com" or "co.uk")."""
+    domain = str(value).strip().lower()
+    if not domain or evidence.registrable_domain(domain) != domain:
+        raise ValueError(f"AI_WEIGHT_RESEARCH_RULES: {value!r} is not a registrable domain")
+    return domain
 
 
 class ResearchError(Exception):
@@ -311,12 +329,12 @@ def check(part, observation):
 
 
 def credibility(domain, part, r):
-    first = domain.split(".")[0]
-    if normalize_brand(first) == part.brand_key:
+    """Only reviewed allowlists raise a source's credibility; an unknown domain is a standard source."""
+    if (part.brand_key, domain) in r.manufacturer_sites:
         return WeightResearchSource.CREDIBILITY_MANUFACTURER
     if domain in r.trusted_sites:
         return WeightResearchSource.CREDIBILITY_TRUSTED
-    if first in r.marketplaces:
+    if domain.split(".")[0] in r.marketplaces:
         return WeightResearchSource.CREDIBILITY_MARKETPLACE
     return WeightResearchSource.CREDIBILITY_STANDARD
 
@@ -369,7 +387,8 @@ def score(sites, measurement="shipping", r=None, misquoted=0):
                                                            WeightResearchSource.CREDIBILITY_TRUSTED))
     if strong:
         value += r.trusted_bonus
-        lines.append(f"+{r.trusted_bonus}: the manufacturer's site or a trusted catalog agrees ({', '.join(strong)}).")
+        lines.append(f"+{r.trusted_bonus}: an allowlisted manufacturer site or trusted catalog agrees "
+                     f"({', '.join(strong)}).")
     if not measurement:
         value -= r.unspecified_penalty
         lines.append(f"-{r.unspecified_penalty}: the pages do not say whether this is net or shipping weight.")
@@ -388,11 +407,12 @@ def score(sites, measurement="shipping", r=None, misquoted=0):
     return proposal, value, agreeing, disagreeing, lines
 
 
-def verify(part, claimed_kg, claimed_measurement, url, deadline):
-    """Fetch the cited page and check it. -> (outcome, page kg or None, page measurement, final domain, note, snippet).
-    The one place a future structured-catalog source (LPK-248) would plug its own verified lookup in."""
+def verify(part, claimed_kg, claimed_measurement, url, deadline, robots):
+    """Fetch the cited page (robots.txt permitting) and check it. -> (outcome, page kg or None, page measurement, final
+    domain, note, snippet). The one place a future structured-catalog source (LPK-248) would plug its own verified
+    lookup in."""
     try:
-        final_url, text = fetch_page(url, deadline)
+        final_url, text = fetch_page(url, deadline, robots)
     except Unverifiable as error:
         return error.status, None, "", site(url), error.note, ""
     outcome, kg, measurement, note, snippet = evidence.check_page(text, part.part_number_key, part.brand_key,
@@ -406,7 +426,7 @@ def verify(part, claimed_kg, claimed_measurement, url, deadline):
 def _assess(job, observations, now):
     part, r = job.part, rules()
     deadline = time.monotonic() + r.verify_seconds
-    rows, fetched = [], {}
+    rows, fetched, robots = [], {}, {}  # robots: each host's robots.txt, read once per job
     for obs in observations:
         claimed, stated_measurement, domain, reason = check(part, obs)
         row = {"obs": obs, "stated_measurement": stated_measurement, "domain": domain, "outcome": evidence.NOT_CHECKED,
@@ -414,7 +434,7 @@ def _assess(job, observations, now):
         if claimed is not None:
             key = (obs.url, claimed, stated_measurement)
             if key not in fetched:  # the same page cited twice is fetched (and counted) once
-                fetched[key] = verify(part, claimed, stated_measurement, obs.url, deadline)
+                fetched[key] = verify(part, claimed, stated_measurement, obs.url, deadline, robots)
             outcome, kg, measurement, final_domain, note, snippet = fetched[key]
             row.update(outcome=outcome, kg=kg, measurement=measurement, snippet=snippet, reason=note,
                        domain=final_domain or domain)

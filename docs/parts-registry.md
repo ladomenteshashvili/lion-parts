@@ -156,5 +156,5 @@ and deletes nothing.
    verified. The alternative is to price only those who sent a quote request.
 4. **The backfill opens no tasks** for old `checking` searches, so nobody is notified about old searches.
 5. **AI estimates** come from the AI weight research (LPK-247, `docs/ai-weight-research.md`), off by default. Only pages
-   this server fetched and checked itself count. They are always pending until an operator approves them, and
+   this server fetched (robots.txt permitting) and checked itself count, with the weight tied to the part. They are always pending until an operator approves them, and
    approving one prices nobody unless the operator chooses "approve and price" and confirms it.
