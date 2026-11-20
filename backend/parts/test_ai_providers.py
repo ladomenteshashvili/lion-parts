@@ -99,6 +99,24 @@ def openai_response(observations=AGREEING, results=URLS, status="completed", arg
                       "total_tokens": 11000} if usage else None}
 
 
+def no_search(message):
+    """A Claude message as if the model answered at once: no search call, no search result (the LJ9Z-7P086-A case)."""
+    searched = ("server_tool_use", "web_search_tool_result")
+    message["content"] = [b for b in message["content"] if b["type"] not in searched]
+    if "server_tool_use" in message["usage"]:
+        message["usage"]["server_tool_use"]["web_search_requests"] = 0
+    for block in message["content"]:
+        if block["type"] == "text":
+            block["citations"] = None
+    return message
+
+
+def openai_no_search(**kw):
+    response = openai_response(**kw)
+    response["output"] = [i for i in response["output"] if i["type"] != "web_search_call"]
+    return response
+
+
 def error_body(status):
     kind = {429: "rate_limit_error", 500: "api_error", 401: "authentication_error"}[status]
     return {"type": "error", "error": {"type": kind, "message": "details the audit must not keep"}}
@@ -158,6 +176,53 @@ class AnthropicProviderTests(ProviderTestCase):
         self.assertEqual((report["name"], report["strict"], report["input_schema"]), ("report_weights", True, SCHEMA))
         self.assertEqual(body["messages"], [{"role": "user", "content": prompt(self.query())}])
         self.assertIn("Part number: 90915YZZE1\n", body["messages"][0]["content"])
+
+    def test_instructions_require_searching_the_exact_part_without_forcing_a_tool(self):
+        self.replies["anthropic"].append(claude_message())
+        anthropic_research(self.query())
+        body = self.sent["anthropic"][0]["body"]
+        self.assertNotIn("tool_choice", body)  # forced tool_choice is a 400 on Opus/Sonnet 5.5: the prompt steers
+        self.assertIn("You must use the web search tool before you report", body["system"])
+        self.assertIn("Never answer from memory", body["system"])
+        self.assertIn('Search the web for "Toyota 90915YZZE1" before you report', body["messages"][0]["content"])
+
+    def test_an_answer_without_any_web_search_is_an_error_with_its_cost_and_audit(self):
+        """HTTP 200, a report, no search: billed tokens, nothing researched."""
+        usage = {"input_tokens": 3000, "output_tokens": 300,
+                 "server_tool_use": {"web_search_requests": 0, "web_fetch_requests": 0}}
+        for report, usage_case in ((True, usage), (True, {"input_tokens": 3000, "output_tokens": 300}),
+                                   ({"observations": []}, usage)):
+            with self.subTest(report=report, usage=usage_case):
+                self.replies["anthropic"].append(no_search(claude_message(
+                    observations=[obs(FAKE), *AGREEING], report=report, usage=usage_case)))
+                answer = anthropic_research(self.query())
+                self.assertEqual((answer.error, answer.retry, answer.observations, answer.searches),
+                                 ("anthropic: no web search performed", False, [], 0))
+                self.assertEqual((answer.request_id, answer.model, answer.usage["output_tokens"]),
+                                 ("msg_test_1", "claude-opus-5-5", 300))
+                self.assertEqual(answer.cost, D("0.0180"))  # 3000 x $4/M + 300 x $20/M, no search charge
+
+    def test_a_search_with_no_results_is_a_valid_empty_answer(self):
+        self.replies["anthropic"].append(claude_message(results=[], observations=[], searches=1))
+        answer = anthropic_research(self.query())
+        self.assertEqual((answer.error, answer.observations, answer.searches, answer.unsourced), ("", [], 1, 0))
+        self.assertEqual(answer.cost, D("0.1200"))  # 20000 x $4/M + 1500 x $20/M + 1 search x $10/1000
+
+    def test_an_empty_search_result_without_usage_counts_is_a_search_with_unknown_cost(self):
+        """Codex P2 on fc96183: an empty web_search_tool_result and no usage.server_tool_use is still a search."""
+        self.replies["anthropic"].append(claude_message(results=[], observations=[], report={"observations": []},
+                                                        usage={"input_tokens": 3000, "output_tokens": 300}))
+        answer = anthropic_research(self.query())
+        self.assertEqual((answer.error, answer.retry, answer.observations, answer.searches), ("", True, [], None))
+        self.assertIsNone(answer.cost)  # search count unknown: never assumed to be 0, the reservation stands
+        self.assertEqual(answer.cost_note[:12], "cost unknown")
+
+    def test_a_failed_search_is_still_reported_as_unavailable_not_as_no_search(self):
+        self.replies["anthropic"].append(claude_message(report=False, search_error="too_many_requests",
+                                                        stop="end_turn", searches=0))
+        answer = anthropic_research(self.query())
+        self.assertEqual((answer.error, answer.retry),
+                         ("anthropic: web search unavailable (too_many_requests)", True))
 
     def test_verified_answer_with_citations_usage_and_estimated_cost(self):
         self.replies["anthropic"].append(claude_message(observations=[*AGREEING, obs(FAKE)]))
@@ -246,6 +311,13 @@ class OpenAIProviderTests(ProviderTestCase):
         self.assertEqual(answer.cost, D("0.0480"))
         self.assertEqual(answer.usage["output_tokens_details"], {"reasoning_tokens": 600})
 
+    def test_an_answer_without_any_web_search_is_an_error(self):
+        self.replies["openai"].append(openai_no_search(observations=[obs(FAKE)]))
+        answer = openai_research(self.query())
+        self.assertEqual((answer.error, answer.retry, answer.observations, answer.searches),
+                         ("openai: no web search performed", False, [], 0))
+        self.assertEqual((answer.request_id, answer.cost), ("resp_test_1", D("0.0280")))  # tokens only
+
     def test_unusable_answers_are_errors(self):
         cases = ((openai_response(status="incomplete", incomplete={"reason": "max_output_tokens"}, arguments=False),
                   "openai: answer max_output_tokens"),
@@ -314,6 +386,39 @@ class JobTests(ProviderTestCase):
         for secret in ("JTDBR32E720123456", "nino@example.com", "555000001", "40.00", "tariff"):
             self.assertNotIn(secret, sent)
         self.assertEqual(set(self.query()), {"part_number", "manufacturer", "name", "max_cost_usd", "min_sources"})
+
+    def test_no_web_search_fails_the_job_without_an_automatic_retry(self):
+        self.replies["anthropic"].append(no_search(claude_message(observations=[obs(FAKE)])))
+        with self.assertLogs("parts.weight_research", "WARNING"):
+            self.assertEqual(run_job(self.job().pk), "failed")
+        job = self.job()
+        self.assertEqual((job.status, job.attempts, job.last_error, job.proposed_weight),
+                         ("failed", 1, "anthropic: no web search performed", None))
+        self.assertIn("not retried automatically", job.explanation)
+        self.assertEqual(run_due_jobs(now=timezone.now() + timedelta(days=2))["ran"], 0)  # never requeued
+        call = self.calls()[0]
+        self.assertEqual((call.outcome, call.searches, call.request_id, call.cost_usd, call.reserved_usd),
+                         ("unusable", 0, "msg_test_1", D("0.1100"), D("0.50")))
+        self.assertEqual((job.cost_usd, self.spent()), (D("0.1100"), D("0.1100")))  # the billed tokens count
+
+    @override_settings(AI_WEIGHT_RESEARCH_FALLBACK_PROVIDERS=["openai"])
+    def test_no_web_search_uses_only_the_configured_and_reserved_fallback(self):
+        self.replies["anthropic"].append(no_search(claude_message()))
+        self.replies["openai"].append(openai_response())
+        with self.assertLogs("parts.weight_research", "WARNING"):
+            run_due_jobs()
+        self.assertEqual((self.job().status, self.job().provider), ("done", "openai"))
+        self.assertEqual([(c.provider, c.outcome) for c in self.calls()],
+                         [("anthropic", "unusable"), ("openai", "answered")])
+        self.assertEqual(self.spent(), D("0.1580"))  # 0.11 + 0.048: nothing more than the two reserved calls
+
+    @override_settings(AI_WEIGHT_RESEARCH_FALLBACK_PROVIDERS=["openai"])
+    def test_no_search_and_a_failed_fallback_is_final_too(self):
+        self.replies["anthropic"].append(no_search(claude_message()))
+        self.replies["openai"].append(httpx2.ReadTimeout("slow"))
+        with self.assertLogs("parts.weight_research", "WARNING"):
+            self.assertEqual(run_job(self.job().pk), "failed")
+        self.assertEqual(self.job().last_error, "anthropic: no web search performed; openai: timed out")
 
     @override_settings(AI_WEIGHT_RESEARCH_PROVIDER="openai")
     def test_switching_the_provider_is_a_setting(self):

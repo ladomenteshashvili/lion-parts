@@ -143,6 +143,7 @@ class Answer:
     unsourced: int = 0  # observations dropped because the search never returned their URL
     cost_note: str = ""
     error: str = ""
+    retry: bool = True  # False: an unusable answer that would likely repeat (no web search); the job is not requeued
 
 
 # --- research providers (the only code that talks to them) ----------------------------------------------------------
@@ -318,7 +319,7 @@ def run_job(job_id, now=None):
     if not isinstance(job, WeightResearchJob):
         return job
     limit = settings.AI_WEIGHT_RESEARCH_MAX_COST_PER_ATTEMPT_USD
-    query, day, used, errors = research_query(job.part), timezone.localdate(now), None, []
+    query, day, used, errors, retry = research_query(job.part), timezone.localdate(now), None, [], True
     held, within = limit * len(job.chain), True  # reservations not yet replaced by a cost
     for name in job.chain:
         if not within:  # an earlier call cost more than its reservation: the next one might not be covered
@@ -344,7 +345,12 @@ def run_job(job_id, now=None):
             break
         logger.warning("AI weight research job %s: provider %s failed: %s", job.pk, name, answer.error)
         errors.append(answer.error)
+        retry = retry and answer.retry
     _settle(job, day, -held)  # calls not made give their share back
+    if used is None and not retry:  # no automatic retry, so no further paid call; the admin "retry" action requeues
+        return _finish(job, WeightResearchJob.STATUS_FAILED, now, error="; ".join(errors)[:200],
+                       explanation="A provider answered without searching the web, so nothing was researched. It is "
+                                   "not retried automatically; use the retry action to queue it again.")
     if used is None:
         return _failed_attempt(job, "; ".join(errors)[:200], now)
     name, answer = used
