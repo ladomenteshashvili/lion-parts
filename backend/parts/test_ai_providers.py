@@ -224,6 +224,23 @@ class AnthropicProviderTests(ProviderTestCase):
         self.assertEqual((answer.error, answer.retry),
                          ("anthropic: web search unavailable (too_many_requests)", True))
 
+    def test_an_empty_report_after_only_failed_searches_is_an_outage_not_a_result(self):
+        """LPK-252: every search failed, the model still sent a valid empty report_weights."""
+        self.replies["anthropic"].append(claude_message(report={"observations": []}, search_error="unavailable",
+                                                        searches=1))
+        answer = anthropic_research(self.query())
+        self.assertEqual((answer.error, answer.retry, answer.observations, answer.searches),
+                         ("anthropic: web search unavailable (unavailable)", True, [], 1))
+        self.assertEqual(answer.cost, D("0.1200"))  # billed: tokens + 1 search, as before
+
+    def test_an_empty_report_after_one_failed_and_one_empty_search_is_a_valid_empty_answer(self):
+        message = claude_message(results=[], observations=[], searches=2)
+        message["content"][1:1] = [{"type": "web_search_tool_result", "tool_use_id": "srvtoolu_0", "content": {
+            "type": "web_search_tool_result_error", "error_code": "unavailable"}}]
+        self.replies["anthropic"].append(message)
+        answer = anthropic_research(self.query())
+        self.assertEqual((answer.error, answer.observations, answer.searches), ("", [], 2))
+
     def test_verified_answer_with_citations_usage_and_estimated_cost(self):
         self.replies["anthropic"].append(claude_message(observations=[*AGREEING, obs(FAKE)]))
         answer = anthropic_research(self.query())
@@ -317,6 +334,19 @@ class OpenAIProviderTests(ProviderTestCase):
         self.assertEqual((answer.error, answer.retry, answer.observations, answer.searches),
                          ("openai: no web search performed", False, [], 0))
         self.assertEqual((answer.request_id, answer.cost), ("resp_test_1", D("0.0280")))  # tokens only
+
+    def test_an_empty_report_after_only_failed_searches_is_an_outage_not_a_result(self):
+        """LPK-252: every search failed, the model still sent a valid empty report_weights."""
+        self.replies["openai"].append(openai_response(results=[], observations=[], search_status="failed"))
+        answer = openai_research(self.query())
+        self.assertEqual((answer.error, answer.retry, answer.observations, answer.searches),
+                         ("openai: web search unavailable", True, [], 2))
+        self.assertEqual(answer.cost, D("0.0480"))  # billed: tokens + 2 calls, as before
+
+    def test_a_search_with_no_results_is_a_valid_empty_answer(self):
+        self.replies["openai"].append(openai_response(results=[], observations=[]))
+        answer = openai_research(self.query())
+        self.assertEqual((answer.error, answer.observations, answer.searches, answer.cost), ("", [], 2, D("0.0480")))
 
     def test_unusable_answers_are_errors(self):
         cases = ((openai_response(status="incomplete", incomplete={"reason": "max_output_tokens"}, arguments=False),
