@@ -123,9 +123,12 @@ def anthropic_research(query):
                    {"name": REPORT, "description": REPORT_DESCRIPTION, "input_schema": SCHEMA, "strict": True}])
     except anthropic.APIError as error:
         raise ResearchError(_failure("anthropic", anthropic, error)) from None
-    sources, citations, search_errors, report = set(), [], [], None
+    sources, citations, search_errors, report, searched = set(), [], [], None, False
     for block in message.content:
-        if block.type == "web_search_tool_result":
+        if block.type == "server_tool_use" and block.name == "web_search":
+            searched = True  # a search call, whatever it returned (an empty result list included)
+        elif block.type == "web_search_tool_result":
+            searched = True
             if isinstance(block.content, list):
                 sources.update(url_key(result.url) for result in block.content)
             else:
@@ -140,7 +143,9 @@ def anthropic_research(query):
             report = block.input
     usage = message.usage
     server = usage.server_tool_use
-    searches = server.web_search_requests if server else (0 if not sources and not search_errors else None)
+    # no usage count: 0 only when the content shows no search at all; otherwise unknown, so the cost is unknown and
+    # the reservation stands
+    searches = server.web_search_requests if server else (None if searched or sources else 0)
     unpriced = bool(usage.cache_creation_input_tokens) or bool(server and server.web_fetch_requests)
     tokens = usage.input_tokens + (usage.cache_read_input_tokens or 0)
     cost = None if unpriced else estimate((message.model, model), tokens, usage.output_tokens, searches)
@@ -151,7 +156,7 @@ def anthropic_research(query):
         error = "anthropic: answer cut off at max tokens"
     elif message.stop_reason == "pause_turn":
         error = "anthropic: search did not finish"
-    elif not searches and not sources and not search_errors:  # answered (and billed) without researching anything
+    elif not (searches or searched or sources):  # answered (and billed) without researching anything
         error, retry = NO_SEARCH.format("anthropic"), False
     elif report is None:
         error = (f"anthropic: web search unavailable ({search_errors[0]})" if search_errors and not sources

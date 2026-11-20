@@ -208,6 +208,15 @@ class AnthropicProviderTests(ProviderTestCase):
         self.assertEqual((answer.error, answer.observations, answer.searches, answer.unsourced), ("", [], 1, 0))
         self.assertEqual(answer.cost, D("0.1200"))  # 20000 x $4/M + 1500 x $20/M + 1 search x $10/1000
 
+    def test_an_empty_search_result_without_usage_counts_is_a_search_with_unknown_cost(self):
+        """Codex P2 on fc96183: an empty web_search_tool_result and no usage.server_tool_use is still a search."""
+        self.replies["anthropic"].append(claude_message(results=[], observations=[], report={"observations": []},
+                                                        usage={"input_tokens": 3000, "output_tokens": 300}))
+        answer = anthropic_research(self.query())
+        self.assertEqual((answer.error, answer.retry, answer.observations, answer.searches), ("", True, [], None))
+        self.assertIsNone(answer.cost)  # search count unknown: never assumed to be 0, the reservation stands
+        self.assertEqual(answer.cost_note[:12], "cost unknown")
+
     def test_a_failed_search_is_still_reported_as_unavailable_not_as_no_search(self):
         self.replies["anthropic"].append(claude_message(report=False, search_error="too_many_requests",
                                                         stop="end_turn", searches=0))
