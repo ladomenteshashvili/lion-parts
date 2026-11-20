@@ -123,13 +123,14 @@ def anthropic_research(query):
                    {"name": REPORT, "description": REPORT_DESCRIPTION, "input_schema": SCHEMA, "strict": True}])
     except anthropic.APIError as error:
         raise ResearchError(_failure("anthropic", anthropic, error)) from None
-    sources, citations, search_errors, report, searched = set(), [], [], None, False
+    sources, citations, search_errors, report, searched, ok = set(), [], [], None, False, 0
     for block in message.content:
         if block.type == "server_tool_use" and block.name == "web_search":
             searched = True  # a search call, whatever it returned (an empty result list included)
         elif block.type == "web_search_tool_result":
             searched = True
             if isinstance(block.content, list):
+                ok += 1
                 sources.update(url_key(result.url) for result in block.content)
             else:
                 search_errors.append(getattr(block.content, "error_code", "error"))
@@ -158,9 +159,10 @@ def anthropic_research(query):
         error = "anthropic: search did not finish"
     elif not (searches or searched or sources):  # answered (and billed) without researching anything
         error, retry = NO_SEARCH.format("anthropic"), False
+    elif search_errors and not ok and not sources:  # every search failed: an outage, even with a valid empty report
+        error = f"anthropic: web search unavailable ({search_errors[0]})"
     elif report is None:
-        error = (f"anthropic: web search unavailable ({search_errors[0]})" if search_errors and not sources
-                 else "anthropic: no report_weights call")
+        error = "anthropic: no report_weights call"
     observations, unsourced, malformed = ([], 0, "") if error else _observations(report, sources, "anthropic")
     return Answer(observations, unsourced=unsourced, error=error or malformed, retry=retry, cost=cost,
                   model=message.model, request_id=message.id, usage=usage.model_dump(mode="json", exclude_none=True),
@@ -188,7 +190,9 @@ def openai_research(query):
     for item in response.output:
         if item.type == "web_search_call":
             calls += 1
-            failed += item.status == "failed"
+            if item.status == "failed":  # a URL it tried to open or search is not evidence the call worked
+                failed += 1
+                continue
             for source in getattr(item.action, "sources", None) or ():
                 sources.add(url_key(source.url))
             if getattr(item.action, "url", None):  # open_page / find_in_page
@@ -214,9 +218,10 @@ def openai_research(query):
         error = f"openai: answer {reason}"
     elif not calls:
         error, retry = NO_SEARCH.format("openai"), False
+    elif failed == calls:  # every search failed: an outage, even with a valid empty report
+        error = "openai: web search unavailable"
     elif report is None:
-        error = ("openai: web search unavailable" if calls and failed == calls and not sources
-                 else "openai: no report_weights call")
+        error = "openai: no report_weights call"
     observations, unsourced, malformed = ([], 0, "") if error else _observations(report, sources, "openai")
     return Answer(observations, unsourced=unsourced, error=error or malformed, retry=retry, cost=cost,
                   model=response.model, request_id=response.id,
