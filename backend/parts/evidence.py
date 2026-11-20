@@ -138,9 +138,11 @@ def registrable_domain(host):
 
 
 def site(url):
-    """-> the registrable domain of an https URL, or ""."""
-    parts = urlsplit(url)
-    return registrable_domain(parts.hostname or "") if parts.scheme == "https" else ""
+    """-> the registrable domain of a URL fetch_page would request (_target), or "" for any other, malformed included."""
+    try:
+        return registrable_domain(_target(url)[0])
+    except Unverifiable:
+        return ""
 
 
 # --- units ---------------------------------------------------------------------------------------------------------
@@ -159,7 +161,10 @@ def to_kg(value, unit):
         return None
     if not number.is_finite() or number <= 0:
         return None
-    return (number * factor).quantize(Decimal("0.001"))
+    try:
+        return (number * factor).quantize(Decimal("0.001"))
+    except ArithmeticError:  # Overflow / InvalidOperation: beyond Decimal precision, no part weighs that
+        return None
 
 
 def close(a, b):

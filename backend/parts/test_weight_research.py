@@ -32,7 +32,7 @@ from parts.registry import record_weight
 from parts.test_registry import PART, RegistryTestCase, amt_row
 from parts.weight_research import (BUDGET, Answer, MAX_OBSERVATIONS, Observation, ResearchError, Rules, _claim,
                                    approve_and_price, approve_proposal, call_research_service, check, credibility,
-                                   research_query, rules, run_due_jobs, run_job, score, site)
+                                   evaluate, research_query, rules, run_due_jobs, run_job, score, site)
 from parts.weight_tasks import approve_task
 
 D = Decimal
@@ -490,6 +490,30 @@ class EvidenceTests(ResearchTestCase):
             with self.subTest(observation=observation):
                 got = check(self.p, Observation(**observation))
                 self.assertEqual((got[0], got[3]), (weight, reason))
+
+    def test_malformed_urls_and_extreme_numbers_are_rejected_not_raised(self):  # LPK-250
+        bad_url = "not an https URL on a public site"
+        cases = [(obs(url="https://[::1"), bad_url), (obs(url="https://[bad]/p"), bad_url),
+                 (obs(url="https://shop-a.example:99999/p"), bad_url), (obs(url="https://shop-a.example:8443/p"), bad_url),
+                 (obs(url="https://user:pw@shop-a.example/p"), bad_url), (obs(url="https://127.0.0.1/p"), bad_url),
+                 (obs(url="https://" + "a" * 70 + ".example/p"), bad_url), (obs(url=""), bad_url),
+                 (obs(value="1e999999999"), "weight or unit not understood"),
+                 (obs(value="9e999999"), "weight or unit not understood"),
+                 (obs(value="1e30", unit="lbs"), "weight or unit not understood"),
+                 (obs(value="-1e999999999"), "weight or unit not understood"),
+                 (obs(value="1e-999999999"), "outside 0.01 to 500 kg")]
+        for observation, reason in cases:
+            with self.subTest(observation=observation):
+                got = check(self.p, Observation(**observation))
+                self.assertEqual((got[0], got[3]), (None, reason))
+        # the whole job's evaluation survives them, fetches nothing and still scores the valid claims
+        with mock.patch("parts.weight_research.verify",
+                        return_value=(evidence.VERIFIED, D("0.400"), "shipping", "shop-a.example", "", "")) as verify:
+            rows, best, *_ = evaluate(self.p, [Observation(**o) for o, _r in cases] + [Observation(**obs())])
+        self.assertEqual(verify.call_count, 1)
+        self.assertEqual([r["outcome"] for r in rows], [evidence.NOT_CHECKED] * len(cases) + [evidence.VERIFIED])
+        self.assertEqual((best, rows[-1]["kg"]), ("shipping", D("0.400")))
+        self.assertEqual(site("https://[::1"), "")
 
     def test_score_is_explained_and_not_a_probability(self):
         std = "standard"
