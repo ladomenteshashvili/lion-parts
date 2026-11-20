@@ -26,6 +26,12 @@ fi
 state="$(git rev-parse --absolute-git-dir)/ai-tasks/$key"
 mkdir -p "$state"
 chmod 700 "$state"
+# One run per task at a time: held until this script and its children exit, before counters are read.
+exec 9>"$state/lock"
+if ! flock -n 9; then
+    echo "STOP: another ai-task.sh run for $key is in progress."
+    exit 4
+fi
 attempts="$(cat "$state/attempts" 2>/dev/null || echo 0)"
 spent="$(cat "$state/spent_usd" 2>/dev/null || echo 0)"
 remaining="$(python3 -c 'import sys; from decimal import Decimal as D; print(max(D(sys.argv[1]) - D(sys.argv[2]), D(0)))' \
@@ -44,13 +50,22 @@ fi
 attempts=$((attempts + 1))
 echo "$attempts" >"$state/attempts"  # counted before any paid call, so a crash cannot reset it
 review="$state/review-$attempts.log"
-scripts/ai-review.sh | tee "$review"
-
-read -r -p "Send these findings to Claude for a fix? [y/N] " answer
-if [[ "$answer" != [yY] ]]; then
-    echo "No fix requested. When ready: git push -u origin $branch && gh pr create --draft --base main"
-    exit 0
+if ! scripts/ai-review.sh | tee "$review"; then
+    echo "STOP: the Codex review failed; Claude was not called."
+    exit 5
 fi
+
+# Codex review output is free text, so a human classifies it; exit code 0 alone never means clean.
+read -r -p "Review result: [c]lean, [f]indings to send to Claude, [x] failed or unclear? " answer
+case "$answer" in
+    c) echo "Clean review; Claude was not called. When ready: git push -u origin $branch && gh pr create --draft --base main"
+       exit 0 ;;
+    f) ;;
+    x) echo "STOP: review marked as failed; Claude was not called."
+       exit 5 ;;
+    *) echo "No fix requested; Claude was not called."
+       exit 0 ;;
+esac
 
 result="$state/claude-$attempts.json"
 prompt="Jira $key, correction attempt $attempts of $MAX_ATTEMPTS. A Codex review of this branch found the issues
