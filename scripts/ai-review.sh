@@ -6,7 +6,7 @@ cd "$(git rev-parse --show-toplevel)"
 branch="$(git branch --show-current)"
 base="origin/main"
 
-if [[ -z "$branch" || "$branch" == "main" ]]; then
+if [[ "$branch" != feature/* ]]; then
     echo "STOP: review must run on a feature branch."
     exit 2
 fi
@@ -31,7 +31,7 @@ if [[ "$(git rev-list --count "$base..HEAD")" -eq 0 ]]; then
     exit 2
 fi
 
-logdir="$(git rev-parse --git-path ai-reviews)"
+logdir="$(git rev-parse --absolute-git-dir)/ai-reviews"
 mkdir -p "$logdir"
 chmod 700 "$logdir"
 
@@ -40,9 +40,23 @@ log="$(mktemp "$logdir/$(date -u +%Y%m%dT%H%M%SZ).XXXXXX.log")"
 echo "Reviewing $branch against $base"
 echo "Saving report to $log"
 
-if codex exec --sandbox read-only review --base "$base" 2>&1 | tee "$log"; then
+reviewdir="$(mktemp -d "${TMPDIR:-/tmp}/lpk-review.XXXXXXXX")"
+
+cleanup() {
+    git worktree remove --force "$reviewdir" >/dev/null 2>&1 || true
+    rmdir "$reviewdir" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+git worktree add --detach "$reviewdir" HEAD >/dev/null
+
+if (
+    cd "$reviewdir"
+    codex exec --sandbox read-only review --base "$base" >"$log" 2>/dev/null
+); then
+    cat "$log"
     echo "Review completed. Inspect findings before approval."
 else
-    echo "Codex failed. Check the saved report."
+    echo "Codex failed. Review not approved."
     exit 1
 fi
