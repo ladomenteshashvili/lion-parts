@@ -343,6 +343,13 @@ class OpenAIProviderTests(ProviderTestCase):
                          ("openai: web search unavailable", True, [], 2))
         self.assertEqual(answer.cost, D("0.0480"))  # billed: tokens + 2 calls, as before
 
+    def test_a_failed_open_page_with_its_url_is_still_an_outage(self):
+        response = openai_response(results=[], observations=[], search_status="failed")
+        response["output"][1]["action"]["url"] = URLS[0]
+        self.replies["openai"].append(response)
+        answer = openai_research(self.query())
+        self.assertEqual((answer.error, answer.retry, answer.observations), ("openai: web search unavailable", True, []))
+
     def test_a_search_with_no_results_is_a_valid_empty_answer(self):
         self.replies["openai"].append(openai_response(results=[], observations=[]))
         answer = openai_research(self.query())
@@ -360,6 +367,16 @@ class OpenAIProviderTests(ProviderTestCase):
                 self.replies["openai"].append(response)
                 answer = openai_research(self.query())
                 self.assertEqual((answer.error, answer.observations), (error, []))
+
+    def test_all_failed_searches_with_citation_are_an_outage(self):
+        response = openai_response(
+            observations=[], results=URLS, search_status="failed",
+            arguments=json.dumps({"observations": []}))
+        self.replies["openai"].append(response)
+        answer = openai_research(self.query())
+        self.assertEqual(
+            (answer.error, answer.retry, answer.observations),
+            ("openai: web search unavailable", True, []))
 
     def test_missing_usage_leaves_the_cost_unknown(self):
         self.replies["openai"].append(openai_response(usage=False))

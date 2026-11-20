@@ -190,7 +190,9 @@ def openai_research(query):
     for item in response.output:
         if item.type == "web_search_call":
             calls += 1
-            failed += item.status == "failed"
+            if item.status == "failed":  # a URL it tried to open or search is not evidence the call worked
+                failed += 1
+                continue
             for source in getattr(item.action, "sources", None) or ():
                 sources.add(url_key(source.url))
             if getattr(item.action, "url", None):  # open_page / find_in_page
@@ -216,7 +218,7 @@ def openai_research(query):
         error = f"openai: answer {reason}"
     elif not calls:
         error, retry = NO_SEARCH.format("openai"), False
-    elif failed == calls and not sources:  # every search failed: an outage, even with a valid empty report
+    elif failed == calls:  # every search failed: an outage, even with a valid empty report
         error = "openai: web search unavailable"
     elif report is None:
         error = "openai: no report_weights call"
