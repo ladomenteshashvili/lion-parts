@@ -11,7 +11,12 @@ if [[ -z "$branch" || "$branch" == "main" ]]; then
     exit 2
 fi
 
-if [[ -n "$(git status --porcelain)" ]]; then
+if ! worktree_status="$(git status --porcelain)"; then
+    echo "STOP: Git working-tree check failed."
+    exit 2
+fi
+
+if [[ -n "$worktree_status" ]]; then
     echo "STOP: commit changes before review."
     exit 2
 fi
@@ -30,7 +35,7 @@ logdir="$(git rev-parse --git-path ai-reviews)"
 mkdir -p "$logdir"
 chmod 700 "$logdir"
 
-log="$logdir/$(date -u +%Y%m%dT%H%M%SZ).log"
+log="$(mktemp "$logdir/$(date -u +%Y%m%dT%H%M%SZ).XXXXXX.log")"
 
 echo "Reviewing $branch against $base"
 echo "Saving report to $log"
