@@ -83,3 +83,15 @@ jobs:
       - name: Run backend tests
         working-directory: backend
         run: python manage.py test
+
+  automation-scripts:
+    name: AI task loop (mocked)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run mocked tests (fake agents, no AI calls, no secrets)
+        run: bash scripts/tests/test_ai_task.sh
