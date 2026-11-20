@@ -11,7 +11,7 @@ if [[ -z "$branch" || "$branch" == "main" ]]; then
     exit 2
 fi
 
-if ! worktree_status="$(git status --porcelain)"; then
+if ! worktree_status="$(git status --porcelain --untracked-files=normal)"; then
     echo "STOP: Git working-tree check failed."
     exit 2
 fi
